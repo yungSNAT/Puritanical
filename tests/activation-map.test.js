@@ -18,13 +18,12 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     fs.mkdirSync(path.join(workspace, 'lib'), { recursive: true });
     fs.writeFileSync(path.join(workspace, 'lib', 'helper.js'), 'export function usefulHelper() {}');
 
-    if (scenario !== 'successful') {
+    if (scenario !== 'successful' && scenario !== 'default') {
       const body = {
         blocked: 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000); return "";',
         failed: 'throw new Error("map unavailable");',
         oversized: 'return "x".repeat(100000);',
         disabled: 'require("node:fs").writeFileSync("map-ran", "yes"); return "unexpected map";',
-        default: 'require("node:fs").writeFileSync("map-ran", "yes"); return "unexpected map";',
       }[scenario];
       fs.writeFileSync(path.join(hooks, 'puritanical-map.js'),
         `exports.buildMap = () => { ${body} };\n` +
@@ -56,8 +55,8 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     assert.match(output.additionalContext, /validation at trust boundaries/);
     assert.match(output.additionalContext, /Subagents do not inherit these rules/);
     assert.match(output.additionalContext, /Never weaken, skip or\s+delete a test/);
-    // The map is opt-in: only PURITANICAL_MAP=1 with a working map adds it.
-    if (scenario === 'successful') {
+    // The map is on unless PURITANICAL_MAP=0; only a working map adds it.
+    if (scenario === 'successful' || scenario === 'default') {
       assert.match(output.additionalContext, /Codebase map[\s\S]*lib\/: usefulHelper/);
     } else {
       assert.doesNotMatch(output.additionalContext, /Codebase map|unexpected map|x{1000}/);
