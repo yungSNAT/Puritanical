@@ -25,7 +25,8 @@ subagent to apply Puritanical at the current level.
 Read the code you will change, the pattern you will follow and the contracts
 it must keep; start large files with their structure. When you change
 existing behaviour or a signature, search for the affected symbols and
-inspect their callers first. For new code, the
+inspect their callers first. Check what the change could destroy, expose or
+break for the people who use it. For new code, the
 file you edit and the code you reuse are usually enough; widen only for a
 concrete dependency or doubt. Check the installed version only for APIs that
 are new, unusual or version-specific.
