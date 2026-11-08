@@ -96,7 +96,7 @@ on real submissions.
 
 ```bash
 python judge.py --selftest            # validate the judge (small spend)
-python judge.py --run runs/<stamp>    # score every workspace's source
+python judge.py --run runs/<stamp>    # score every workspace's source; exits 1 listing any cell it could not score
 python judge.py --run runs/<stamp> --workers 6   # cells judged at once (default 6)
 ```
 
@@ -124,7 +124,7 @@ the gate logic with no API call (no key needed).
 ```bash
 python complete.py --selftest-offline  # validate the gate logic, no API
 python complete.py --selftest          # validate the judge (small spend)
-python complete.py --run runs/<stamp>  # completeness-score every workspace
+python complete.py --run runs/<stamp>  # completeness-score every workspace; exits 1 listing any unscored cell
 python complete.py --run runs/<stamp> --model claude-opus-5-5 --arms baseline,puritanical2 --workers 6
 ```
 

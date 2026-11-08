@@ -167,6 +167,13 @@ def selftest(key):
     print(f"\njudge selftest: {'valid' if ok else 'NOT TRUSTWORTHY'}")
     return 0 if ok else 1
 
+def unscored(scored, key):
+    """List the cells the judge could not score, so a partial result is never read as complete."""
+    missing = [r["cell"] for r in scored if not isinstance(r[key], int)]
+    print(f"\nscored {len(scored) - len(missing)} of {len(scored)}; unscored {len(missing)}")
+    for cell in missing[:20]: print(f"  unscored: {cell}")
+    return missing
+
 def run(run_dir, key, workers=6):
     run_dir = Path(run_dir)
     if not run_dir.exists(): run_dir = RUNS_DIR / run_dir.name
@@ -200,7 +207,9 @@ def run(run_dir, key, workers=6):
     print(f"\n=== flagged over-engineered (score >= 2): {len(worst)} cells ===")
     for r in worst[:20]:
         print(f"  {r['task']:11} {r['arm']:15} {r['model']:7} score={r['over_engineering']} cite={r['cite']}")
+    missing = unscored(scored, "over_engineering")
     print(f"\nwrote {run_dir / 'judge.json'}")
+    return 1 if missing else 0
 
 def main():
     ap = argparse.ArgumentParser()
@@ -212,7 +221,7 @@ def main():
     if args.selftest: sys.exit(selftest(key))
     if args.run:
         if selftest(key): sys.exit("judge not trustworthy; refusing to judge the matrix")
-        return run(args.run, key, args.workers)
+        sys.exit(run(args.run, key, args.workers))
     sys.exit("give --selftest or --run <dir>")
 
 if __name__ == "__main__":

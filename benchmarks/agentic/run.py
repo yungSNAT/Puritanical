@@ -25,11 +25,11 @@ over-engineering score is a later pass.
 shortcut: the claude CLI is the harness (already installed, we run inside it). No SDK
 dependency. The CLI's JSON output already carries cost/tokens/duration/permission_denials.
 """
-import argparse, concurrent.futures, datetime, json, os, re, shutil, signal, stat, statistics, subprocess, sys, tempfile, time, zlib
+import argparse, concurrent.futures, contextlib, datetime, io, json, os, re, shutil, signal, stat, statistics, subprocess, sys, tempfile, time, zlib
 from collections import defaultdict
 from pathlib import Path
 
-import compare
+import compare, complete, judge
 from tasks import QUICK, TASKS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -288,6 +288,7 @@ def selftest():
     failures += _selftest_isolated_scoring()
     failures += _selftest_plugin_dir()
     failures += _selftest_kill()
+    failures += _selftest_judges()
     failures += compare.selftest()
     print(f"\nselftest: {'all instruments valid' if not failures else str(failures) + ' BROKEN'}")
     return failures
@@ -491,6 +492,22 @@ def _selftest_kill():
     except subprocess.TimeoutExpired: ok = False; p.kill()
     print(f"{'ok ' if ok else 'XX '} tree_kill    terminates a timed-out cell")
     return 0 if ok else 1
+
+def _selftest_judges():
+    """Both judges must report a cell they could not score and exit non-zero, never drop it silently."""
+    def exit_codes(texts):
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()):
+            for n, text in enumerate(texts, 1):
+                _write(Path(d) / f"vibe-todo__a__m__{n}" / "app.py", text)
+            return judge.run(d, None, workers=2), complete.run(d, None, workers=2)
+    saved = judge.judge_call, complete.judge_call
+    judge.judge_call = complete.judge_call = lambda prompt, files, key, **kw: (
+        '{"over_engineering": 1, "completeness": 3}' if "scorable" in files else "no score")
+    try:
+        ok = exit_codes(["scorable = 1", "scorable = 2"]) == (0, 0) and exit_codes(["scorable = 1", "x = 1"]) == (1, 1)
+    finally:
+        judge.judge_call, complete.judge_call = saved
+    return _report("judges       an unscored cell is reported and fails the run", ok)
 
 def chat_code_loc(text):
     """LOC of fenced code blocks in a chat answer: (total incl comments, code-only)."""
