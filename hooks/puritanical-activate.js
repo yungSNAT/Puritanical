@@ -66,11 +66,12 @@ function activate(mode) {
   // 2. Emit the puritanical ruleset, filtered to the active intensity level.
   let output = getPuritanicalInstructions(mode);
 
-  // 2b. Opt-in codebase map (PURITANICAL_MAP=1): what already exists, so "reuse first" costs no
-  // search. Off by default because it runs git ls-files and adds tokens to every session start.
+  // 2b. Codebase map, on unless PURITANICAL_MAP=0: what already exists, so "reuse first" costs no
+  // search. By default it maps git repositories only (git ls-files); PURITANICAL_MAP=1 also walks other
+  // folders. It adds about PURITANICAL_MAP_CHARS (2000) characters per session start.
   // Fail open: the map gets 3 s, well inside the 15 s hook limit, so a stalled map never costs the rules.
   // shortcut: a map slower than 3 s is still dropped; a cached per-repo map would lift that if it shows up.
-  if (mode !== 'review' && process.env.PURITANICAL_MAP === '1') try {
+  if (mode !== 'review' && process.env.PURITANICAL_MAP !== '0') try {
     const map = execFileSync(process.execPath, [path.join(__dirname, 'puritanical-map.js')], {
       encoding: 'utf8', timeout: 3000, maxBuffer: 64 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
     }).trimEnd();

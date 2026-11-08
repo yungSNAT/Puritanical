@@ -4,10 +4,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 
 const root = path.join(__dirname, '..');
 
-for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disabled', 'default']) {
+for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disabled', 'default', 'outside-git']) {
   test(`SessionStart preserves instructions when the optional map is ${scenario}`, (t) => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical activation '));
     t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
@@ -17,35 +18,44 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     fs.cpSync(path.join(root, 'skills'), path.join(temp, 'plugin', 'skills'), { recursive: true });
     fs.mkdirSync(path.join(workspace, 'lib'), { recursive: true });
     fs.writeFileSync(path.join(workspace, 'lib', 'helper.js'), 'export function usefulHelper() {}');
+    if (scenario === 'default') {
+      for (const args of [['init', '-q'], ['add', 'lib/helper.js']]) {
+        assert.equal(spawnSync('git', args, { cwd: workspace, timeout: 10000 }).status, 0, `git ${args[0]}`);
+      }
+    }
 
-    if (scenario !== 'successful') {
+    if (!['successful', 'default', 'outside-git'].includes(scenario)) {
       const body = {
-        blocked: 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000); return "";',
+        // Blocks past the 15 s hook limit, so a hook that waited for the map would fail.
+        blocked: 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000); return "";',
         failed: 'throw new Error("map unavailable");',
         oversized: 'return "x".repeat(100000);',
         disabled: 'require("node:fs").writeFileSync("map-ran", "yes"); return "unexpected map";',
-        default: 'require("node:fs").writeFileSync("map-ran", "yes"); return "unexpected map";',
       }[scenario];
       fs.writeFileSync(path.join(hooks, 'puritanical-map.js'),
         `exports.buildMap = () => { ${body} };\n` +
         'if (require.main === module) process.stdout.write(exports.buildMap());\n');
     }
 
+    const env = {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: path.join(temp, 'claude'),
+      CLAUDE_PROJECT_DIR: '',
+      PLUGIN_DATA: path.join(temp, 'state'),
+      COPILOT_PLUGIN_DATA: '',
+      XDG_CONFIG_HOME: path.join(temp, 'config'),
+      PURITANICAL_DEFAULT_MODE: 'full',
+      PURITANICAL_MAP: scenario === 'disabled' ? '0' : '1',
+    };
+    // The default is an unset variable, not an empty one.
+    if (scenario === 'default' || scenario === 'outside-git') delete env.PURITANICAL_MAP;
     const result = spawnSync(process.execPath, [path.join(hooks, 'puritanical-activate.js')], {
       cwd: workspace,
       input: '',
       encoding: 'utf8',
-      timeout: 5000,
-      env: {
-        ...process.env,
-        CLAUDE_CONFIG_DIR: path.join(temp, 'claude'),
-        CLAUDE_PROJECT_DIR: '',
-        PLUGIN_DATA: path.join(temp, 'state'),
-        COPILOT_PLUGIN_DATA: '',
-        XDG_CONFIG_HOME: path.join(temp, 'config'),
-        PURITANICAL_DEFAULT_MODE: 'full',
-        PURITANICAL_MAP: { disabled: '0', default: '' }[scenario] ?? '1',
-      },
+      // The SessionStart limit in hooks/*.json: the contract, not a tighter bound a loaded machine misses.
+      timeout: 15000,
+      env,
     });
     assert.equal(result.error, undefined, 'optional mapping must finish before the hook timeout');
     assert.equal(result.status, 0, result.stderr);
@@ -56,8 +66,9 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     assert.match(output.additionalContext, /validation at trust boundaries/);
     assert.match(output.additionalContext, /Subagents do not inherit these rules/);
     assert.match(output.additionalContext, /Never weaken, skip or\s+delete a test/);
-    // The map is opt-in: only PURITANICAL_MAP=1 with a working map adds it.
-    if (scenario === 'successful') {
+    // The map is on unless PURITANICAL_MAP=0, for git repositories only unless PURITANICAL_MAP=1;
+    // only a working map adds it.
+    if (scenario === 'successful' || scenario === 'default') {
       assert.match(output.additionalContext, /Codebase map[\s\S]*lib\/: usefulHelper/);
     } else {
       assert.doesNotMatch(output.additionalContext, /Codebase map|unexpected map|x{1000}/);
@@ -65,3 +76,42 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     assert.equal(fs.existsSync(path.join(workspace, 'map-ran')), false);
   });
 }
+
+test('SessionStart omits a working map in review mode', (t) => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical activation '));
+  t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const hooks = path.join(temp, 'plugin', 'hooks');
+  const workspace = path.join(temp, 'workspace');
+  const state = path.join(temp, 'state');
+  fs.cpSync(path.join(root, 'hooks'), hooks, { recursive: true });
+  fs.cpSync(path.join(root, 'skills'), path.join(temp, 'plugin', 'skills'), { recursive: true });
+  fs.mkdirSync(path.join(workspace, 'lib'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'lib', 'helper.js'), 'export function usefulHelper() {}');
+  // review is never a default; it reaches SessionStart only as the live mode restored after compaction.
+  const modes = path.join(state, 'puritanical-modes');
+  fs.mkdirSync(modes, { recursive: true });
+  fs.writeFileSync(path.join(modes, createHash('sha256').update(path.normalize(workspace)).digest('hex')), 'review');
+
+  const result = spawnSync(process.execPath, [path.join(hooks, 'puritanical-activate.js')], {
+    cwd: workspace,
+    input: JSON.stringify({ source: 'compact' }),
+    encoding: 'utf8',
+    timeout: 15000,
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: path.join(temp, 'claude'),
+      CLAUDE_PROJECT_DIR: workspace,
+      PLUGIN_DATA: state,
+      COPILOT_PLUGIN_DATA: '',
+      XDG_CONFIG_HOME: path.join(temp, 'config'),
+      PURITANICAL_DEFAULT_MODE: 'full',
+      PURITANICAL_MAP: '1',
+    },
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const output = JSON.parse(result.stdout).hookSpecificOutput;
+  assert.match(output.additionalContext, /PURITANICAL MODE ACTIVE — level: review/);
+  assert.doesNotMatch(output.additionalContext, /Codebase map|usefulHelper/);
+});

@@ -112,7 +112,7 @@ The plugin:
 - does not inject the ruleset into Claude Code or Codex subagents, or again into a resumed session that already has it;
 - removes the Band status board, which wrapped every Bash, Edit and Write call and logged prompt text to a local file;
 - removes the gain scoreboard, which reported upstream benchmark figures;
-- makes the session-start codebase map opt-in with `PURITANICAL_MAP=1`;
+- maps only git repositories at session start, unless `PURITANICAL_MAP=1`; `PURITANICAL_MAP=0` turns the map off;
 - refuses to follow a planted symlink when writing mode and config files on macOS and Linux;
 - fixes subagent injection and host detection in Qoder, CommonJS exports in the codebase map and rule loading in Pi when another extension forces the system prompt;
 - generates `AGENTS.md`, 7 host rule files, the command prompts, the OpenClaw skills and both fallback strings from `skills/`, with a Rust tool that CI runs to catch drift.
