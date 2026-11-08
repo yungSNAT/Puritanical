@@ -79,7 +79,7 @@ def _plugin_dir(name):
         sys.exit(f"{name} plugin dir not found under {base}; install the plugin or set {name.upper()}_PLUGIN_DIR")
     return str(versions[-1])                    # latest version dir; not pinned to one machine's hash
 
-PINNED = {"puritanical": "PURITANICAL_PLUGIN_DIR", "ponytail": "PONYTAIL_PLUGIN_DIR",
+PINNED = {"puritanical": "PURITANICAL_PLUGIN_DIR", "puritanical2": "PURITANICAL2_PLUGIN_DIR", "ponytail": "PONYTAIL_PLUGIN_DIR",
           "superpowers": "SUPERPOWERS_PLUGIN_DIR", "karpathy": "KARPATHY_CLAUDE_MD"}
 TMPL_COMMIT = "cd83fc1"
 
@@ -442,16 +442,17 @@ def _selftest_plugin_dir():
             fn(); return False
         except SystemExit:
             return True
-    previous = {e: os.environ.pop(e, None) for e in ("PONYTAIL_PLUGIN_DIR", "PURITANICAL_PLUGIN_DIR")}
-    ok_rival = exits(lambda: _sources(["ponytail"], [])) and exits(lambda: _sources(["puritanical"], []))
+    previous = {e: os.environ.pop(e, None) for e in ("PONYTAIL_PLUGIN_DIR", "PURITANICAL_PLUGIN_DIR", "PURITANICAL2_PLUGIN_DIR")}
+    ok_rival = all(exits(lambda a=a: _sources([a], [])) for a in ("ponytail", "puritanical", "puritanical2"))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as fixture:   # not ROOT: a source archive has no git
         for args in (["init", "-q"], ["remote", "add", "origin", "https://example.invalid/rival.git"],
                      ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "t"]):
             subprocess.run(["git", "-C", fixture, *args], check=True, capture_output=True)
-        os.environ["PONYTAIL_PLUGIN_DIR"] = fixture
-        ok_rival = ok_rival and len(_sources(["ponytail"], [])["ponytail"]["commit"]) == 40 and _sources(["baseline"], []) == {}
+        os.environ["PONYTAIL_PLUGIN_DIR"] = os.environ["PURITANICAL2_PLUGIN_DIR"] = fixture
+        ok_rival = ok_rival and _sources(["baseline"], []) == {} and all(
+            len(_sources([a], [])[a]["commit"]) == 40 for a in ("ponytail", "puritanical2"))
         (Path(fixture) / "edit.txt").write_text("x", encoding="utf-8")
-        ok_dirty = exits(lambda: _sources(["ponytail"], []))
+        ok_dirty = exits(lambda: _sources(["ponytail"], [])) and exits(lambda: _sources(["puritanical2"], []))
     for env, value in previous.items():
         os.environ.pop(env, None)
         if value is not None: os.environ[env] = value

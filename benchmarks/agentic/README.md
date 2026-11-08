@@ -97,6 +97,7 @@ on real submissions.
 ```bash
 python judge.py --selftest            # validate the judge (small spend)
 python judge.py --run runs/<stamp>    # score every workspace's source
+python judge.py --run runs/<stamp> --workers 6   # cells judged at once (default 6)
 ```
 
 ### Completeness judge (`complete.py`)
