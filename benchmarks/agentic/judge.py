@@ -9,6 +9,7 @@ minimal one for the same task, or we do not trust it on real submissions.
 
   python judge.py --selftest                 # validate the judge on reference pairs (small spend)
   python judge.py --run runs/<stamp>          # judge every workspace's source in a matrix run
+  python judge.py --run runs/<stamp> --workers 6   # cells judged at once (default 6)
 
 Judge: claude-sonnet-4-6 via the Anthropic Messages API (key from ../../.env). Scores the SOURCE
 files only (tests excluded -- a test is not over-engineering). Cost is ~$0.003/cell.
@@ -17,6 +18,7 @@ shortcut: stdlib urllib for the API call, no requests dependency.
 """
 import argparse, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from tasks import TASKS
@@ -165,7 +167,14 @@ def selftest(key):
     print(f"\njudge selftest: {'valid' if ok else 'NOT TRUSTWORTHY'}")
     return 0 if ok else 1
 
-def run(run_dir, key):
+def unscored(scored, key):
+    """List the cells the judge could not score, so a partial result is never read as complete."""
+    missing = [r["cell"] for r in scored if not isinstance(r[key], int)]
+    print(f"\nscored {len(scored) - len(missing)} of {len(scored)}; unscored {len(missing)}")
+    for cell in missing[:20]: print(f"  unscored: {cell}")
+    return missing
+
+def run(run_dir, key, workers=6):
     run_dir = Path(run_dir)
     if not run_dir.exists(): run_dir = RUNS_DIR / run_dir.name
     cells, scored = [], []
@@ -174,13 +183,16 @@ def run(run_dir, key):
         if len(parts) != 4 or parts[0] not in TASKS: continue
         cells.append((parts[0], parts[1], parts[2], ws))
     print(f"judging {len(cells)} workspaces with {JUDGE_MODEL} ...")
-    for i, (tid, arm, model, ws) in enumerate(cells, 1):
+    def one(cell):
+        tid, arm, model, ws = cell
         s = parse_score(judge_call(TASKS[tid]["prompt"], submission(ws, tid), key)) or {"over_engineering": None}
-        rec = {"task": tid, "arm": arm, "model": model, "cell": ws.name, "over_engineering": s.get("over_engineering"),
-               "why": s.get("why", ""), "cite": s.get("cite", "")}
-        scored.append(rec)
-        if i % 25 == 0 or i == len(cells): print(f"  [{i}/{len(cells)}]", flush=True)
-        (run_dir / "judge.json").write_text(json.dumps({"judge": JUDGE_MODEL, "rubric": RUBRIC, "scores": scored}, indent=2), encoding="utf-8")
+        return {"task": tid, "arm": arm, "model": model, "cell": ws.name, "over_engineering": s.get("over_engineering"),
+                "why": s.get("why", ""), "cite": s.get("cite", "")}
+    with ThreadPoolExecutor(workers) as ex:
+        for i, rec in enumerate(ex.map(one, cells), 1):       # in cell order, as complete.py
+            scored.append(rec)
+            if i % 25 == 0 or i == len(cells): print(f"  [{i}/{len(cells)}]", flush=True)
+            (run_dir / "judge.json").write_text(json.dumps({"judge": JUDGE_MODEL, "rubric": RUBRIC, "scores": scored}, indent=2), encoding="utf-8")
     # aggregate
     by_arm = defaultdict(list)
     for r in scored:
@@ -195,18 +207,21 @@ def run(run_dir, key):
     print(f"\n=== flagged over-engineered (score >= 2): {len(worst)} cells ===")
     for r in worst[:20]:
         print(f"  {r['task']:11} {r['arm']:15} {r['model']:7} score={r['over_engineering']} cite={r['cite']}")
+    missing = unscored(scored, "over_engineering")
     print(f"\nwrote {run_dir / 'judge.json'}")
+    return 1 if missing else 0
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--run", help="run dir to judge")
+    ap.add_argument("--workers", type=int, default=6, help="cells judged at once")
     args = ap.parse_args()
     key = load_key()                       # none: judge_call uses the claude CLI login
     if args.selftest: sys.exit(selftest(key))
     if args.run:
         if selftest(key): sys.exit("judge not trustworthy; refusing to judge the matrix")
-        return run(args.run, key)
+        sys.exit(run(args.run, key, args.workers))
     sys.exit("give --selftest or --run <dir>")
 
 if __name__ == "__main__":

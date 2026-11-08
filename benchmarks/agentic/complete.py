@@ -29,7 +29,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from tasks import TASKS
-from judge import load_key, submission, judge_call, parse_score, RUNS_DIR, JUDGE_MODEL
+from judge import load_key, submission, judge_call, parse_score, unscored, RUNS_DIR, JUDGE_MODEL
 
 SCORE_KEY = "completeness"
 FLAG_AT = 1                 # cells scoring <= this are under-delivery (stub/partial) and get listed
@@ -140,7 +140,9 @@ def run(run_dir, key, model=JUDGE_MODEL, arms=None, workers=6):
     print(f"\n=== under-delivered (completeness <= {FLAG_AT}): {len(under)} cells ===")
     for r in under[:20]:
         print(f"  {r['task']:13} {r['arm']:15} {r['model']:7} score={r[SCORE_KEY]} missing={r['missing']}")
+    missing = unscored(scored, SCORE_KEY)
     print(f"\nwrote {run_dir / 'completeness.json'}")
+    return 1 if missing else 0
 
 def main():
     ap = argparse.ArgumentParser()
@@ -157,7 +159,7 @@ def main():
     if args.selftest: sys.exit(selftest(key, args.model))
     if args.run:
         if selftest(key, args.model): sys.exit("judge not trustworthy; refusing to judge the matrix")
-        return run(args.run, key, args.model, args.arms and args.arms.split(","), args.workers)
+        sys.exit(run(args.run, key, args.model, args.arms and args.arms.split(","), args.workers))
     sys.exit("give --selftest, --selftest-offline, or --run <dir>")
 
 if __name__ == "__main__":

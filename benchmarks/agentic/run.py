@@ -25,11 +25,11 @@ over-engineering score is a later pass.
 shortcut: the claude CLI is the harness (already installed, we run inside it). No SDK
 dependency. The CLI's JSON output already carries cost/tokens/duration/permission_denials.
 """
-import argparse, concurrent.futures, datetime, json, os, re, shutil, signal, stat, statistics, subprocess, sys, tempfile, time, zlib
+import argparse, concurrent.futures, contextlib, datetime, io, json, os, re, shutil, signal, stat, statistics, subprocess, sys, tempfile, time, zlib
 from collections import defaultdict
 from pathlib import Path
 
-import compare
+import compare, complete, judge
 from tasks import QUICK, TASKS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,7 +79,7 @@ def _plugin_dir(name):
         sys.exit(f"{name} plugin dir not found under {base}; install the plugin or set {name.upper()}_PLUGIN_DIR")
     return str(versions[-1])                    # latest version dir; not pinned to one machine's hash
 
-PINNED = {"puritanical": "PURITANICAL_PLUGIN_DIR", "ponytail": "PONYTAIL_PLUGIN_DIR",
+PINNED = {"puritanical": "PURITANICAL_PLUGIN_DIR", "puritanical2": "PURITANICAL2_PLUGIN_DIR", "ponytail": "PONYTAIL_PLUGIN_DIR",
           "superpowers": "SUPERPOWERS_PLUGIN_DIR", "karpathy": "KARPATHY_CLAUDE_MD"}
 TMPL_COMMIT = "cd83fc1"
 
@@ -115,6 +115,14 @@ def _sources(arms, task_ids):
         if not sources["template"]["commit"].startswith(TMPL_COMMIT):
             sys.exit(f"template: {path} is not at the pinned commit {TMPL_COMMIT}")
     return sources
+
+def _resume_dir(resume, sources):
+    """The kept run dir, only if it started from these sources and cells: resuming after a checkout
+    moved would mix 2 revisions in one result set. Stops before touching the run dir."""
+    out_dir = Path(resume) if Path(resume).exists() else RUNS_DIR / Path(resume).name
+    if json.loads((out_dir / "sources.json").read_text(encoding="utf-8")) != sources:
+        sys.exit(f"the sources or cells differ from when {out_dir.name} started, so it cannot resume; compare with sources.json")
+    return out_dir
 
 CELL_TIMEOUT = 300  # seconds per cell; a hung agent is force-killed (process tree) so the pool can't freeze
 SCORE_TIMEOUT = 120 # seconds to score a cell; produced code runs during scoring and can hang
@@ -288,6 +296,7 @@ def selftest():
     failures += _selftest_isolated_scoring()
     failures += _selftest_plugin_dir()
     failures += _selftest_kill()
+    failures += _selftest_judges()
     failures += compare.selftest()
     print(f"\nselftest: {'all instruments valid' if not failures else str(failures) + ' BROKEN'}")
     return failures
@@ -442,21 +451,32 @@ def _selftest_plugin_dir():
             fn(); return False
         except SystemExit:
             return True
-    previous = {e: os.environ.pop(e, None) for e in ("PONYTAIL_PLUGIN_DIR", "PURITANICAL_PLUGIN_DIR")}
-    ok_rival = exits(lambda: _sources(["ponytail"], [])) and exits(lambda: _sources(["puritanical"], []))
+    previous = {e: os.environ.pop(e, None) for e in ("PONYTAIL_PLUGIN_DIR", "PURITANICAL_PLUGIN_DIR", "PURITANICAL2_PLUGIN_DIR")}
+    ok_rival = all(exits(lambda a=a: _sources([a], [])) for a in ("ponytail", "puritanical", "puritanical2"))
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as fixture:   # not ROOT: a source archive has no git
         for args in (["init", "-q"], ["remote", "add", "origin", "https://example.invalid/rival.git"],
                      ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "t"]):
             subprocess.run(["git", "-C", fixture, *args], check=True, capture_output=True)
-        os.environ["PONYTAIL_PLUGIN_DIR"] = fixture
-        ok_rival = ok_rival and len(_sources(["ponytail"], [])["ponytail"]["commit"]) == 40 and _sources(["baseline"], []) == {}
+        os.environ["PONYTAIL_PLUGIN_DIR"] = os.environ["PURITANICAL2_PLUGIN_DIR"] = fixture
+        ok_rival = ok_rival and _sources(["baseline"], []) == {} and all(
+            len(_sources([a], [])[a]["commit"]) == 40 for a in ("ponytail", "puritanical2"))
+        recorded = _sources(["puritanical2"], [])
+        with tempfile.TemporaryDirectory() as kept:
+            _write(Path(kept) / "sources.json", json.dumps(recorded))
+            _write(Path(kept) / "results.json", "kept")
+            ok_same = _resume_dir(kept, recorded) == Path(kept)
+            subprocess.run(["git", "-C", fixture, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                            "commit", "-q", "--allow-empty", "-m", "t2"], check=True, capture_output=True)
+            ok_moved = ok_same and exits(lambda: _resume_dir(kept, _sources(["puritanical2"], []))) \
+                and (Path(kept) / "results.json").read_text(encoding="utf-8") == "kept"
         (Path(fixture) / "edit.txt").write_text("x", encoding="utf-8")
-        ok_dirty = exits(lambda: _sources(["ponytail"], []))
+        ok_dirty = exits(lambda: _sources(["ponytail"], [])) and exits(lambda: _sources(["puritanical2"], []))
     for env, value in previous.items():
         os.environ.pop(env, None)
         if value is not None: os.environ[env] = value
     fails += _report("sources      unset exits, checkout records its commit", ok_rival)
     fails += _report("sources      uncommitted changes exit", ok_dirty)
+    fails += _report("sources      resuming after a checkout moved exits, results kept", ok_moved)
     tmpl = TASKS["tmpl-be-count"]["fixture"]
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as fixture:
         for args in (["init", "-q"], ["remote", "add", "origin", "https://example.invalid/template.git"],
@@ -490,6 +510,26 @@ def _selftest_kill():
     except subprocess.TimeoutExpired: ok = False; p.kill()
     print(f"{'ok ' if ok else 'XX '} tree_kill    terminates a timed-out cell")
     return 0 if ok else 1
+
+def _selftest_judges():
+    """Both judges must report a cell they could not score and exit non-zero, never drop it silently."""
+    def run_judges(texts):
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(out):
+            for n, text in enumerate(texts, 1):
+                _write(Path(d) / f"vibe-todo__a__m__{n}" / "app.py", text)
+            codes = judge.run(d, None, workers=2), complete.run(d, None, workers=2)
+        return codes, out.getvalue()
+    saved = judge.judge_call, complete.judge_call
+    judge.judge_call = complete.judge_call = lambda prompt, files, key, **kw: (
+        '{"over_engineering": 1, "completeness": 3}' if "scorable" in files else "no score")
+    try:
+        codes, out = run_judges(["scorable = 1", "x = 1"])
+        ok = run_judges(["scorable = 1", "scorable = 2"])[0] == (0, 0) and codes == (1, 1) \
+            and out.count("unscored: vibe-todo__a__m__2") == 2
+    finally:
+        judge.judge_call, complete.judge_call = saved
+    return _report("judges       an unscored cell is reported and fails the run", ok)
 
 def chat_code_loc(text):
     """LOC of fenced code blocks in a chat answer: (total incl comments, code-only)."""
@@ -841,10 +881,8 @@ def main():
     preflight(arms)
     results = []
     if args.resume:
-        out_dir = Path(args.resume) if Path(args.resume).exists() else RUNS_DIR / Path(args.resume).name
+        out_dir = _resume_dir(args.resume, sources)
         stamp = out_dir.name
-        if json.loads((out_dir / "sources.json").read_text(encoding="utf-8")) != sources:
-            sys.exit(f"the sources or cells differ from when {stamp} started, so it cannot resume; compare with sources.json")
         kept = {p.name for p in out_dir.iterdir() if p.is_dir()}
         remaining = []
         for spec in cells:
