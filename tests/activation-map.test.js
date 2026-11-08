@@ -26,7 +26,8 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
 
     if (!['successful', 'default', 'outside-git'].includes(scenario)) {
       const body = {
-        blocked: 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000); return "";',
+        // Blocks past the 15 s hook limit, so a hook that waited for the map would fail.
+        blocked: 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000); return "";',
         failed: 'throw new Error("map unavailable");',
         oversized: 'return "x".repeat(100000);',
         disabled: 'require("node:fs").writeFileSync("map-ran", "yes"); return "unexpected map";',
@@ -52,7 +53,8 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
       cwd: workspace,
       input: '',
       encoding: 'utf8',
-      timeout: 5000,
+      // The SessionStart limit in hooks/*.json: the contract, not a tighter bound a loaded machine misses.
+      timeout: 15000,
       env,
     });
     assert.equal(result.error, undefined, 'optional mapping must finish before the hook timeout');
@@ -94,7 +96,7 @@ test('SessionStart omits a working map in review mode', (t) => {
     cwd: workspace,
     input: JSON.stringify({ source: 'compact' }),
     encoding: 'utf8',
-    timeout: 5000,
+    timeout: 15000,
     env: {
       ...process.env,
       CLAUDE_CONFIG_DIR: path.join(temp, 'claude'),
