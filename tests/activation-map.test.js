@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 
 const root = path.join(__dirname, '..');
 
-for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disabled', 'default']) {
+for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disabled', 'default', 'outside-git']) {
   test(`SessionStart preserves instructions when the optional map is ${scenario}`, (t) => {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical activation '));
     t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
@@ -17,8 +17,13 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     fs.cpSync(path.join(root, 'skills'), path.join(temp, 'plugin', 'skills'), { recursive: true });
     fs.mkdirSync(path.join(workspace, 'lib'), { recursive: true });
     fs.writeFileSync(path.join(workspace, 'lib', 'helper.js'), 'export function usefulHelper() {}');
+    if (scenario === 'default') {
+      for (const args of [['init', '-q'], ['add', 'lib/helper.js']]) {
+        assert.equal(spawnSync('git', args, { cwd: workspace, timeout: 10000 }).status, 0, `git ${args[0]}`);
+      }
+    }
 
-    if (scenario !== 'successful' && scenario !== 'default') {
+    if (!['successful', 'default', 'outside-git'].includes(scenario)) {
       const body = {
         blocked: 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000); return "";',
         failed: 'throw new Error("map unavailable");',
@@ -30,21 +35,24 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
         'if (require.main === module) process.stdout.write(exports.buildMap());\n');
     }
 
+    const env = {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: path.join(temp, 'claude'),
+      CLAUDE_PROJECT_DIR: '',
+      PLUGIN_DATA: path.join(temp, 'state'),
+      COPILOT_PLUGIN_DATA: '',
+      XDG_CONFIG_HOME: path.join(temp, 'config'),
+      PURITANICAL_DEFAULT_MODE: 'full',
+      PURITANICAL_MAP: scenario === 'disabled' ? '0' : '1',
+    };
+    // The default is an unset variable, not an empty one.
+    if (scenario === 'default' || scenario === 'outside-git') delete env.PURITANICAL_MAP;
     const result = spawnSync(process.execPath, [path.join(hooks, 'puritanical-activate.js')], {
       cwd: workspace,
       input: '',
       encoding: 'utf8',
       timeout: 5000,
-      env: {
-        ...process.env,
-        CLAUDE_CONFIG_DIR: path.join(temp, 'claude'),
-        CLAUDE_PROJECT_DIR: '',
-        PLUGIN_DATA: path.join(temp, 'state'),
-        COPILOT_PLUGIN_DATA: '',
-        XDG_CONFIG_HOME: path.join(temp, 'config'),
-        PURITANICAL_DEFAULT_MODE: 'full',
-        PURITANICAL_MAP: { disabled: '0', default: '' }[scenario] ?? '1',
-      },
+      env,
     });
     assert.equal(result.error, undefined, 'optional mapping must finish before the hook timeout');
     assert.equal(result.status, 0, result.stderr);
@@ -55,7 +63,8 @@ for (const scenario of ['blocked', 'failed', 'oversized', 'successful', 'disable
     assert.match(output.additionalContext, /validation at trust boundaries/);
     assert.match(output.additionalContext, /Subagents do not inherit these rules/);
     assert.match(output.additionalContext, /Never weaken, skip or\s+delete a test/);
-    // The map is on unless PURITANICAL_MAP=0; only a working map adds it.
+    // The map is on unless PURITANICAL_MAP=0, for git repositories only unless PURITANICAL_MAP=1;
+    // only a working map adds it.
     if (scenario === 'successful' || scenario === 'default') {
       assert.match(output.additionalContext, /Codebase map[\s\S]*lib\/: usefulHelper/);
     } else {

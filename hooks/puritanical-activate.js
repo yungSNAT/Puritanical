@@ -67,7 +67,8 @@ function activate(mode) {
   let output = getPuritanicalInstructions(mode);
 
   // 2b. Codebase map, on unless PURITANICAL_MAP=0: what already exists, so "reuse first" costs no
-  // search. It runs git ls-files and adds up to PURITANICAL_MAP_CHARS (2000) characters per session start.
+  // search. By default it maps git repositories only (git ls-files); PURITANICAL_MAP=1 also walks other
+  // folders. It adds about PURITANICAL_MAP_CHARS (2000) characters per session start.
   // Fail open: the map gets 3 s, well inside the 15 s hook limit, so a stalled map never costs the rules.
   // shortcut: a map slower than 3 s is still dropped; a cached per-repo map would lift that if it shows up.
   if (mode !== 'review' && process.env.PURITANICAL_MAP !== '0') try {

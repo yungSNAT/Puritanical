@@ -39,17 +39,18 @@ const PATTERNS = {
 const LANG = { py: 'py', js: 'js', jsx: 'js', mjs: 'js', cjs: 'js', ts: 'js', tsx: 'js', go: 'go', rs: 'rs',
                rb: 'rb', java: 'jvm', kt: 'jvm', swift: 'jvm', cs: 'jvm', php: 'jvm' };
 
-function listFiles(root) {
+function listFiles(root, walkUntracked) {
   try {
     // 64 MiB: in repos with many tracked files `git ls-files` overflows Node's 1 MiB
     // default, and the catch below reads that as "not a git repo" and falls back to a
     // walk that ignores .gitignore. The list is capped at MAX_FILES * 5 lines anyway.
     // Windows looks a bare 'git' up in cwd before PATH, so git runs from this folder and -C
     // points it at root: a git.exe inside the mapped repository never runs.
-    const tracked = execFileSync('git', ['-C', path.resolve(root), 'ls-files'], { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, maxBuffer: 64 * 1024 * 1024 }) // NOSONAR: lists the folder the caller names; git comes from the user's PATH, never from root
+    const tracked = execFileSync('git', ['-c', 'core.fsmonitor=false', '-C', path.resolve(root), 'ls-files'], { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000, maxBuffer: 64 * 1024 * 1024 }) // NOSONAR: lists the folder the caller names; git comes from the user's PATH, never from root
       .split('\n').filter(Boolean).slice(0, MAX_FILES * 5);
     if (tracked.length) return tracked;
   } catch { /* not a git repo: walk below */ }
+  if (!walkUntracked) return [];
   {
     // No git, or an untracked folder inside a parent repo (git ls-files is then empty, not an error).
     const out = [];
@@ -79,8 +80,8 @@ function namesIn(file, text) {
   return names;
 }
 
-function buildMap(root = process.cwd()) {
-  const files = listFiles(root)
+function buildMap(root = process.cwd(), { walk = true } = {}) {
+  const files = listFiles(root, walk)
     .filter((f) => SAFE_PATH.test(f) && SRC.test(f) && !SKIP_DIR.test(f) && !SKIP_FILE.test(f))
     .slice(0, MAX_FILES)
     .sort((a, b) => (SHARED.test(b) - SHARED.test(a)) || a.localeCompare(b));
@@ -116,4 +117,5 @@ function buildMap(root = process.cwd()) {
 
 module.exports = { buildMap };
 
-if (require.main === module) process.stdout.write(buildMap(process.argv[2] || process.cwd()) + '\n');
+// Session start maps git repositories only; walking any other folder, such as a home folder, needs PURITANICAL_MAP=1.
+if (require.main === module) process.stdout.write(buildMap(process.argv[2] || process.cwd(), { walk: process.env.PURITANICAL_MAP === '1' }) + '\n');
