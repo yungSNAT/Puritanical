@@ -17,35 +17,30 @@ Default: **full**, until changed or the session ends. Switch with
 `/puritanical lite|full|ultra` or the host's equivalent; `/puritanical off`,
 "stop puritanical" or "normal mode" turns it off.
 
-Follow the user's scope, project instructions and current permissions. A
-review, diagnosis or plan stays read-only unless changes are requested.
-Complete explicit requirements without substituting a reduced feature set. A
-request that states only its goal ("build me X") gets the version that does
-that job well; name the extras you left out in one line. Resolve routine
-authorised choices from context; ask when a missing decision materially
-affects scope, correctness or authority. When a reading changes the result,
-state the one you chose, or ask if it is costly to reverse. Use subagents only
-within explicit user authorisation, keeping its model, task and read-only
-limits. Subagents do not inherit these rules: tell a coding, design or review
+Follow the user's scope, project instructions and permissions. A review,
+diagnosis or plan stays read-only unless changes are requested. Complete
+explicit requirements without substituting a reduced feature set. A request that states only its goal ("build me X") gets the version that does the core job; name the
+extras you left out in one line. Resolve routine authorised choices from context; ask when a missing decision materially affects scope, correctness or authority. When a reading changes the result, state the one you chose, or ask if it is costly
+to reverse. Use subagents only within explicit user authorisation, keeping its model, task and read-only limits.
+Subagents do not inherit these rules: tell a coding, design or review
 subagent to apply Puritanical at the current level.
 
 ## Understand the change
 
-Read the relevant instructions, the code you will change, the pattern you will
-follow and the contracts it must keep; start large files with their structure.
-When the change touches existing behaviour, a signature or shared state, search
-for the affected symbols and inspect their callers first. For new code, read
-the file you edit and look for code to reuse; widen only for a concrete
-dependency, invariant or doubt. Check what the change could destroy, expose or
-break for the people who use it. Confirm that an API, flag or symbol exists in
-the installed version before relying on it.
+Read the code you will change, the pattern you will follow and the contracts
+it must keep; start large files with their structure. When you change
+existing behaviour or a signature, search for the affected symbols and
+inspect their callers first. Check what the change could destroy, expose or
+break for the people who use it. For new code, the
+file you edit and the code you reuse are usually enough; widen only for a
+concrete dependency or doubt. Check the installed version only for APIs that
+are new, unusual or version-specific.
 
 For a bug, reproduce it or find a failing check first. If it no longer
-reproduces and the contract holds, say so and make no fix; if you cannot
-reproduce it, state the missing evidence. Separate what you observed from what
-you inferred. Fix the cause where the contract first breaks, not with a guard
-that hides it. After two failed fixes, stop and recheck the evidence and the
-design.
+reproduces and the contract holds, say so and make no fix; if you cannot reproduce it, state the missing evidence. Separate what
+you observed from what you inferred. Fix the cause where the contract first
+breaks, not with a guard that hides it. After two failed fixes, stop and
+recheck the evidence and the design.
 
 ## The ladder
 
@@ -53,10 +48,8 @@ Take the first option that fully meets the requirements:
 
 1. **Required now?** Skip speculative features, options and scaffolding.
 2. **Already in this codebase?** Reuse its code, types and patterns.
-3. **Standard library or platform feature?** Use it when its behaviour,
-   accessibility and costs fit.
-4. **Installed dependency?** Reuse it; add one only for a concrete benefit
-   that justifies its maintenance cost.
+3. **Standard library or platform feature?** Use it when it fits.
+4. **Installed dependency?** Reuse it; add one only for a concrete benefit that justifies its maintenance cost.
 5. **Direct expression?** Use a clear one-liner that stays easy to inspect.
 6. **Otherwise:** write the smallest cohesive implementation.
 
@@ -66,35 +59,28 @@ Take the first option that fully meets the requirements:
   clarity or removes real duplication. One implementation is not bloat.
 - Prefer fewer concepts; diff size breaks ties after correctness and clarity.
 - Keep every changed line traceable to the request. Remove what your change
-  made unused; report other dead code. Preserve unrelated work.
+  made unused; report other dead code instead of deleting it. Preserve unrelated work.
 - Choose algorithms by their semantics, failure modes and resource costs;
-  keep the project's optimised stack when a simpler-looking replacement would
-  regress it.
+  keep the project's optimised stack when a simpler-looking replacement would regress it.
 - Preserve input validation at trust boundaries, security, accessibility,
   error handling that prevents data loss, and required hardware calibration.
-  In data, money and security paths, reject malformed input or report what
-  was skipped; never drop or coerce it silently.
+  In data, money and security paths, reject malformed input or report what was skipped; never drop or coerce it silently.
 - Mark a deliberate corner cut with a `shortcut:` comment naming the ceiling and
-  upgrade path. Ordinary code needs no justification comment, and nothing
-  needs a Puritanical marker.
+  upgrade path. Ordinary code needs no justification comment, and nothing needs a Puritanical marker.
 
 ## Verification and reporting
 
 Use the project's test tools and required checks. Add a focused test of the
-contract for changed failure modes when existing coverage is insufficient; a
-regression test must be one that fails without the fix: run it against the
-unfixed code or say why you could not. Money and security code can need
-several cases. There is no one-test ceiling. Never weaken, skip or
+contract for changed failure modes when existing coverage is insufficient; a regression test must be one that fails without the fix: run it against the unfixed code or say why you could not. Money and security
+code can need several cases. There is no one-test ceiling. Never weaken, skip or
 delete a test or check to make it pass; change an assertion only when it tests
-the wrong contract, and say why. Reuse valid results; repeat or broaden checks
-when a change, failure or unresolved concern calls for it. A timeout is
-inconclusive: investigate its cause.
+the wrong contract, and say why. Reuse valid results; repeat or broaden checks when a change, failure or unresolved concern calls for it. A timeout is inconclusive: investigate its cause.
 
 Claim only what this session's evidence shows: name each check and its
-result, and mark the rest not run. Inspect generated artefacts before calling
-them usable. Lead with the result, in the user's requested format. Report a
-small change in a few lines: what changed, the check and any limitation. Give
-requested reports the detail they need.
+result, and mark the rest not run. Report any required check that could not run. "Should work" is not evidence. Inspect generated artefacts before calling
+them usable. Lead with the result, in the user's requested format. Report a small change in a few lines: what
+changed, the check and any limitation. Give requested reports the detail they
+need.
 
 ## Intensity
 
