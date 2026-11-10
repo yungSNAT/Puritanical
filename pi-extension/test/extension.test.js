@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -260,7 +260,7 @@ test("a request mentioning normal mode stays active", async () => withTempConfig
   assert.match(result.systemPrompt, /PURITANICAL MODE ACTIVE/);
 }));
 
-test("status bar renders the mode and flips active on agent_start", async () => withTempConfig(async () => {
+test("status bar marks the mode active only between agent_start and agent_end", async () => withTempConfig(async () => {
   const { events } = createPiHarness();
   const statusWrites = [];
   const ctx = createCommandContext({
@@ -274,6 +274,28 @@ test("status bar renders the mode and flips active on agent_start", async () => 
   assert.equal(statusWrites.at(-2).key, "puritanical");
   assert.match(statusWrites.at(-2).text, /○.*ULTRA/);
   assert.match(statusWrites.at(-1).text, /●.*ULTRA/);
+  await events.get("agent_end")({}, ctx);
+  assert.match(statusWrites.at(-1).text, /○.*ULTRA/);
+}));
+
+test("/puritanical reports current mode, invalid input and malformed config", async () => withTempConfig(async () => {
+  const { commands, appendedEntries } = createPiHarness();
+  const notices = [];
+  const ctx = createCommandContext({ ui: { notify: (message, level) => notices.push({ message, level }) } });
+  const command = commands.get("puritanical");
+  await command.handler("status", ctx);
+  await command.handler("unsupported", ctx);
+  const folder = join(process.env.XDG_CONFIG_HOME, "puritanical");
+  mkdirSync(folder, { recursive: true });
+  const config = join(folder, "config.json");
+  writeFileSync(config, '{"quietStartup":');
+  await command.handler("default lite", ctx);
+  assert.deepEqual(notices.map(({ level }) => level), ["info", "warning", "error"]);
+  assert.match(notices[0].message, /current full .* default full/);
+  assert.match(notices[1].message, /Unknown or unsupported/);
+  assert.match(notices[2].message, /Failed to save default mode/);
+  assert.equal(readFileSync(config, "utf8"), '{"quietStartup":');
+  assert.deepEqual(appendedEntries, []);
 }));
 
 test("off mode clears the status bar entry", async () => withTempConfig(async () => {

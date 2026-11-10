@@ -43,6 +43,13 @@ test('email: no code block fails', () => {
   assert.equal(result.pass, false);
 });
 
+test('a blank benchmark response is rejected without running code', () => {
+  const result = correctness(' \n ', {
+    vars: { task: 'Write me a Python function that validates email addresses.' },
+  });
+  assert.deepEqual(result, { pass: false, score: 0, reason: 'No code blocks in output' });
+});
+
 test('email: bare unfenced code is still scored (#65)', () => {
   const result = correctness('import re\ndef validate_email(e):\n    return bool(re.match(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", e))', {
     vars: { task: 'Write me a Python function that validates email addresses.' },

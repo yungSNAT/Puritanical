@@ -88,6 +88,39 @@ function writeFlag(c, mode) {
   fs.writeFileSync(c.flag, mode);
 }
 
+test('installer rejects an unknown command without writing config', () => {
+  const c = cursorEnv('invalid-action');
+  const result = cli(['unexpected'], c.env);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /usage: .*install\|uninstall/);
+  assert.equal(fs.existsSync(path.join(c.home, '.cursor', 'hooks.json')), false);
+});
+
+test('installer refuses to embed a checkout path with shell metacharacters', (t) => {
+  const c = cursorEnv('unsafe-checkout');
+  const checkout = path.join(temp, 'unsafe;checkout');
+  const script = require.resolve('../scripts/cursor-hooks');
+  const cached = require.cache[script];
+  const scriptsDir = path.dirname(script);
+  const join = path.join;
+  t.mock.method(os, 'homedir', () => c.home);
+  const rootPath = t.mock.method(path, 'join', (...parts) => (
+    parts.length === 2 && parts[0] === scriptsDir && parts[1] === '..'
+      ? checkout
+      : join(...parts)
+  ));
+  delete require.cache[script];
+  let install;
+  try {
+    ({ install } = require(script));
+  } finally {
+    require.cache[script] = cached;
+    rootPath.mock.restore();
+  }
+  assert.throws(() => install('user'), /path with shell metacharacters/);
+  assert.equal(fs.existsSync(path.join(c.home, '.cursor', 'hooks.json')), false);
+});
+
 test('Cursor uninstall preserves a symlink containing only Puritanical hooks', (t) => {
   const c = cursorEnv('symlink-only');
   const file = path.join(c.home, '.cursor', 'hooks.json');
