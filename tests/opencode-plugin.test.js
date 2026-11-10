@@ -223,6 +223,33 @@ function transform(hooks) {
   return hooks['experimental.chat.system.transform']({ model: {} }, output).then(() => output.system);
 }
 
+test('V1 registers commands and adds its skills directory only once', async () => {
+  const hooks = await loadPlugin.server();
+  const config = {};
+  await hooks.config(config);
+  assert.equal(Object.keys(config.command).length, 5);
+  assert.match(config.command.puritanical.template, /\$ARGUMENTS/);
+  assert.deepEqual(config.skills.paths, [path.resolve(__dirname, '../skills')]);
+
+  config.command.croft = { template: 'Keep this user command' };
+  config.skills.paths.unshift(path.join(tmp, 'user-skills'));
+  await hooks.config(config);
+  assert.equal(config.command.croft.template, 'Keep this user command');
+  assert.deepEqual(config.skills.paths, [
+    path.join(tmp, 'user-skills'),
+    path.resolve(__dirname, '../skills'),
+  ]);
+});
+
+test('V1 reports the selected mode through the app logger when available', async () => {
+  const logged = [];
+  const hooks = await loadPlugin.server({ client: { app: { log: (entry) => logged.push(entry.body) } } });
+  await hooks['command.execute.before']({ command: 'puritanical', arguments: 'lite' });
+  assert.deepEqual(logged, [
+    { service: 'puritanical', level: 'info', message: 'puritanical lite' },
+  ]);
+});
+
 test('system.transform injects the ruleset at the default mode (full)', async () => {
   try { fs.unlinkSync(statePath); } catch (e) {}
   const hooks = await loadPlugin.server({});
