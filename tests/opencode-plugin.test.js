@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
+const { spawnSync } = require('child_process');
 
 // Point the plugin's mode-flag at a temp config home BEFORE it loads — the
 // plugin resolves its state path once at load (as it does under a real OpenCode
@@ -318,6 +319,78 @@ test('unrelated commands do not touch the flag', async () => {
   assert.equal(fs.existsSync(statePath), false);
 });
 
+test('V1 bare activation reuses the configured default and survives a logger failure', async () => {
+  const hooks = await loadPlugin.server({ client: { app: { log() { throw new Error('log disconnected'); } } } });
+  const flag = path.join(tmp, 'puritanical', 'config.json');
+  fs.mkdirSync(path.dirname(flag), { recursive: true });
+  fs.writeFileSync(flag, '{"defaultMode":"lite"}');
+  fs.writeFileSync(statePath, 'off');
+  try {
+    await hooks['command.execute.before']({ command: 'puritanical' });
+    assert.equal(fs.readFileSync(statePath, 'utf8'), 'lite');
+    assert.match((await transform(hooks))[0], /level: lite/);
+  } finally {
+    fs.rmSync(path.dirname(flag), { recursive: true, force: true });
+  }
+});
+
+test('V1 default changes report malformed config without replacing it', async (t) => {
+  const hooks = await loadPlugin.server({ client: {} });
+  const config = path.join(tmp, 'puritanical', 'config.json');
+  fs.mkdirSync(path.dirname(config), { recursive: true });
+  fs.writeFileSync(config, '{"quietStartup":');
+  t.after(() => fs.rmSync(path.dirname(config), { recursive: true, force: true }));
+  const errors = [];
+  t.mock.method(console, 'error', (message) => errors.push(message));
+
+  await hooks['command.execute.before']({ command: 'puritanical', arguments: 'default lite' });
+  assert.match(errors.join('\n'), /puritanical default not saved: .*could not be read as JSON/);
+  assert.equal(fs.readFileSync(config, 'utf8'), '{"quietStartup":');
+});
+
+test('V2 loads without optional command and skill directories', async (t) => {
+  const original = fs.readdirSync;
+  t.mock.method(fs, 'readdirSync', (directory, options) => {
+    const name = path.basename(directory);
+    if (name === 'command' || name === 'skills') {
+      throw Object.assign(new Error('missing plugin resources'), { code: 'ENOENT' });
+    }
+    return original(directory, options);
+  });
+  const { added, hooks } = await setupV2();
+  assert.deepEqual(added.commands, []);
+  assert.deepEqual(added.skills, []);
+  assert.equal(typeof hooks.context, 'function');
+});
+
+test('V2 names a skill without frontmatter name after its folder', async (t) => {
+  const skill = path.join(__dirname, '..', 'skills', 'puritanical', 'SKILL.md');
+  const original = fs.readFileSync;
+  t.mock.method(fs, 'readFileSync', (file, ...options) => (
+    file === skill ? '---\ndescription: Fixture skill\n---\nFixture rules\n' : original(file, ...options)
+  ));
+  const { added } = await setupV2();
+  const registration = added.skills.find(({ id }) => id === 'puritanical');
+  assert.equal(registration.name, 'puritanical');
+  assert.equal(registration.content, 'Fixture rules\n');
+});
+
+test('V1 uses the home config directory when XDG_CONFIG_HOME is unset', () => {
+  const fixtureHome = fs.mkdtempSync(path.join(tmp, 'croft-manor-'));
+  const url = pathToFileURL(path.join(__dirname, '..', '.opencode', 'plugins', 'puritanical.mjs'));
+  const env = { ...process.env };
+  delete env.XDG_CONFIG_HOME;
+  const result = spawnSync(process.execPath, ['--input-type=module', '--eval', `
+    import os from 'node:os';
+    os.homedir = () => process.argv[2];
+    const { default: plugin } = await import(process.argv[1]);
+    const hooks = await plugin.server();
+    await hooks['command.execute.before']({ command: 'puritanical', arguments: 'ultra' });
+  `, url.href, fixtureHome], { env, encoding: 'utf8', timeout: 30000 });
+  assert.equal(result.status, 0, result.error?.message || result.stderr);
+  assert.equal(fs.readFileSync(path.join(fixtureHome, '.config', 'opencode', '.puritanical-active'), 'utf8'), 'ultra');
+});
+
 test('parseCommandFile reads frontmatter description + body, LF and CRLF', () => {
   const lf = path.join(tmp, 'cmd-lf.md');
   fs.writeFileSync(lf, '---\ndescription: do a thing\n---\n\nthe template body\n');
@@ -350,7 +423,7 @@ test('parseSkillFile folds >, keeps | lines, and stops at the next key', () => {
   // Plain scalar stays as written, and a literal block keeps its newlines.
   fs.writeFileSync(file, '---\nname: demo\ndescription: plain\n---\nB\n');
   assert.equal(parseSkillFile(file).description, 'plain');
-  fs.writeFileSync(file, '---\ndescription: |\n  line one\n  line two\n---\nB\n');
+  fs.writeFileSync(file, '---\ndescription: |\n  line one\n  line two\n  \n---\nB\n');
   assert.equal(parseSkillFile(file).description, 'line one\nline two\n');
   // Chomping indicator drops the closing newline.
   fs.writeFileSync(file, '---\ndescription: >-\n  stripped\n---\nB\n');

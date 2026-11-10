@@ -287,4 +287,18 @@ for (const filePath of inheritedFiles) {
   assert.equal(fs.existsSync(filePath), true, `uninstall must not touch inherited config: ${filePath}`);
 }
 
+for (const [name, location] of [
+  ['cursor', path.join('.cursor', 'hooks.json')],
+  ['claude', path.join('.claude', 'settings.json')],
+]) {
+  const blockedHome = path.join(temp, 'blocked-' + name);
+  const configDirectory = path.join(blockedHome, location);
+  fs.mkdirSync(configDirectory, { recursive: true });
+  fs.writeFileSync(path.join(configDirectory, 'keep'), 'fixture');
+  const blocked = runUninstall({ HOME: blockedHome, USERPROFILE: blockedHome, XDG_CONFIG_HOME: blockedHome });
+  assert.equal(blocked.status, 1, blocked.stderr);
+  assert.match(blocked.stderr, /EISDIR/);
+  assert.equal(fs.readFileSync(path.join(configDirectory, 'keep'), 'utf8'), 'fixture');
+}
+
 console.log('uninstall script checks passed');

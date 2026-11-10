@@ -29,8 +29,8 @@ assert.equal(isShellSafe('/tmp/a"&calc.exe&"/x.sh'), false);
 assert.equal(isShellSafe('/tmp/$(calc)/x.sh'), false);
 assert.equal(isShellSafe('/tmp/a;rm -rf/x.sh'), false);
 
-function run(script, env, input = '') {
-  return spawnSync(process.execPath, [path.join(root, 'hooks', script)], {
+function run(script, env, input = '', nodeArgs = []) {
+  return spawnSync(process.execPath, [...nodeArgs, path.join(root, 'hooks', script)], {
     env: { ...process.env, ...env },
     input,
     encoding: 'utf8',
@@ -69,6 +69,63 @@ process.on('exit', () => fs.rmSync(temp, { recursive: true, force: true }));
 const home = path.join(temp, 'home');
 const pluginData = path.join(temp, 'plugin-data');
 fs.mkdirSync(home, { recursive: true });
+
+// A hook still exits successfully if its host closes stdout just before a write.
+{
+  const isolatedHome = path.join(temp, 'closed-pipe');
+  const claude = path.join(isolatedHome, '.claude');
+  const project = path.join(isolatedHome, 'project');
+  const rule = path.join(project, '.cursor', 'rules', 'puritanical.mdc');
+  fs.mkdirSync(claude, { recursive: true });
+  fs.writeFileSync(path.join(claude, '.puritanical-active'), 'full');
+  fs.mkdirSync(path.dirname(rule), { recursive: true });
+  fs.writeFileSync(rule, 'fixture always-on rule');
+
+  const preload = path.join(temp, 'closed-stdout.cjs');
+  fs.writeFileSync(preload, `
+    const fs = require('node:fs');
+    const write = fs.writeSync;
+    fs.writeSync = (fd, ...args) => {
+      if (fd !== 1) return write(fd, ...args);
+      write(2, 'fixture rejected stdout\\n');
+      throw Object.assign(new Error('broken pipe'), { code: 'EPIPE' });
+    };
+  `);
+  const env = {
+    HOME: isolatedHome, USERPROFILE: isolatedHome, XDG_CONFIG_HOME: isolatedHome,
+    PURITANICAL_DEFAULT_MODE: 'full', PURITANICAL_MAP: '0',
+  };
+  for (const [script, hookEnv] of [
+    ['puritanical-activate.js', env],
+    ['puritanical-subagent.js', env],
+    ['puritanical-activate.js', { ...env, CURSOR_VERSION: '3.20.17', CURSOR_PROJECT_DIR: project }],
+  ]) {
+    const closed = run(script, hookEnv, '', ['--require', preload]);
+    assert.equal(closed.status, 0, closed.stderr);
+    assert.equal(closed.stderr, 'fixture rejected stdout\n');
+    assert.equal(closed.stdout, '');
+  }
+}
+
+// Unwritable mode state is best-effort. Unsafe paths get manual statusline help.
+{
+  const blocked = path.join(temp, 'blocked-config');
+  fs.writeFileSync(blocked, 'not a folder');
+  const env = {
+    HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: temp,
+    PURITANICAL_DEFAULT_MODE: 'full', PURITANICAL_MAP: '0',
+  };
+  const withoutState = run('puritanical-activate.js', { ...env, CLAUDE_CONFIG_DIR: blocked });
+  assert.equal(withoutState.status, 0, withoutState.stderr);
+  assert.match(withoutState.stdout, /PURITANICAL MODE ACTIVE — level: full/);
+  assert.equal(fs.readFileSync(blocked, 'utf8'), 'not a folder');
+
+  const manual = path.join(temp, 'unsafe;config');
+  const setup = run('puritanical-activate.js', { ...env, CLAUDE_CONFIG_DIR: manual });
+  assert.equal(setup.status, 0, setup.stderr);
+  assert.match(setup.stdout, /characters unsafe to embed in a shell command/);
+  assert.doesNotMatch(setup.stdout, /"statusLine":\s*\{/);
+}
 
 // Off-mode SessionStart must clear stale state without emitting model-visible
 // output on any harness.
@@ -553,6 +610,16 @@ result = run(
 assert.equal(result.status, 0, result.stderr);
 output = JSON.parse(result.stdout);
 assert.match(output.hookSpecificOutput.additionalContext, /PURITANICAL MODE ACTIVE — level: full/);
+
+// Malformed or null hook input must fail open too.
+for (const malformed of ['{', 'null']) {
+  const fallback = run(
+    'puritanical-subagent.js', { ...scopeEnv, PURITANICAL_SUBAGENT_MATCHER: 'general' }, malformed,
+  );
+  assert.equal(fallback.status, 0, fallback.stderr);
+  assert.match(JSON.parse(fallback.stdout).hookSpecificOutput.additionalContext,
+    /PURITANICAL MODE ACTIVE — level: full/);
+}
 
 // Invalid regex → must not crash; fall back to injecting everywhere.
 result = run(
