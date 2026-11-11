@@ -6,7 +6,7 @@
 //! and CI run.
 //!
 //!   puritanical-tools sync [--check]        write (or verify) every rule copy
-//!   puritanical-tools check-versions        every manifest shares one version
+//!   puritanical-tools check-versions        manifests share one version; Claude Code's has none
 //!   puritanical-tools publish-openclaw ...  push .openclaw/skills to `ClawHub`
 
 mod publish;

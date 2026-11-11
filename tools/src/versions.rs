@@ -2,15 +2,21 @@
 // SPDX-License-Identifier: FSL-1.1-ALv2
 
 //! Version-consistency guard. Puritanical declares its version in every host
-//! manifest, and a release bumps all of them by hand. Manifests that agree
-//! with each other can still all be stale, so on a release-tag CI run the
-//! shared version must also equal the tag.
+//! manifest except Claude Code's, and a release bumps all of them by hand.
+//! Manifests that agree with each other can still all be stale, so on a
+//! release-tag CI run the shared version must also equal the tag.
 
 use std::path::Path;
 
+/// Claude Code updates an installed plugin only when its version changes. With
+/// no `version`, it uses the installed commit SHA, so every change reaches users
+/// without a bump. This manifest, and the plugin's entry in the marketplace,
+/// must therefore declare none.
+const UNVERSIONED: &str = ".claude-plugin/plugin.json";
+const MARKETPLACE: &str = ".claude-plugin/marketplace.json";
+
 /// Every file that declares the project version. Add new host manifests here.
-const JSON_FILES: [&str; 7] = [
-    ".claude-plugin/plugin.json",
+const JSON_FILES: [&str; 6] = [
     ".codex-plugin/plugin.json",
     ".devin-plugin/plugin.json",
     ".github/plugin/plugin.json",
@@ -61,9 +67,34 @@ fn read_version(root: &Path, rel: &str) -> Result<Option<String>, String> {
         .map(str::to_string))
 }
 
+/// Each `plugins[].version` in the Claude Code marketplace, which pins the plugin
+/// as a manifest version does.
+fn marketplace_versions(root: &Path) -> Result<Vec<String>, String> {
+    let raw = std::fs::read_to_string(root.join(MARKETPLACE))
+        .map_err(|e| format!("{MARKETPLACE}: {e}"))?;
+    let json: serde_json::Value = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
+        .map_err(|e| format!("{MARKETPLACE}: {e}"))?;
+    Ok(json["plugins"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|plugin| plugin.get("version").map(ToString::to_string))
+        .collect())
+}
+
 pub fn check(root: &Path, tag: &TagEnv) -> Result<String, String> {
     let mut errors = Vec::new();
     let mut versions = Vec::new();
+    if let Some(v) = read_version(root, UNVERSIONED)? {
+        errors.push(format!(
+            "{UNVERSIONED}: declares version {v:?}; remove it so Claude Code installs track commits"
+        ));
+    }
+    for v in marketplace_versions(root)? {
+        errors.push(format!(
+            "{MARKETPLACE}: a plugin entry declares version {v}; remove it so Claude Code installs track commits"
+        ));
+    }
     for rel in JSON_FILES.iter().chain(YAML_FILES.iter()) {
         match read_version(root, rel)? {
             Some(v) if pinned(&v) => versions.push((*rel, v)),
@@ -113,8 +144,16 @@ mod tests {
         ref_name: None,
     };
 
-    fn tree(versions: &[&str; 8]) -> tempfile::TempDir {
+    fn tree(versions: &[&str; 7]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
+        let claude = dir.path().join(UNVERSIONED);
+        fs::create_dir_all(claude.parent().unwrap()).unwrap();
+        fs::write(claude, "{\"name\": \"puritanical\"}").unwrap();
+        fs::write(
+            dir.path().join(MARKETPLACE),
+            "{\"plugins\": [{\"name\": \"puritanical\", \"source\": \"./\"}]}",
+        )
+        .unwrap();
         for (rel, v) in JSON_FILES.iter().chain(YAML_FILES.iter()).zip(versions) {
             let path = dir.path().join(rel);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -136,10 +175,37 @@ mod tests {
     #[test]
     fn one_stale_manifest_is_reported() {
         let dir = tree(&[
-            "1.0.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0", "0.9.0",
+            "1.0.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0", "0.9.0",
         ]);
         let err = check(dir.path(), &NO_TAG).unwrap_err();
         assert!(err.contains("0.9.0\tplugin.yaml"), "{err}");
+    }
+
+    #[test]
+    fn a_claude_manifest_version_is_reported() {
+        let dir = tree(&["1.0.0"; 7]);
+        fs::write(
+            dir.path().join(UNVERSIONED),
+            "{\"name\": \"puritanical\", \"version\": \"1.0.0\"}",
+        )
+        .unwrap();
+        let err = check(dir.path(), &NO_TAG).unwrap_err();
+        assert!(
+            err.contains("remove it so Claude Code installs track commits"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_marketplace_entry_version_is_reported() {
+        let dir = tree(&["1.0.0"; 7]);
+        fs::write(
+            dir.path().join(MARKETPLACE),
+            "{\"plugins\": [{\"name\": \"puritanical\", \"version\": \"1.0.0\"}]}",
+        )
+        .unwrap();
+        let err = check(dir.path(), &NO_TAG).unwrap_err();
+        assert!(err.contains("a plugin entry declares version"), "{err}");
     }
 
     #[test]
@@ -147,13 +213,13 @@ mod tests {
         for bad in ["^1.0.0", "1.0", "1.0.0-rc.1", "1..0"] {
             assert!(!pinned(bad), "{bad}");
         }
-        let dir = tree(&["^1.0.0"; 8]);
+        let dir = tree(&["^1.0.0"; 7]);
         assert!(check(dir.path(), &NO_TAG).is_err());
     }
 
     #[test]
     fn a_release_tag_must_match_the_shared_version() {
-        let dir = tree(&["1.0.0"; 8]);
+        let dir = tree(&["1.0.0"; 7]);
         let tag = |name: &str| TagEnv {
             ref_type: Some("tag".into()),
             ref_name: Some(name.into()),
