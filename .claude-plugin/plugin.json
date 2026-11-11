@@ -1,6 +1,5 @@
 {
   "name": "puritanical",
-  "version": "1.0.0",
   "description": "Strict simplicity for coding agents. Correctness, safety and verification come first; then YAGNI, reuse, the standard library and the smallest change that meets every requirement.",
   "author": {
     "name": "yungSNAT",

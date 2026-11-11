@@ -18,7 +18,6 @@ const EXTENSION_NAME = 'puritanical';
 const PINNED_SEMVER = /^\d+\.\d+\.\d+$/;
 const VERSIONED_MANIFESTS = [
   'gemini-extension.json',
-  '.claude-plugin/plugin.json',
   '.codex-plugin/plugin.json',
   '.github/plugin/plugin.json',
 ];
