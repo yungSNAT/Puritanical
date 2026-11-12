@@ -37,7 +37,7 @@ Means over 5 runs. Lines are non-blank source lines the agent wrote, comments in
 ## Limits
 
 - **Pre-release ruleset:** the `puritanical` arm is `3d145eb`, not 1.0.0.
-- **Small:** 4 tasks and 5 runs. This is not the full head-to-head that the [analysis plan](../agentic/README.md#analysis-plan) fixes (47 tasks, 5 arms), so it supports no claim under that plan. It is published as descriptive evidence.
+- **Small:** 4 tasks and 5 runs. This is not the full head-to-head that the [analysis plan](../agentic/README.md#analysis-plan) fixes (47 tasks, 5 arms), so it supports no claim under that plan. Its 4 tasks are the plan's pilot set, and the plan does not count pilot cells. It is published as descriptive evidence.
 - **Checks:** correctness and completeness are at their ceiling for every arm here. They show no arm failing; they do not show what the extra lines buy.
 - **Scope:** one model, one host (Claude Code), one date. Superpowers and the Karpathy guidelines were not in this run.
 
