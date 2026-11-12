@@ -11,9 +11,9 @@
 
 [![tests](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml) [![Codecov](https://codecov.io/gh/yungSNAT/Puritanical/graph/badge.svg)](https://codecov.io/gh/yungSNAT/Puritanical) [![CodeQL](https://github.com/yungSNAT/Puritanical/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/codeql.yml) [![OSV-Scanner](https://github.com/yungSNAT/Puritanical/actions/workflows/osv-scanner.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/osv-scanner.yml) [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=EquityBot_Puritanical&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=EquityBot_Puritanical) [![Codacy code quality](https://app.codacy.com/project/badge/Grade/7aea28799635432b9a6fcd222a6c4ccb)](https://app.codacy.com/gh/yungSNAT/Puritanical/dashboard)<br>
 [![OpenSSF Scorecard](https://raw.githubusercontent.com/ryanduguid/.github/badges/EquityBot/Puritanical.svg)](https://scorecard.dev/viewer/?uri=github.com/yungSNAT/Puritanical)<br>
-[![licence: FSL-1.1-ALv2](.github/assets/badges/licence.svg)](LICENSE) [![fork of: Ponytail](.github/assets/badges/fork-of.svg)](https://github.com/DietrichGebert/ponytail)
+[![licence: FSL-1.1-ALv2](.github/assets/badges/licence.svg)](LICENSE) [![release](https://img.shields.io/github/v/release/yungSNAT/Puritanical?color=66023C&labelColor=000000&style=flat)](https://github.com/yungSNAT/Puritanical/releases/latest) [![fork of: Ponytail](.github/assets/badges/fork-of.svg)](https://github.com/DietrichGebert/ponytail)
 
-[Install](#install) · [Use](#use) · [The rules](#the-rules) · [How it compares](#how-it-compares) · [Changes from Ponytail](#changes-from-ponytail) · [Development](#development) · [Credits](#credits)
+[Install](#install) · [Use](#use) · [The rules](#the-rules) · [How it compares](#how-it-compares) · [Changes from Ponytail](#changes-from-ponytail) · [Benchmarks](#benchmarks) · [Development](#development) · [Credits](#credits) · [Licence](#licence)
 
 </div>
 

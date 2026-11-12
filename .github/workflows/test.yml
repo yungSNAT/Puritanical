@@ -3,6 +3,8 @@ name: test
 on:
   push:
     branches: [main]
+    # check-versions compares a release tag with the version files.
+    tags: ['v*']
   pull_request:
 
 permissions:

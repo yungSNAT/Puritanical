@@ -42,4 +42,4 @@ A new task needs a `good` and a `bad` reference in `tasks.py`, so `--selftest` p
 
 ## Releases
 
-Bump every version file together; `check-versions` lists them and, on a tag build, checks the tag matches. `.claude-plugin/plugin.json` declares no version, so Claude Code installs follow each commit; `check-versions` refuses one there. `puritanical-tools publish-openclaw` pushes `.openclaw/skills/` to ClawHub after `clawhub login`; nothing is published there yet. A `v*` tag and GitHub release do not publish to npm; run the `publish` workflow by hand from the tag once npm trusted publishing is set up.
+Bump every version file together; `check-versions` lists them and, on a tag build, checks the tag matches. `.claude-plugin/plugin.json` declares no version, so Claude Code installs follow each commit; `check-versions` refuses one there. `puritanical-tools publish-openclaw` pushes `.openclaw/skills/` to ClawHub after `clawhub login`; nothing is published there yet. A `v*` tag and GitHub release publish nothing to npm.

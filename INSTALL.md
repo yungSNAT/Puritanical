@@ -74,16 +74,16 @@ omp runs puritanical's Pi extension unchanged, so the ruleset is injected every 
 Puritanical is not published to npm. Clone this repository, then point a project's `opencode.json` at the checkout (the plugin reuses `hooks/` and `skills/`):
 
 ```json
-{ "plugins": ["./.opencode/plugins"] }
+{ "plugins": ["<checkout>/.opencode/plugins"] }
 ```
 
-Injects the ruleset every turn at the active level; adds the `/puritanical` commands (see [Commands](README.md#commands)). OpenCode also auto-loads this repo's `AGENTS.md`, so the rules hold even without the plugin. The plugin adds the `lite/full/ultra/off` levels.
+Injects the ruleset every turn at the active level; adds the `/puritanical` commands (see [Use](README.md#use)). OpenCode also auto-loads this repo's `AGENTS.md`, so the rules hold even without the plugin. The plugin adds the `lite/full/ultra/off` levels.
 
-The `./` path resolves against your project's `opencode.json`; to share one checkout across projects, point it at the absolute path of the checkout's `.opencode/plugins` directory. A `plugins` entry must name a **directory**, not a file: OpenCode 2 rejects a path to `puritanical.mjs` with `configured plugin path must be a directory`. Opening this repo in OpenCode 2 needs no entry at all: it loads `.opencode/plugins/index.js` on its own.
+Replace `<checkout>` with the absolute path of your clone: a relative path resolves against your project's `opencode.json`, not the checkout. A `plugins` entry must name a **directory**, not a file: OpenCode 2 rejects a path to `puritanical.mjs` with `configured plugin path must be a directory`. Opening this repo in OpenCode 2 needs no entry at all: it loads `.opencode/plugins/index.js` on its own.
 
 Kilo Code is built on OpenCode and runs the same plugin through its `plugin` key: add `{ "plugin": ["<checkout>/.opencode/plugins/puritanical.mjs"] }` to `kilo.jsonc` (or `~/.config/kilo/kilo.jsonc` for every project).
 
-OpenCode 1 uses the older `plugin` key with the file path: `{ "plugin": ["./.opencode/plugins/puritanical.mjs"] }`.
+OpenCode 1 uses the older `plugin` key with the file path: `{ "plugin": ["<checkout>/.opencode/plugins/puritanical.mjs"] }`.
 
 ## Gemini CLI
 
