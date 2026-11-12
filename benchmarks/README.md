@@ -1,6 +1,6 @@
 # Benchmark
 
-Puritanical has not been benchmarked yet. The harness is inherited from [Ponytail](https://github.com/DietrichGebert/ponytail); its published results measure the upstream rulesets, so they are in [upstream `benchmarks/results/`](https://github.com/DietrichGebert/ponytail/tree/main/benchmarks/results) and are not repeated here.
+Puritanical's own runs are in [`results/`](results/), from the [agentic benchmark](agentic/README.md#results); the single-shot benchmark below has not been run on it. The harness is inherited from [Ponytail](https://github.com/DietrichGebert/ponytail); upstream's published results measure the upstream rulesets, so they are in [upstream `benchmarks/results/`](https://github.com/DietrichGebert/ponytail/tree/main/benchmarks/results) and are not repeated here.
 
 The single-shot benchmark below has 3 arms (no skill, [caveman](https://github.com/JuliusBrussee/caveman), puritanical), 3 models and 5 everyday tasks. Code LOC is counted from fenced code blocks; tokens, cost and latency come from the API. The headline harness is the [agentic benchmark](agentic/).
 
