@@ -4,6 +4,10 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 
 ## [Unreleased]
 
+### Added
+
+- The results of 2 benchmark runs, with every cell, under `benchmarks/results/`: the 1.0.0 ruleset against the draft before it, and a pre-release ruleset against Ponytail and no skill, where Ponytail wrote fewer lines and cost less on all 4 tasks.
+
 ### Fixed
 
 - Claude Code installs follow each commit: `.claude-plugin/plugin.json` no longer declares a version, so Claude Code offers updates for changes made since 1.0.0. `check-versions` refuses a version there (#55).
@@ -14,7 +18,7 @@ First release. Puritanical guides coding agents to the smallest correct change: 
 
 ### Added
 
-- The v5 ruleset, which finishes routine changes instead of stopping to ask (#52). Across 470 benchmark cells (47 tasks, Claude Opus 5.5, 5 runs per arm), 235 of 235 were correct and safe, against 232 of 235 for the previous draft. Code size and cost are unchanged from that draft, which was about a tenth smaller and cheaper than the one before it (#49).
+- The v5 ruleset, which finishes routine changes instead of stopping to ask (#52). Across 470 benchmark cells (47 tasks, Claude Opus 5.5, 5 runs per arm), 235 of 235 were correct and safe, against 232 of 235 for the previous draft ([results](benchmarks/results/2026-11-08-v5-vs-v4.md)). Code size and cost are unchanged from that draft, which was about a tenth smaller and cheaper than the one before it (#49).
 - A codebase map at session start in Git repositories, so the agent reuses what exists, on by default since #49; `PURITANICAL_MAP=0` turns it off.
 - A benchmark harness that runs Puritanical, Ponytail, Superpowers, the Karpathy guidelines and no skill from pinned checkouts, plus behaviour probes for the rules this fork added.
 - Installs for Claude Code, Codex and the other hosts the README lists.
