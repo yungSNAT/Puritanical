@@ -43,8 +43,16 @@ function readMode() {
   }
 }
 
+// A failed write (a planted symlink, no permission) is logged, as a failed default
+// is: a throw would drop the /puritanical message and fail the host's prompt hook.
 function writeMode(mode) {
-  writeFileNoFollow(statePath, mode);
+  try {
+    writeFileNoFollow(statePath, mode);
+    return true;
+  } catch (e) {
+    console.error('puritanical mode not saved: ' + e.message);
+    return false;
+  }
 }
 
 // `off` is persisted like any mode; the injection reads it and stays silent.
@@ -68,8 +76,7 @@ function persistMode(args) {
   if (!wanted && readMode() !== 'off') return;
   const mode = wanted ? normalizeMode(wanted) : (getDefaultMode() === 'off' ? 'full' : getDefaultMode());
   if (!mode) return;
-  writeMode(mode);
-  console.log('puritanical ' + mode);
+  if (writeMode(mode)) console.log('puritanical ' + mode);
 }
 
 // A message that is only 'stop puritanical' or 'normal mode' switches it off, as on the other hosts.
