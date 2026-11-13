@@ -86,7 +86,9 @@ function namesIn(file, text) {
 
 function buildMap(root = process.cwd(), { walk = true } = {}) {
   const files = listFiles(root, walk)
-    .filter((f) => SAFE_PATH.test(f) && SRC.test(f) && !SKIP_DIR.test(f) && !SKIP_FILE.test(f))
+    // Folder names reach the map as written, so they follow the 40-character rule for names.
+    .filter((f) => SAFE_PATH.test(f) && SRC.test(f) && !SKIP_DIR.test(f) && !SKIP_FILE.test(f) &&
+      path.posix.dirname(f).split('/').every((s) => s.length <= 40))
     .slice(0, MAX_FILES)
     .sort((a, b) => (SHARED.test(b) - SHARED.test(a)) || a.localeCompare(b));
   // One line per directory: names are enough to know something exists; grep finds the file.
