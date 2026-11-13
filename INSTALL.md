@@ -123,7 +123,7 @@ git clone https://github.com/yungSNAT/Puritanical.git ~/.hermes/plugins/puritani
 hermes plugins enable puritanical
 ```
 
-Restart Hermes after installing. The plugin injects the active Puritanical mode before each LLM turn, registers the bundled skills as `puritanical:<skill>`, and adds `/puritanical`, `/puritanical-review`, `/puritanical-audit`, `/puritanical-debt`, and `/puritanical-help`. In shared gateways, restrict `/puritanical` to trusted users with Hermes slash-command access controls; runtime mode is process-local.
+Restart Hermes after installing. The plugin injects the active Puritanical mode before each LLM turn, registers the bundled skills as `puritanical:<skill>`, and adds `/puritanical`, `/puritanical-review`, `/puritanical-audit`, `/puritanical-debt`, and `/puritanical-help`. In shared gateways, restrict `/puritanical` to trusted users with Hermes slash-command access controls. Each session keeps its own level where Hermes passes the calling session to plugin commands; on versions that do not, one level serves every session in the process.
 
 ## CodeWhale
 

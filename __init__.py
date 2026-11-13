@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -21,7 +22,28 @@ ROOT = Path(__file__).resolve().parent
 SKILLS_DIR = ROOT / "skills"
 PURITANICAL_SKILL = SKILLS_DIR / "puritanical" / "SKILL.md"
 
-_current_mode = None
+# Level set in each session, by Hermes session id, with the order it was set in. Hermes
+# versions that do not pass the session to a command handler store their commands under "",
+# which every session reads; the newer of the two entries wins, so such a command still
+# overrides an off phrase that was keyed by the real session id.
+# shortcut: entries are never dropped; a gateway process keeps one small entry per
+# session that set a level. Clear them from an on_session_reset hook if that matters.
+_session_modes: dict[str, tuple[int, str]] = {}
+_changes = itertools.count()
+
+
+def _set_mode(session_id: str, mode: str) -> None:
+    _session_modes[session_id] = (next(_changes), mode)
+
+
+def _session_mode(session_id: str) -> str:
+    entries = [e for e in (_session_modes.get(session_id), _session_modes.get("")) if e]
+    return max(entries)[1] if entries else _default_mode()
+
+
+def _is_deactivation_command(text: Any) -> bool:
+    # Mirrors isDeactivationCommand in hooks/puritanical-config.js: the whole message only.
+    return isinstance(text, str) and re.fullmatch(r"(?:stop puritanical|normal mode)[.!?\s]*", text.strip().lower()) is not None
 
 
 def _normalize_runtime_mode(mode: str | None) -> str | None:
@@ -50,6 +72,26 @@ def _default_mode() -> str:
         return DEFAULT_MODE
     file_mode = _normalize_runtime_mode(data.get("defaultMode")) if isinstance(data, dict) else None
     return file_mode or DEFAULT_MODE
+
+
+def _write_default_mode(mode: str) -> None:
+    """Save defaultMode to config.json, keeping its other keys, like writeDefaultMode in JS."""
+    config = _config_dir() / "config.json"
+    try:
+        data = json.loads(config.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        data = {}
+    except (OSError, ValueError) as e:
+        # Only a missing file starts empty; anything else would overwrite the user's other keys.
+        raise ValueError(f"{config} could not be read as JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{config} must contain a JSON object.")
+    data["defaultMode"] = mode
+    config.parent.mkdir(parents=True, exist_ok=True)
+    # O_NOFOLLOW fails the write instead of following a symlink planted at this predictable path.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(config, flags, 0o666), "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, indent=2))
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -103,9 +145,11 @@ def build_injected_context(mode: str | None = None) -> str:
 
 
 def _pre_llm_call(
-    session_id: str = "", conversation_history: Any = None, **_: Any
+    session_id: str = "", user_message: Any = None, conversation_history: Any = None, **_: Any
 ) -> dict[str, str] | None:
-    mode = _current_mode or _default_mode()
+    if _is_deactivation_command(user_message):
+        _set_mode(session_id, "off")
+    mode = _session_mode(session_id)
     # Off is injected too: the ruleset from an earlier turn is replayed every turn,
     # and the /puritanical off reply goes to the user, never to the model.
     context = build_injected_context(mode) or "PURITANICAL MODE OFF"
@@ -162,20 +206,33 @@ def rewrite_gateway_command(event: Any = None, gateway: Any = None, **_: Any) ->
     return {"action": "rewrite", "text": _skill_prompt(command, rest)}
 
 
-def _handle_mode_command(raw_args: str) -> str:
-    global _current_mode
+def _handle_mode_command(raw_args: str, *, session_id: str = "") -> str:
     arg = (raw_args or "").strip().lower()
     if not arg:
         # Bare /puritanical switches puritanical on, or reports the level when it already is (#639).
-        mode = _current_mode or _default_mode()
+        mode = _session_mode(session_id)
         if mode != "off":
             return f"Puritanical mode: {mode}. Use `/puritanical lite|full|ultra|off`."
-        _current_mode = "full" if _default_mode() == "off" else _default_mode()
-        return f"Puritanical mode set to {_current_mode}."
+        mode = "full" if _default_mode() == "off" else _default_mode()
+        _set_mode(session_id, mode)
+        return f"Puritanical mode set to {mode}."
+    first, _, rest = arg.partition(" ")
+    if first == "default":
+        # Saves the level new sessions start at; this session keeps the level it has.
+        mode = _normalize_runtime_mode(rest)
+        if not mode:
+            return "Usage: /puritanical default [lite|full|ultra|off]"
+        if session_id not in _session_modes:
+            _set_mode(session_id, _session_mode(session_id))
+        try:
+            _write_default_mode(mode)
+        except (OSError, ValueError) as e:
+            return f"Puritanical default not saved: {e} Config left unchanged."
+        return f"Puritanical default set: new sessions start in {mode}."
     mode = _normalize_runtime_mode(arg)
     if not mode:
-        return "Usage: /puritanical [lite|full|ultra|off]"
-    _current_mode = mode
+        return "Usage: /puritanical [lite|full|ultra|off|default <level>]"
+    _set_mode(session_id, mode)
     return f"Puritanical mode set to {mode}."
 
 
@@ -207,8 +264,8 @@ def register(ctx: Any) -> None:
     ctx.register_command(
         "puritanical",
         _handle_mode_command,
-        description="Set the Puritanical level: lite, full, ultra or off.",
-        args_hint="[lite|full|ultra|off]",
+        description="Set the Puritanical level: lite, full, ultra or off; default <level> sets it for new sessions.",
+        args_hint="[lite|full|ultra|off|default <level>]",
     )
     for command, description in SKILL_COMMANDS.items():
         ctx.register_command(
