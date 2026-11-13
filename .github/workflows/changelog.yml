@@ -1,0 +1,46 @@
+name: changelog
+
+# Fails a pull request that changes what installs load (skills, hooks,
+# commands, the host plugin and rule files, the Hermes plugin, pi-extension and
+# the manifests) without adding a line to CHANGELOG.md. Tests, docs, CI,
+# benchmarks and tools/ need no line. Waive it with the skip-changelog label;
+# Dependabot pull requests are skipped.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    if: >-
+      !contains(github.event.pull_request.labels.*.name, 'skip-changelog')
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for a changelog line
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          shipped='^(skills|hooks|commands|scripts)/|^pi-extension/|^\.(agents|claude-plugin|clinerules|codex-plugin|cursor|devin-plugin|grok-plugin|kimi-plugin|kiro|openclaw|opencode|qoder|qoder-plugin|windsurf)/|^\.github/(plugin/|copilot-instructions\.md$)|^(AGENTS\.md|__init__\.py|after-install\.md|gemini-extension\.json|opencode\.json|package\.json|plugin\.json|plugin\.yaml)$'
+          changed=$(git diff --name-only "$BASE...$HEAD" | grep -Ev '^pi-extension/test/' | grep -E "$shipped" || true)
+          if [ -z "$changed" ]; then
+            echo "No shipped files changed."
+            exit 0
+          fi
+          # Added lines that are not blank, without the "+++ b/CHANGELOG.md" header.
+          if git diff "$BASE...$HEAD" -- CHANGELOG.md | grep -v '^+++ ' | grep -Eq '^\+.*[^[:space:]]'; then
+            echo "CHANGELOG.md has a new line."
+            exit 0
+          fi
+          printf 'Shipped files changed:\n%s\n' "$changed"
+          echo "::error file=CHANGELOG.md::This pull request changes shipped files but adds no line to CHANGELOG.md. Add one under ## [Unreleased], or apply the skip-changelog label if users will not notice the change."
+          exit 1
