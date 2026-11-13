@@ -490,7 +490,7 @@ test('Hermes /puritanical default keeps the old config when the write or rename 
   const config = path.join(dir, 'config.json');
   fs.mkdirSync(dir);
   const original = JSON.stringify({ defaultMode: 'lite', hideStatus: true });
-  // The full disk fails the write after the file is open, as a real one does.
+  // The full disk fails part way through the write, after the file is open, as a real one does.
   const failures = {
     'a full disk': String.raw`
 import errno
@@ -499,7 +499,10 @@ class Full:
     def __init__(self, f): self.f = f
     def __enter__(self): return self
     def __exit__(self, *exc): self.f.close()
-    def write(self, text): raise OSError(errno.ENOSPC, 'No space left on device')
+    def write(self, text):
+        self.f.write(text[:11])
+        self.f.flush()
+        raise OSError(errno.ENOSPC, 'No space left on device')
 mod.os.fdopen = lambda fd, *a, **k: Full(real_fdopen(fd, *a, **k))
 `,
     'a failed rename': String.raw`
@@ -517,13 +520,34 @@ print(json.dumps(command('default ultra', 'a')))
     assert.deepEqual(fs.readdirSync(dir), ['config.json'], name);
   }
 
-  if (process.platform !== 'win32') fs.chmodSync(config, 0o600);
-  const saved = python(hermesSessions + String.raw`
+  fs.writeFileSync(config, original);
+  fs.chmodSync(config, 0o444);
+  const readOnly = python(hermesSessions + String.raw`
 print(json.dumps(command('default ultra', 'a')))
 `, { XDG_CONFIG_HOME: tmp });
-  assert.match(JSON.parse(saved), /new sessions start in ultra/);
+  fs.chmodSync(config, 0o644);
+  assert.match(JSON.parse(readOnly), /not saved/, 'a read-only config is refused');
+  assert.equal(fs.readFileSync(config, 'utf8'), original, 'a read-only config is left as it was');
+  assert.deepEqual(fs.readdirSync(dir), ['config.json']);
+
+  if (process.platform !== 'win32') fs.chmodSync(config, 0o600);
+  // The temp file is private from the start, not only once chmod runs.
+  const [saved, tempModes] = JSON.parse(python(hermesSessions + String.raw`
+import os, stat
+real_chmod = os.chmod
+seen = []
+def chmod(p, m, *a, **k):
+    seen.append(stat.S_IMODE(os.stat(p).st_mode))
+    return real_chmod(p, m, *a, **k)
+mod.os.chmod = chmod
+print(json.dumps([command('default ultra', 'a'), seen]))
+`, { XDG_CONFIG_HOME: tmp }));
+  assert.match(saved, /new sessions start in ultra/);
   assert.deepEqual(JSON.parse(fs.readFileSync(config, 'utf8')), { defaultMode: 'ultra', hideStatus: true });
-  if (process.platform !== 'win32') assert.equal(fs.statSync(config).mode & 0o777, 0o600, 'the mode carries over');
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(config).mode & 0o777, 0o600, 'the mode carries over');
+    assert.deepEqual(tempModes, [0o600], 'the temp file is created with the old mode');
+  }
   assert.deepEqual(fs.readdirSync(dir), ['config.json']);
 });
 
@@ -547,6 +571,22 @@ print(json.dumps(command('default ultra', 'a')))
   assert.ok(fs.lstatSync(config).isSymbolicLink());
   assert.equal(fs.readFileSync(victim, 'utf8'), '{}');
   assert.deepEqual(fs.readdirSync(dir).sort(), ['config.json', 'victim.json']);
+
+  // A link planted after the check, just before the rename, is replaced, not written through.
+  fs.rmSync(config);
+  const raced = python(hermesSessions + String.raw`
+import os
+real_replace = os.replace
+def replace(src, dst):
+    os.symlink(${JSON.stringify(victim)}, dst)
+    return real_replace(src, dst)
+mod.os.replace = replace
+print(json.dumps(command('default ultra', 'a')))
+`, { XDG_CONFIG_HOME: tmp });
+  assert.match(JSON.parse(raced), /new sessions start in ultra/);
+  assert.equal(fs.lstatSync(config).isSymbolicLink(), false);
+  assert.equal(JSON.parse(fs.readFileSync(config, 'utf8')).defaultMode, 'ultra');
+  assert.equal(fs.readFileSync(victim, 'utf8'), '{}');
 });
 
 test('Hermes gateway rewrite preserves every skill command and ignores unrelated text', () => {

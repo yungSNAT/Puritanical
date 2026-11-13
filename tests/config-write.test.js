@@ -32,10 +32,12 @@ const diskFull = () => Object.assign(new Error('no space left on device'), { cod
 test('a write that fails on a full disk keeps the old config and leaves no temp file', (t) => {
   const { dir, config } = configHome(t);
   fs.writeFileSync(config, ORIGINAL);
-  // A real full disk fails after the file is opened for writing, so open (and so
-  // truncate, for a write in place) whatever path is named, then fail.
+  // A real full disk fails part way through: open (and so truncate, for a write in
+  // place) whatever is named, write the first bytes, then fail.
   t.mock.method(fs, 'writeFileSync', (file) => {
-    if (typeof file !== 'number') fs.closeSync(fs.openSync(file, 'w'));
+    const fd = typeof file === 'number' ? file : fs.openSync(file, 'w');
+    fs.writeSync(fd, '{"defaultMo');
+    if (fd !== file) fs.closeSync(fd);
     throw diskFull();
   });
   assert.throws(() => writeDefaultMode('ultra'), { code: 'ENOSPC' });
@@ -62,6 +64,39 @@ test('a successful write replaces the config, keeping its other keys and its mod
   assert.deepEqual(JSON.parse(fs.readFileSync(config, 'utf8')), { defaultMode: 'ultra', hideStatus: true });
   if (process.platform !== 'win32') assert.equal(fs.statSync(config).mode & 0o777, 0o600);
   assert.deepEqual(fs.readdirSync(dir), ['config.json']);
+});
+
+test('a read-only config is refused and left as it was', (t) => {
+  const { dir, config } = configHome(t);
+  fs.writeFileSync(config, ORIGINAL);
+  fs.chmodSync(config, 0o444);
+  assert.throws(() => writeDefaultMode('ultra'), { code: /^(EACCES|EPERM)$/ });
+  assert.equal(fs.readFileSync(config, 'utf8'), ORIGINAL);
+  assert.equal(fs.statSync(config).mode & 0o222, 0, 'still read-only');
+  assert.deepEqual(fs.readdirSync(dir), ['config.json']);
+});
+
+test('a symlink planted just before the rename is replaced, not written through', (t) => {
+  const { dir, config } = configHome(t);
+  const victim = path.join(dir, 'victim.json');
+  fs.writeFileSync(victim, ORIGINAL);
+  const rename = fs.renameSync;
+  let planted = false;
+  t.mock.method(fs, 'renameSync', (from, to) => {
+    try {
+      fs.symlinkSync(victim, to);
+      planted = true;
+    } catch (e) {
+      if (e.code !== 'EPERM') throw e;
+    }
+    return rename(from, to);
+  });
+  writeDefaultMode('ultra');
+  t.mock.restoreAll();
+  if (!planted) return t.skip('symlink creation is not permitted');
+  assert.equal(fs.lstatSync(config).isSymbolicLink(), false);
+  assert.equal(JSON.parse(fs.readFileSync(config, 'utf8')).defaultMode, 'ultra');
+  assert.equal(fs.readFileSync(victim, 'utf8'), ORIGINAL);
 });
 
 test('a symlinked config is refused, not written through or replaced', (t) => {
