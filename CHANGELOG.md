@@ -4,6 +4,10 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 
 ## [Unreleased]
 
+### Fixed
+
+- On a Hermes version that passes no session to plugin commands, `/puritanical default <level>` now reaches new sessions instead of pinning every session at the old default, and a bare `/puritanical` resumes a chat that 'stop puritanical' or 'normal mode' switched off.
+
 ## [1.0.1] - 2026-11-13
 
 ### Added
