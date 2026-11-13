@@ -30,14 +30,17 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
-          shipped='^(skills|hooks|commands|scripts)/|^pi-extension/|^\.(agents|claude-plugin|clinerules|codex-plugin|cursor|devin-plugin|grok-plugin|kimi-plugin|kiro|openclaw|opencode|qoder|qoder-plugin|windsurf)/|^\.github/(plugin/|copilot-instructions\.md$)|^(AGENTS\.md|__init__\.py|after-install\.md|gemini-extension\.json|opencode\.json|package\.json|plugin\.json|plugin\.yaml)$'
-          changed=$(git diff --name-only "$BASE...$HEAD" | grep -Ev '^pi-extension/test/' | grep -E "$shipped" || true)
+          shipped='^(skills|hooks|commands|scripts)/|^pi-extension/|^\.(agents|claude-plugin|clinerules|codex-plugin|cursor|devin-plugin|grok-plugin|kimi-plugin|kiro|openclaw|opencode|qoder|qoder-plugin|windsurf)/|^\.github/(plugin/|copilot-instructions\.md$)|^(AGENTS\.md|LICENSE|NOTICE|__init__\.py|after-install\.md|gemini-extension\.json|opencode\.json|package\.json|plugin\.json|plugin\.yaml)$'
+          # Each git diff is saved first, so a git error fails the step instead of reading as empty.
+          files=$(git diff --name-only "$BASE...$HEAD")
+          changed=$(printf '%s\n' "$files" | grep -Ev '^pi-extension/test/' | grep -E "$shipped" || true)
           if [ -z "$changed" ]; then
             echo "No shipped files changed."
             exit 0
           fi
           # Added lines that are not blank, without the "+++ b/CHANGELOG.md" header.
-          if git diff "$BASE...$HEAD" -- CHANGELOG.md | grep -v '^+++ ' | grep -Eq '^\+.*[^[:space:]]'; then
+          notes=$(git diff "$BASE...$HEAD" -- CHANGELOG.md)
+          if printf '%s\n' "$notes" | grep -v '^+++ ' | grep -Eq '^\+.*[^[:space:]]'; then
             echo "CHANGELOG.md has a new line."
             exit 0
           fi
