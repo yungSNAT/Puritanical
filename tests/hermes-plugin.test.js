@@ -534,6 +534,7 @@ print(json.dumps(command('default ultra', 'a')))
   // The temp file is private from the start, not only once chmod runs.
   const [saved, tempModes] = JSON.parse(python(hermesSessions + String.raw`
 import os, stat
+os.umask(0o022)  # an inherited 077 would hide a temp file created 0644
 real_chmod = os.chmod
 seen = []
 def chmod(p, m, *a, **k):

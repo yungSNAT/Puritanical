@@ -209,13 +209,14 @@ function writeDefaultMode(mode) {
     throw new Error(configPath + ' must contain a JSON object.');
   }
   config.defaultMode = normalized;
-  // A symlink or a read-only file is refused, as the old write in place refused
-  // them. The atomic write keeps the old file whole if the write fails (a full
-  // disk), and its rename replaces a link planted after this check instead of
-  // following it.
+  // A symlink or a file this user may not write is refused, as the old write in
+  // place refused them; opening it for writing, without truncating, also honours
+  // Windows ACLs, which an access check ignores. The atomic write keeps the old
+  // file whole if the write fails (a full disk), and its rename replaces a link
+  // planted after this check instead of following it.
   const entry = fs.lstatSync(configPath, { throwIfNoEntry: false });
   if (entry?.isSymbolicLink()) throw new Error(configPath + ' is a symlink; nothing was changed.');
-  if (entry) fs.accessSync(configPath, fs.constants.W_OK);
+  if (entry) fs.closeSync(fs.openSync(configPath, fs.constants.O_WRONLY));
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   writeFileAtomic(configPath, JSON.stringify(config, null, 2), entry ? entry.mode & 0o777 : null);
   return normalized;

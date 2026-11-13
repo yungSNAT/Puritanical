@@ -88,17 +88,19 @@ def _write_default_mode(mode: str) -> None:
     if not isinstance(data, dict):
         raise TypeError(f"{config} must contain a JSON object.")
     data["defaultMode"] = mode
-    # A symlink or a read-only file is refused, as the old write in place refused them.
-    # The temp file and one rename keep the old file whole if the write fails (a full
-    # disk), and the rename replaces a link planted after this check instead of following it.
+    # A symlink or a file this user may not write is refused, as the old write in place
+    # refused them; opening it for writing, without truncating, also honours Windows ACLs,
+    # which os.access ignores. The temp file and one rename keep the old file whole if the
+    # write fails (a full disk), and the rename replaces a link planted after this check
+    # instead of following it.
     try:
         old = os.lstat(config)
     except FileNotFoundError:
         old = None
     if old and stat.S_ISLNK(old.st_mode):
         raise ValueError(f"{config} is a symlink; nothing was changed.")
-    if old and not os.access(config, os.W_OK):
-        raise PermissionError(f"{config} is read-only; nothing was changed.")
+    if old:
+        os.close(os.open(config, os.O_WRONLY))
     config.parent.mkdir(parents=True, exist_ok=True)
     tmp = config.with_name(f"{config.name}.{os.getpid()}.tmp")
     # Created with the old mode, so private settings are never readable to others.
