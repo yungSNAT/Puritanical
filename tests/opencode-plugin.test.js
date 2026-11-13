@@ -312,6 +312,28 @@ test('/puritanical default lite saves the default and leaves the session level a
   fs.rmSync(path.join(tmp, 'puritanical'), { recursive: true, force: true });
 });
 
+test('a message that is only "stop puritanical" or "normal mode" switches it off under V2 and V1 (R0807)', async () => {
+  const { hooks: v2 } = await setupV2();
+  fs.writeFileSync(statePath, 'ultra');
+  await v2.prompt({ sessionID: 's', prompt: { text: 'Stop puritanical.' } });
+  assert.equal(fs.readFileSync(statePath, 'utf8'), 'off');
+
+  const v1 = await loadPlugin.server({});
+  fs.writeFileSync(statePath, 'ultra');
+  await v1['chat.message']({ sessionID: 's' }, { message: {}, parts: [{ type: 'text', text: 'normal mode' }] });
+  assert.equal(fs.readFileSync(statePath, 'utf8'), 'off');
+  assert.deepEqual(await transform(v1), []);
+});
+
+test('an off phrase inside a longer message leaves the level alone', async () => {
+  const { hooks: v2 } = await setupV2();
+  const v1 = await loadPlugin.server({});
+  fs.writeFileSync(statePath, 'ultra');
+  await v2.prompt({ sessionID: 's', prompt: { text: 'add a normal mode toggle' } });
+  await v1['chat.message']({ sessionID: 's' }, { message: {}, parts: [{ type: 'text', text: 'stop puritanical from logging twice' }] });
+  assert.equal(fs.readFileSync(statePath, 'utf8'), 'ultra');
+});
+
 test('unrelated commands do not touch the flag', async () => {
   try { fs.unlinkSync(statePath); } catch (e) {}
   const hooks = await loadPlugin.server({});
