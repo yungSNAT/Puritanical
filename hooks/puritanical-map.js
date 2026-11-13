@@ -63,7 +63,8 @@ function listFiles(root, walkUntracked) {
         if (ent.name.startsWith('.')) continue;
         const rel = path.relative(root, path.join(dir, ent.name)).replace(/\\/g, '/');
         // A folder name over 40 characters keeps its files out of the map, so it is not walked either.
-        if (ent.isDirectory()) { if (ent.name.length <= 40 && !SKIP_DIR.test(rel + '/')) walk(path.join(dir, ent.name), depth + 1); }
+        if (ent.isDirectory() && ent.name.length > 40) continue;
+        if (ent.isDirectory()) { if (!SKIP_DIR.test(rel + '/')) walk(path.join(dir, ent.name), depth + 1); }
         else out.push(rel);
       }
     })(root, 0);
