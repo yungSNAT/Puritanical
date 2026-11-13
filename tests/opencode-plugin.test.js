@@ -325,6 +325,43 @@ test('a message that is only "stop puritanical" or "normal mode" switches it off
   assert.deepEqual(await transform(v1), []);
 });
 
+// A symlink planted at the state path makes the no-follow write fail (ELOOP), and a
+// folder there fails it on every platform (EISDIR). Either way the hooks log it and
+// carry on: a throw would drop the /puritanical message and fail the prompt hook.
+for (const blocker of ['a symlink', 'a folder']) {
+  test(`a state file blocked by ${blocker} is logged, and the hooks still run (R2421)`, async (t) => {
+    const victim = path.join(tmp, 'victim');
+    fs.rmSync(statePath, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    t.after(() => fs.rmSync(statePath, { recursive: true, force: true }));
+    if (blocker === 'a symlink') {
+      if (!fs.constants.O_NOFOLLOW) return t.skip('no O_NOFOLLOW on this platform');
+      fs.writeFileSync(victim, 'SECRET');
+      t.after(() => fs.rmSync(victim, { force: true }));
+      try { fs.symlinkSync(victim, statePath); } catch (e) {
+        if (e.code !== 'EPERM') throw e;
+        return t.skip('symlink creation is not permitted');
+      }
+    } else {
+      fs.mkdirSync(statePath);
+    }
+    const errors = [];
+    t.mock.method(console, 'error', (message) => errors.push(message));
+
+    const { added, prompts, hooks: v2 } = await setupV2();
+    await v2.prompt({ sessionID: 's', prompt: { text: 'stop puritanical' } });
+    await added.commands.puritanical.execute({ sessionID: 's', prompt: { text: 'ultra' }, delivery: 'steer' });
+    assert.equal(prompts.length, 1, 'the /puritanical message is still sent');
+    const v1 = await loadPlugin.server({});
+    await v1['chat.message']({ sessionID: 's' }, { message: {}, parts: [{ type: 'text', text: 'normal mode' }] });
+    await v1['command.execute.before']({ command: 'puritanical', arguments: 'lite', sessionID: 's' });
+
+    assert.equal(errors.length, 4, errors.join('\n'));
+    for (const error of errors) assert.match(error, /^puritanical mode not saved: /);
+    if (blocker === 'a symlink') assert.equal(fs.readFileSync(victim, 'utf8'), 'SECRET');
+  });
+}
+
 test('an off phrase inside a longer message leaves the level alone', async () => {
   const { hooks: v2 } = await setupV2();
   const v1 = await loadPlugin.server({});
