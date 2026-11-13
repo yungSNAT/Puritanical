@@ -419,6 +419,23 @@ print(json.dumps([reply, turn('a', a), turn('b', b)]))
   assert.equal(b, null, 'session b keeps the ruleset it already has');
 });
 
+// Hermes passes session_id='' for a chat that has no session yet.
+test('Hermes: a command from a chat with no session yet changes no other chat', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
+  const output = python(hermesSessions + String.raw`
+b = started('b')
+off = command('off', '')
+after_off = turn('b', b)
+default = command('default lite', '')
+print(json.dumps([off, after_off, default, command('', 'c')]))
+`, { XDG_CONFIG_HOME: tmp });
+  const [off, b, saved, fresh] = JSON.parse(output);
+  assert.match(off, /no session yet/);
+  assert.equal(b, null, 'session b keeps its ruleset');
+  assert.match(saved, /new sessions start in lite/);
+  assert.match(fresh, /Puritanical mode: lite/, 'the default is saved and not pinned for every chat');
+});
+
 test('Hermes switches a session off when its message is only "stop puritanical" or "normal mode" (R1973)', () => {
   const output = python(hermesSessions + String.raw`
 print(json.dumps([turn(s, started(s), text) for s, text in [('a', 'Stop puritanical.'), ('b', 'normal mode'), ('c', 'add a normal mode toggle')]]))

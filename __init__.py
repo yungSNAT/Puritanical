@@ -206,15 +206,26 @@ def rewrite_gateway_command(event: Any = None, gateway: Any = None, **_: Any) ->
     return {"action": "rewrite", "text": _skill_prompt(command, rest)}
 
 
-def _handle_mode_command(raw_args: str, *, session_id: str = "") -> str:
+_NO_SESSION = "This chat has no session yet, so its Puritanical level cannot be set. Send a message first, then try again."
+
+
+def _handle_mode_command(raw_args: str, *, session_id: str | None = None) -> str:
+    # None: this Hermes passes no session, so the level is the shared "" entry.
+    # "": Hermes passes sessions, but this chat has none yet. A level kept for it would
+    # never be read (pre_llm_call gets the session id, not session_key), and writing the
+    # shared entry would change every chat, so such a call sets no level.
+    no_session = session_id == ""
+    key = session_id or ""
     arg = (raw_args or "").strip().lower()
     if not arg:
         # Bare /puritanical switches puritanical on, or reports the level when it already is (#639).
-        mode = _session_mode(session_id)
+        mode = _session_mode(key)
         if mode != "off":
             return f"Puritanical mode: {mode}. Use `/puritanical lite|full|ultra|off`."
+        if no_session:
+            return _NO_SESSION
         mode = "full" if _default_mode() == "off" else _default_mode()
-        _set_mode(session_id, mode)
+        _set_mode(key, mode)
         return f"Puritanical mode set to {mode}."
     first, _, rest = arg.partition(" ")
     if first == "default":
@@ -222,8 +233,8 @@ def _handle_mode_command(raw_args: str, *, session_id: str = "") -> str:
         mode = _normalize_runtime_mode(rest)
         if not mode:
             return "Usage: /puritanical default [lite|full|ultra|off]"
-        if session_id not in _session_modes:
-            _set_mode(session_id, _session_mode(session_id))
+        if not no_session and key not in _session_modes:
+            _set_mode(key, _session_mode(key))
         try:
             _write_default_mode(mode)
         except (OSError, ValueError, TypeError) as e:
@@ -232,7 +243,9 @@ def _handle_mode_command(raw_args: str, *, session_id: str = "") -> str:
     mode = _normalize_runtime_mode(arg)
     if not mode:
         return "Usage: /puritanical [lite|full|ultra|off|default <level>]"
-    _set_mode(session_id, mode)
+    if no_session:
+        return _NO_SESSION
+    _set_mode(key, mode)
     return f"Puritanical mode set to {mode}."
 
 
