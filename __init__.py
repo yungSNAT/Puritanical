@@ -85,7 +85,7 @@ def _write_default_mode(mode: str) -> None:
         # Only a missing file starts empty; anything else would overwrite the user's other keys.
         raise ValueError(f"{config} could not be read as JSON: {e}") from e
     if not isinstance(data, dict):
-        raise ValueError(f"{config} must contain a JSON object.")
+        raise TypeError(f"{config} must contain a JSON object.")
     data["defaultMode"] = mode
     config.parent.mkdir(parents=True, exist_ok=True)
     # O_NOFOLLOW fails the write instead of following a symlink planted at this predictable path.
@@ -226,7 +226,7 @@ def _handle_mode_command(raw_args: str, *, session_id: str = "") -> str:
             _set_mode(session_id, _session_mode(session_id))
         try:
             _write_default_mode(mode)
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, TypeError) as e:
             return f"Puritanical default not saved: {e} Config left unchanged."
         return f"Puritanical default set: new sessions start in {mode}."
     mode = _normalize_runtime_mode(arg)

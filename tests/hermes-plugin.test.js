@@ -456,12 +456,14 @@ print(json.dumps([saved, command('', 'a'), command('', 'b'), command('default re
   assert.match(fresh, /Puritanical mode: lite/, 'a new session starts at the default');
   assert.match(review, /Usage:/);
 
-  fs.writeFileSync(config, '{ not json');
-  const kept = python(hermesSessions + String.raw`
+  for (const unusable of ['{ not json', '[]']) {
+    fs.writeFileSync(config, unusable);
+    const kept = python(hermesSessions + String.raw`
 print(json.dumps(command('default ultra', 'a')))
 `, { XDG_CONFIG_HOME: tmp });
-  assert.match(JSON.parse(kept), /not saved/);
-  assert.equal(fs.readFileSync(config, 'utf8'), '{ not json', 'an unreadable config is left as it was');
+    assert.match(JSON.parse(kept), /not saved/);
+    assert.equal(fs.readFileSync(config, 'utf8'), unusable, 'a config that is not a JSON object is left as it was');
+  }
 });
 
 test('Hermes gateway rewrite preserves every skill command and ignores unrelated text', () => {
