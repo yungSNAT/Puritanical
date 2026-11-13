@@ -23,7 +23,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // The shared instruction builder is CommonJS; bridge to it from this ES module.
 const require = createRequire(import.meta.url);
 const { getPuritanicalInstructions } = require('../../hooks/puritanical-instructions');
-const { getDefaultMode, normalizeMode, writeDefaultMode, writeFileNoFollow } = require('../../hooks/puritanical-config');
+const { getDefaultMode, isDeactivationCommand, normalizeMode, writeDefaultMode, writeFileNoFollow } = require('../../hooks/puritanical-config');
 const { parseCommandFile, parseSkillFile } = require('./puritanical-frontmatter.cjs');
 
 // OpenCode has no flag-file convention of its own; keep mode beside its config.
@@ -70,6 +70,11 @@ function persistMode(args) {
   if (!mode) return;
   writeMode(mode);
   console.log('puritanical ' + mode);
+}
+
+// A message that is only 'stop puritanical' or 'normal mode' switches it off, as on the other hosts.
+function persistOffPhrase(text) {
+  if (isDeactivationCommand(text)) writeMode('off');
 }
 
 // V2 has no `config` hook: the domains that own these definitions own them now,
@@ -162,6 +167,7 @@ export default {
       if (mode === 'off') return;
       event.system.push({ type: 'text', text: getPuritanicalInstructions(mode) });
     };
+    await ctx.session.hook('prompt', (event) => persistOffPhrase(event.prompt?.text));
     await ctx.session.hook('context', addRuleset);
     await ctx.session.hook('compaction', addRuleset);
   },
@@ -197,6 +203,10 @@ export default {
         } else {
           output.system.push(instructions);
         }
+      },
+
+      'chat.message': async (_input, output) => {
+        persistOffPhrase(output?.parts?.filter((part) => part.type === 'text').map((part) => part.text).join('\n'));
       },
 
       'command.execute.before': async (input) => {
