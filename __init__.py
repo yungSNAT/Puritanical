@@ -6,6 +6,7 @@ import itertools
 import json
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Any, Callable
 
@@ -87,11 +88,27 @@ def _write_default_mode(mode: str) -> None:
     if not isinstance(data, dict):
         raise TypeError(f"{config} must contain a JSON object.")
     data["defaultMode"] = mode
+    # A symlink is refused, not written through. The temp file and one rename keep the
+    # old file whole if the write fails (a full disk), and the rename replaces a link
+    # planted after this check instead of following it.
+    try:
+        old = os.lstat(config)
+    except FileNotFoundError:
+        old = None
+    if old and stat.S_ISLNK(old.st_mode):
+        raise ValueError(f"{config} is a symlink; nothing was changed.")
     config.parent.mkdir(parents=True, exist_ok=True)
-    # O_NOFOLLOW fails the write instead of following a symlink planted at this predictable path.
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
-    with os.fdopen(os.open(config, flags, 0o666), "w", encoding="utf-8") as f:
-        f.write(json.dumps(data, indent=2))
+    tmp = config.with_name(f"{config.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2))
+        if old:
+            os.chmod(tmp, stat.S_IMODE(old.st_mode))
+        os.replace(tmp, config)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _strip_frontmatter(text: str) -> str:

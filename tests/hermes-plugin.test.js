@@ -483,6 +483,72 @@ print(json.dumps(command('default ultra', 'a')))
   }
 });
 
+test('Hermes /puritanical default keeps the old config when the write or rename fails (R2420)', (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const dir = path.join(tmp, 'puritanical');
+  const config = path.join(dir, 'config.json');
+  fs.mkdirSync(dir);
+  const original = JSON.stringify({ defaultMode: 'lite', hideStatus: true });
+  // The full disk fails the write after the file is open, as a real one does.
+  const failures = {
+    'a full disk': String.raw`
+import errno
+real_fdopen = os.fdopen
+class Full:
+    def __init__(self, f): self.f = f
+    def __enter__(self): return self
+    def __exit__(self, *exc): self.f.close()
+    def write(self, text): raise OSError(errno.ENOSPC, 'No space left on device')
+mod.os.fdopen = lambda fd, *a, **k: Full(real_fdopen(fd, *a, **k))
+`,
+    'a failed rename': String.raw`
+def busy(*a, **k): raise PermissionError('busy')
+mod.os.replace = busy
+`,
+  };
+  for (const [name, patch] of Object.entries(failures)) {
+    fs.writeFileSync(config, original);
+    const reply = python(hermesSessions + 'import os\n' + patch + String.raw`
+print(json.dumps(command('default ultra', 'a')))
+`, { XDG_CONFIG_HOME: tmp });
+    assert.match(JSON.parse(reply), /not saved/, name);
+    assert.equal(fs.readFileSync(config, 'utf8'), original, name);
+    assert.deepEqual(fs.readdirSync(dir), ['config.json'], name);
+  }
+
+  if (process.platform !== 'win32') fs.chmodSync(config, 0o600);
+  const saved = python(hermesSessions + String.raw`
+print(json.dumps(command('default ultra', 'a')))
+`, { XDG_CONFIG_HOME: tmp });
+  assert.match(JSON.parse(saved), /new sessions start in ultra/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(config, 'utf8')), { defaultMode: 'ultra', hideStatus: true });
+  if (process.platform !== 'win32') assert.equal(fs.statSync(config).mode & 0o777, 0o600, 'the mode carries over');
+  assert.deepEqual(fs.readdirSync(dir), ['config.json']);
+});
+
+test('Hermes /puritanical default refuses a symlinked config (R2420)', (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const dir = path.join(tmp, 'puritanical');
+  const config = path.join(dir, 'config.json');
+  const victim = path.join(dir, 'victim.json');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(victim, '{}');
+  try { fs.symlinkSync(victim, config); } catch (e) {
+    if (e.code !== 'EPERM') throw e;
+    t.skip('symlink creation is not permitted');
+    return;
+  }
+  const reply = python(hermesSessions + String.raw`
+print(json.dumps(command('default ultra', 'a')))
+`, { XDG_CONFIG_HOME: tmp });
+  assert.match(JSON.parse(reply), /not saved/);
+  assert.ok(fs.lstatSync(config).isSymbolicLink());
+  assert.equal(fs.readFileSync(victim, 'utf8'), '{}');
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['config.json', 'victim.json']);
+});
+
 test('Hermes gateway rewrite preserves every skill command and ignores unrelated text', () => {
   const output = python(String.raw`
 import importlib.util, json
