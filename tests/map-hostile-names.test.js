@@ -46,6 +46,23 @@ test('a 40-character name is kept and a 41-character one is dropped', (t) => {
   assert.ok(!map.includes(dropped), map);
 });
 
+test('a folder name over 40 characters keeps its files out of the map', (t) => {
+  const kept = `k${'x'.repeat(39)}`;
+  const dropped = `d${'x'.repeat(40)}`;
+  const dir = tree(t, {
+    [`${kept}/a.js`]: 'export const keptName = 1\n',
+    [`src/${dropped}/b.js`]: 'export const droppedName = 1\n',
+  });
+  const map = buildMap(dir);
+  assert.ok(map.includes(`${kept}/: keptName`), map);
+  assert.ok(!map.includes(dropped) && !map.includes('droppedName'), map);
+});
+
+test('a file name over 40 characters is still mapped: only folder names are printed', (t) => {
+  const dir = tree(t, { [`lib/${'f'.repeat(41)}.js`]: 'export const longFileName = 1\n' });
+  assert.ok(buildMap(dir).includes('lib/: longFileName'));
+});
+
 test('an unreadable folder outside git does not cost the whole map', (t) => {
   const dir = tree(t, { 'src/a.js': 'export function kept() {}\n' });
   const locked = path.join(dir, 'locked');

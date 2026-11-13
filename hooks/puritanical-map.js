@@ -62,6 +62,8 @@ function listFiles(root, walkUntracked) {
       for (const ent of ents) {
         if (ent.name.startsWith('.')) continue;
         const rel = path.relative(root, path.join(dir, ent.name)).replace(/\\/g, '/');
+        // A folder name over 40 characters keeps its files out of the map, so it is not walked either.
+        if (ent.isDirectory() && ent.name.length > 40) continue;
         if (ent.isDirectory()) { if (!SKIP_DIR.test(rel + '/')) walk(path.join(dir, ent.name), depth + 1); }
         else out.push(rel);
       }
@@ -86,7 +88,9 @@ function namesIn(file, text) {
 
 function buildMap(root = process.cwd(), { walk = true } = {}) {
   const files = listFiles(root, walk)
-    .filter((f) => SAFE_PATH.test(f) && SRC.test(f) && !SKIP_DIR.test(f) && !SKIP_FILE.test(f))
+    // Folder names reach the map as written, so they follow the 40-character rule for names.
+    .filter((f) => SAFE_PATH.test(f) && SRC.test(f) && !SKIP_DIR.test(f) && !SKIP_FILE.test(f) &&
+      path.posix.dirname(f).split('/').every((s) => s.length <= 40))
     .slice(0, MAX_FILES)
     .sort((a, b) => (SHARED.test(b) - SHARED.test(a)) || a.localeCompare(b));
   // One line per directory: names are enough to know something exists; grep finds the file.
