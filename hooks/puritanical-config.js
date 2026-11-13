@@ -213,11 +213,12 @@ function writeDefaultMode(mode) {
   // place refused them; opening it for writing, without truncating, also honours
   // Windows ACLs, which an access check ignores. The atomic write keeps the old
   // file whole if the write fails (a full disk), and its rename replaces a link
-  // planted after this check instead of following it.
-  const entry = fs.lstatSync(configPath, { throwIfNoEntry: false });
+  // planted after this check instead of following it. The nosemgrep marks are for
+  // the path-traversal rule: configPath is the fixed config location, not input.
+  const entry = fs.lstatSync(configPath, { throwIfNoEntry: false }); // nosemgrep
   if (entry?.isSymbolicLink()) throw new Error(configPath + ' is a symlink; nothing was changed.');
-  if (entry) fs.closeSync(fs.openSync(configPath, fs.constants.O_WRONLY));
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  if (entry) fs.closeSync(fs.openSync(configPath, fs.constants.O_WRONLY)); // nosemgrep
+  fs.mkdirSync(path.dirname(configPath), { recursive: true }); // nosemgrep
   writeFileAtomic(configPath, JSON.stringify(config, null, 2), entry ? entry.mode & 0o777 : null);
   return normalized;
 }
