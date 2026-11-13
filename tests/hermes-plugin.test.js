@@ -296,7 +296,7 @@ history = [{
     'api_content': 'first task\\n\\n' + first['context'],
 }]
 second = mod._pre_llm_call(conversation_history=history)
-mod._current_mode = 'ultra'
+mod._handle_mode_command('ultra')
 switched = mod._pre_llm_call(conversation_history=history)
 history.append({
     'role': 'user',
@@ -375,18 +375,112 @@ import importlib.util, json
 spec = importlib.util.spec_from_file_location('puritanical_hermes_plugin', '__init__.py')
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
-mod._current_mode = 'ultra'
+mod._set_mode('', 'ultra')
 running = mod._handle_mode_command('')
-kept = mod._current_mode
-mod._current_mode = 'off'
+kept = mod._session_mode('')
+mod._set_mode('', 'off')
 switched = mod._handle_mode_command('')
-print(json.dumps([running, kept, switched, mod._current_mode]))
+print(json.dumps([running, kept, switched, mod._session_mode('')]))
 `);
   const [running, kept, switched, after] = JSON.parse(output);
   assert.match(running, /Puritanical mode: ultra/);
   assert.equal(kept, 'ultra');
   assert.match(switched, /set to full/);
   assert.equal(after, 'full');
+});
+
+// Hermes hands a command handler the calling session only when it declares session_id.
+const hermesSessions = String.raw`
+import importlib.util, inspect, json
+spec = importlib.util.spec_from_file_location('puritanical_hermes_plugin', '__init__.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+def started(session_id):
+    first = mod._pre_llm_call(session_id=session_id, user_message='first task', conversation_history=[])
+    return [{'role': 'user', 'content': 'first task', 'api_content': 'first task\n\n' + first['context']}]
+def turn(session_id, history, text='build it'):
+    return mod._pre_llm_call(session_id=session_id, user_message=text, conversation_history=history)
+def command(args, session_id):
+    handler = mod._handle_mode_command
+    if 'session_id' in inspect.signature(handler).parameters:
+        return handler(args, session_id=session_id)
+    return handler(args)
+`;
+
+test('Hermes keeps the level per session: one chat turning off leaves another on (R0808)', () => {
+  const output = python(hermesSessions + String.raw`
+a, b = started('a'), started('b')
+reply = command('off', 'a')
+print(json.dumps([reply, turn('a', a), turn('b', b)]))
+`);
+  const [reply, a, b] = JSON.parse(output);
+  assert.match(reply, /set to off/);
+  assert.deepEqual(a, { context: 'PURITANICAL MODE OFF' });
+  assert.equal(b, null, 'session b keeps the ruleset it already has');
+});
+
+// Hermes passes session_id='' for a chat that has no session yet.
+test('Hermes: a command from a chat with no session yet changes no other chat', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
+  const output = python(hermesSessions + String.raw`
+b = started('b')
+off = command('off', '')
+after_off = turn('b', b)
+default = command('default lite', '')
+print(json.dumps([off, after_off, default, command('', 'c')]))
+`, { XDG_CONFIG_HOME: tmp });
+  const [off, b, saved, fresh] = JSON.parse(output);
+  assert.match(off, /no session yet/);
+  assert.equal(b, null, 'session b keeps its ruleset');
+  assert.match(saved, /new sessions start in lite/);
+  assert.match(fresh, /Puritanical mode: lite/, 'the default is saved and not pinned for every chat');
+});
+
+test('Hermes switches a session off when its message is only "stop puritanical" or "normal mode" (R1973)', () => {
+  const output = python(hermesSessions + String.raw`
+print(json.dumps([turn(s, started(s), text) for s, text in [('a', 'Stop puritanical.'), ('b', 'normal mode'), ('c', 'add a normal mode toggle')]]))
+`);
+  const [a, b, c] = JSON.parse(output);
+  assert.deepEqual(a, { context: 'PURITANICAL MODE OFF' });
+  assert.deepEqual(b, { context: 'PURITANICAL MODE OFF' });
+  assert.equal(c, null, 'a phrase inside a longer message changes nothing');
+});
+
+test('Hermes without session context for commands: a later /puritanical overrides an off phrase', () => {
+  const output = python(hermesSessions + String.raw`
+history = started('a')
+turn('a', history, 'stop puritanical')
+mod._handle_mode_command('full')
+history.append({'role': 'user', 'content': 'x', 'api_content': 'x\n\nPURITANICAL MODE OFF'})
+print(json.dumps(turn('a', history)))
+`);
+  assert.match(JSON.parse(output).context, /PURITANICAL MODE ACTIVE — level: full/);
+});
+
+test('Hermes /puritanical default saves the default, keeps other keys, and leaves the session level alone (R1973)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
+  const config = path.join(tmp, 'puritanical', 'config.json');
+  fs.mkdirSync(path.dirname(config), { recursive: true });
+  fs.writeFileSync(config, JSON.stringify({ hideStatus: true }));
+  const output = python(hermesSessions + String.raw`
+saved = command('default lite', 'a')
+print(json.dumps([saved, command('', 'a'), command('', 'b'), command('default review', 'a')]))
+`, { XDG_CONFIG_HOME: tmp });
+  const [saved, current, fresh, review] = JSON.parse(output);
+  assert.match(saved, /new sessions start in lite/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(config, 'utf8')), { hideStatus: true, defaultMode: 'lite' });
+  assert.match(current, /Puritanical mode: full/, 'the session that set the default keeps its level');
+  assert.match(fresh, /Puritanical mode: lite/, 'a new session starts at the default');
+  assert.match(review, /Usage:/);
+
+  for (const unusable of ['{ not json', '[]']) {
+    fs.writeFileSync(config, unusable);
+    const kept = python(hermesSessions + String.raw`
+print(json.dumps(command('default ultra', 'a')))
+`, { XDG_CONFIG_HOME: tmp });
+    assert.match(JSON.parse(kept), /not saved/);
+    assert.equal(fs.readFileSync(config, 'utf8'), unusable, 'a config that is not a JSON object is left as it was');
+  }
 });
 
 test('Hermes gateway rewrite preserves every skill command and ignores unrelated text', () => {
