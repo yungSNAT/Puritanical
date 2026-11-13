@@ -457,6 +457,34 @@ print(json.dumps(turn('a', history)))
   assert.match(JSON.parse(output).context, /PURITANICAL MODE ACTIVE — level: full/);
 });
 
+test('Hermes without session context for commands: /puritanical default reaches new sessions', () => {
+  const output = python(hermesSessions + String.raw`
+saved = mod._handle_mode_command('default lite')
+print(json.dumps([saved, turn('new', [])]))
+`);
+  const [saved, fresh] = JSON.parse(output);
+  assert.match(saved, /new sessions start in lite/);
+  assert.equal(fresh.context.split('\n')[0], 'PURITANICAL MODE ACTIVE — level: lite');
+});
+
+test('Hermes without session context for commands: a bare /puritanical resumes after an off phrase', () => {
+  const output = python(hermesSessions + String.raw`
+history = started('a')
+off = turn('a', history, 'stop puritanical')
+history.append({'role': 'user', 'content': 'x', 'api_content': 'x\n\nPURITANICAL MODE OFF'})
+reply = mod._handle_mode_command('')
+resumed = turn('a', history)
+mod._handle_mode_command('default lite')
+print(json.dumps([off, reply, resumed, turn('new', [])]))
+`);
+  const [off, reply, resumed, fresh] = JSON.parse(output);
+  assert.deepEqual(off, { context: 'PURITANICAL MODE OFF' });
+  assert.match(reply, /Puritanical mode: full/);
+  assert.notEqual(resumed, null, 'the session that said "stop puritanical" gets the ruleset back');
+  assert.equal(resumed.context.split('\n')[0], 'PURITANICAL MODE ACTIVE — level: full');
+  assert.equal(fresh.context.split('\n')[0], 'PURITANICAL MODE ACTIVE — level: lite', 'resuming pins no level, so a later default still reaches new sessions');
+});
+
 test('Hermes /puritanical default saves the default, keeps other keys, and leaves the session level alone (R1973)', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
   const config = path.join(tmp, 'puritanical', 'config.json');

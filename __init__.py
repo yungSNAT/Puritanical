@@ -27,8 +27,9 @@ PURITANICAL_SKILL = SKILLS_DIR / "puritanical" / "SKILL.md"
 # versions that do not pass the session to a command handler store their commands under "",
 # which every session reads; the newer of the two entries wins, so such a command still
 # overrides an off phrase that was keyed by the real session id.
-# shortcut: entries are never dropped; a gateway process keeps one small entry per
-# session that set a level. Clear them from an on_session_reset hook if that matters.
+# shortcut: a gateway process keeps one small entry per session that set a level; only a bare
+# /puritanical on a Hermes that passes no session drops any, the off-phrase entries it resumes.
+# Clear them from an on_session_reset hook if that matters.
 _session_modes: dict[str, tuple[int, str]] = {}
 _changes = itertools.count()
 
@@ -244,6 +245,12 @@ def _handle_mode_command(raw_args: str, *, session_id: str | None = None) -> str
         # Bare /puritanical switches puritanical on, or reports the level when it already is (#639).
         mode = _session_mode(key)
         if mode != "off":
+            if session_id is None:
+                # This Hermes does not say which chat called, and an off phrase is kept under
+                # the chat's own id, so resume every chat an off phrase switched off.
+                for chat, (_, m) in list(_session_modes.items()):
+                    if m == "off":
+                        del _session_modes[chat]
             return f"Puritanical mode: {mode}. Use `/puritanical lite|full|ultra|off`."
         if no_session:
             return _NO_SESSION
@@ -252,17 +259,20 @@ def _handle_mode_command(raw_args: str, *, session_id: str | None = None) -> str
         return f"Puritanical mode set to {mode}."
     first, _, rest = arg.partition(" ")
     if first == "default":
-        # Saves the level new sessions start at; this session keeps the level it has.
+        # Saves the level new sessions start at. A chat with no level of its own reads the default
+        # too, so the calling session is pinned at its level first. Without a session id there is
+        # nothing to pin, and the calling chat moves as well: pinning "" would hold every chat,
+        # new sessions included, at the old default.
         mode = _normalize_runtime_mode(rest)
         if not mode:
             return "Usage: /puritanical default [lite|full|ultra|off]"
-        if not no_session and key not in _session_modes:
-            _set_mode(key, _session_mode(key))
+        if session_id and session_id not in _session_modes:
+            _set_mode(session_id, _session_mode(session_id))
         try:
             _write_default_mode(mode)
         except (OSError, ValueError, TypeError) as e:
             return f"Puritanical default not saved: {e} Config left unchanged."
-        return f"Puritanical default set: new sessions start in {mode}."
+        return f"Puritanical default set: new sessions start in {mode}, as do chats with no level of their own."
     mode = _normalize_runtime_mode(arg)
     if not mode:
         return "Usage: /puritanical [lite|full|ultra|off|default <level>]"
