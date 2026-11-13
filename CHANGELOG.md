@@ -14,7 +14,7 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 
 - Claude Code installs follow each commit: `.claude-plugin/plugin.json` no longer declares a version, so Claude Code offers updates for changes made since 1.0.0. `check-versions` refuses a version there (#55).
 - Codex installs receive this release: Codex refreshes a plugin only when its manifest version changes, so installs made since 1.0.0 kept the code of their install day.
-- The codebase map labels the names it reads from project files as data, not instructions, and leaves out any name or folder name over 40 characters, so a file someone else wrote cannot put a long instruction into the agent's context. Outside Git, a folder that cannot be read is skipped instead of losing the whole map (#60, #PURFIX).
+- The codebase map labels the names it reads from project files as data, not instructions, and leaves out any name or folder name over 40 characters, so a file someone else wrote cannot put a long instruction into the agent's context. Outside Git, a folder that cannot be read is skipped instead of losing the whole map (#60, #64).
 - INSTALL points OpenCode at `<checkout>/.opencode/plugins`; the relative path it gave resolved in the user's project (#58).
 - OpenCode switches off on a message that is only 'stop puritanical' or 'normal mode', as the other hosts do (#61).
 - Hermes honours 'stop puritanical' and 'normal mode', and accepts `/puritanical default <level>`, which sets the level new sessions start in (#62).
