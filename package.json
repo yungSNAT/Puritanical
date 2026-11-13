@@ -1,7 +1,7 @@
 {
   "name": "@equitybot/puritanical",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Strict simplicity for coding agents: the smallest correct change, verified.",
   "keywords": ["opencode-plugin", "opencode", "puritanical", "pi-package", "pi", "skills", "qoder"],
   "license": "FSL-1.1-ALv2 AND MIT",

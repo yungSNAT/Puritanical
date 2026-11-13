@@ -4,6 +4,8 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-13
+
 ### Added
 
 - The results of 2 benchmark runs, with every cell, under `benchmarks/results/`: the 1.0.0 ruleset against the draft before it, and, on 7 November 2026, a pre-release ruleset (`3d145eb`) against Ponytail v5.3.3 (`7801d06`) and no skill, where Ponytail wrote fewer lines and cost less on all 4 tasks; not significant, as with 4 tasks the sign test cannot go below p = 0.125 ([results](benchmarks/results/2026-11-07-head-to-head.md)).
@@ -11,6 +13,15 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 ### Fixed
 
 - Claude Code installs follow each commit: `.claude-plugin/plugin.json` no longer declares a version, so Claude Code offers updates for changes made since 1.0.0. `check-versions` refuses a version there (#55).
+- Codex installs receive this release: Codex refreshes a plugin only when its manifest version changes, so installs made since 1.0.0 kept the code of their install day.
+- The codebase map labels the names it reads from project files as data, not instructions, and leaves out any name or folder name over 40 characters, so a file someone else wrote cannot put a long instruction into the agent's context. Outside Git, a folder that cannot be read is skipped instead of losing the whole map (#60, #PURFIX).
+- INSTALL points OpenCode at `<checkout>/.opencode/plugins`; the relative path it gave resolved in the user's project (#58).
+- OpenCode switches off on a message that is only 'stop puritanical' or 'normal mode', as the other hosts do (#61).
+- Hermes honours 'stop puritanical' and 'normal mode', and accepts `/puritanical default <level>`, which sets the level new sessions start in (#62).
+
+### Changed
+
+- Hermes keeps the level per session: on a gateway, `/puritanical off` in one chat no longer switches every chat off. On a Hermes version that passes no session to plugin commands, the level stays process-wide as before (#62).
 
 ## [1.0.0] - 2026-11-10
 
@@ -30,5 +41,6 @@ First release. Puritanical guides coding agents to the smallest correct change: 
 - Licence is FSL-1.1-ALv2, not OSI open source; each version becomes Apache-2.0 after 2 years.
 - Released on GitHub only; nothing is published to npm.
 
-[Unreleased]: https://github.com/yungSNAT/Puritanical/compare/v1.0.0...main
+[Unreleased]: https://github.com/yungSNAT/Puritanical/compare/v1.0.1...main
+[1.0.1]: https://github.com/yungSNAT/Puritanical/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/yungSNAT/Puritanical/releases/tag/v1.0.0
