@@ -58,7 +58,7 @@ function listFiles(root, walkUntracked) {
       if (depth > 6 || out.length > MAX_FILES * 5) return;
       // A folder we may not read (EACCES, or macOS-protected ones under ~) is skipped, not fatal.
       let ents;
-      try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; } // NOSONAR: lists the folder the caller names, as git ls-files does above
       for (const ent of ents) {
         if (ent.name.startsWith('.')) continue;
         const rel = path.relative(root, path.join(dir, ent.name)).replace(/\\/g, '/');
