@@ -258,7 +258,7 @@ def _handle_mode_command(raw_args: str, *, session_id: str | None = None) -> str
     first, _, rest = arg.partition(" ")
     if first == "default":
         # Saves the level new sessions start at; this session keeps the level it has. Without a
-        # session to pin, nothing is pinned: "" is read by every session, new ones included.
+        # session id nothing is pinned: pinning "" would hold new sessions at the old default.
         mode = _normalize_runtime_mode(rest)
         if not mode:
             return "Usage: /puritanical default [lite|full|ultra|off]"
