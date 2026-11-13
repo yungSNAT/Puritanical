@@ -1,5 +1,5 @@
 name: puritanical
-version: 1.0.0
+version: 1.0.1
 description: "Strict simplicity for Hermes Agent: always-on context, bundled skills and slash commands."
 author: yungSNAT
 provides_hooks:

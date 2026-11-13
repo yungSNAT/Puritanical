@@ -4,7 +4,7 @@
 > request does not require, without stripping correctness, safety, accessibility or
 > verification. It guides the agent; it does not prove the change correct.
 
-Version 1.0.0, a fork of Ponytail, with adapters for 34 agent hosts. Benchmark runs from
+Version 1.0.1, a fork of Ponytail, with adapters for 34 agent hosts. Benchmark runs from
 7 and 8 November 2026, with every cell, are in `benchmarks/results/`. Install in Claude Code with `/plugin marketplace add yungSNAT/Puritanical`,
 then `/plugin install puritanical@puritanical` as a separate prompt.
 

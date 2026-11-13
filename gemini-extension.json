@@ -1,6 +1,6 @@
 {
   "name": "puritanical",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Strict simplicity for coding agents. Correctness, safety and verification come first; then YAGNI, reuse, the standard library and the smallest change that meets every requirement.",
   "contextFileName": "AGENTS.md"
 }

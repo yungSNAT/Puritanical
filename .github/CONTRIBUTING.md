@@ -42,4 +42,4 @@ A new task needs a `good` and a `bad` reference in `tasks.py`, so `--selftest` p
 
 ## Releases
 
-Bump every version file together; `check-versions` lists them and, on a tag build, checks the tag matches. `.claude-plugin/plugin.json` declares no version, so Claude Code installs follow each commit; `check-versions` refuses one there. `puritanical-tools publish-openclaw` pushes `.openclaw/skills/` to ClawHub after `clawhub login`; nothing is published there yet. A `v*` tag and GitHub release publish nothing to npm.
+Bump every version file together; `check-versions` lists them and, on a tag build, checks the tag matches. `.claude-plugin/plugin.json` declares no version, so Claude Code installs follow each commit; `check-versions` refuses one there. Codex refreshes an install only when `.codex-plugin/plugin.json` changes version, so a change to `hooks/` or `skills/` reaches Codex users only with a release. `puritanical-tools publish-openclaw` pushes `.openclaw/skills/` to ClawHub after `clawhub login`; nothing is published there yet. A `v*` tag and GitHub release publish nothing to npm.
