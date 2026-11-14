@@ -218,8 +218,9 @@ Fixed before the first paid run. Any later change is published with the results,
 
 - [7 November 2026](../results/2026-11-07-head-to-head.md): a pre-release ruleset (`3d145eb`), Ponytail v5.3.3 and no skill, 4 tasks, 5 runs. Ponytail wrote fewer lines and cost less than Puritanical on all 4 tasks.
 - [8 November 2026](../results/2026-11-08-v5-vs-v4.md): the 1.0.0 ruleset against the draft before it, all 47 tasks, 5 runs.
+- [14 November 2026](../results/2026-11-14-v1.0.0-head-to-head.md): 1.0.0, Ponytail v5.3.3 and no skill in 4 rounds, the largest 20 tasks and 10 runs, with the rule texts given to the model directly rather than through this harness's plugin sessions.
 
-Neither is the full head-to-head the analysis plan fixes, and nothing has measured 1.0.0 against a rival or no skill. The harness is inherited from [Ponytail](https://github.com/DietrichGebert/ponytail); upstream's published results measure the upstream rulesets, so they are in [upstream `benchmarks/results/`](https://github.com/DietrichGebert/ponytail/tree/main/benchmarks/results) and are not repeated here.
+None is the full head-to-head the analysis plan fixes. The harness is inherited from [Ponytail](https://github.com/DietrichGebert/ponytail); upstream's published results measure the upstream rulesets, so they are in [upstream `benchmarks/results/`](https://github.com/DietrichGebert/ponytail/tree/main/benchmarks/results) and are not repeated here.
 
 > An upstream run (`results/2026-06-17-agentic-safety.md`) was **superseded** because its
 > baseline was contaminated by the puritanical plugin's `SessionStart` hook firing on every arm, so

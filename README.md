@@ -89,7 +89,7 @@ The ladder never removes input validation at trust boundaries, security, accessi
 | [Superpowers](https://github.com/obra/superpowers) | A skills framework and development methodology | A whole development process, not only rules for each change | MIT |
 | [Spec Kit](https://github.com/github/spec-kit) | GitHub's toolkit for spec-driven development | A specification and plan agreed before any code is written | MIT |
 
-Of these, only Ponytail has been measured against Puritanical, and only a pre-release ruleset (`3d145eb`): on 7 November 2026, with Claude Opus 5.5 on 4 tasks, Ponytail v5.3.3 wrote fewer lines and cost less on all 4, though with 4 tasks no difference can be significant (the sign test cannot go below p = 0.125; [results](benchmarks/results/2026-11-07-head-to-head.md)). Nothing has measured 1.0.0 against these projects; [Benchmarks](#benchmarks) says how to run the comparison.
+Of these, only Ponytail has been measured against Puritanical. On 14 November 2026, with Claude Opus 5.5 on 20 tasks, the 1.0.0 ruleset passed both the correctness and the quality check in 199 of 200 cells, Ponytail v5.3.3 in 192 and no skill in 180, whilst Ponytail wrote fewer lines (a mean of 16.9 against 22.1) and cost 27% less. The whole lead over Ponytail is one task this fork added, and the 20 tasks come from the 47 the ruleset was tuned on ([results and limits](benchmarks/results/2026-11-14-v1.0.0-head-to-head.md)).
 
 ## Changes from Ponytail
 
@@ -121,12 +121,13 @@ The 4 fixes came from community forks: [duofuwang](https://github.com/duofuwang/
 
 ## Benchmarks
 
-Published runs, each with every cell:
+Published runs:
 
-- [7 November 2026](benchmarks/results/2026-11-07-head-to-head.md): a pre-release ruleset (`3d145eb`), Ponytail v5.3.3 and no skill on 4 tasks, with Claude Opus 5.5. Ponytail wrote fewer lines and cost less than Puritanical on all 4; Puritanical wrote fewer lines than no skill on all 4. Neither difference is significant: with 4 tasks the sign test cannot go below p = 0.125.
-- [8 November 2026](benchmarks/results/2026-11-08-v5-vs-v4.md): the 1.0.0 ruleset against the draft before it on 47 tasks. 1.0.0 passed the hidden checks in 100 of 100 surgical cells, the draft in 97.
+- [14 November 2026](benchmarks/results/2026-11-14-v1.0.0-head-to-head.md): 1.0.0, Ponytail v5.3.3 and no skill in 4 rounds, with every cell of the largest. In the 2 rounds of 20 tasks and 600 cells with Claude Opus 5.5, 1.0.0 passed both checks in 199 and 197 of 200 cells, Ponytail in 192 and 190, no skill in 180 and 180; Ponytail wrote the fewest lines and cost the least. All of 1.0.0's lead over Ponytail comes from `abstain-fixed`, a task this fork added with the rule it tests. In 2 smaller rounds of 4 tasks, 1.0.0 failed the malformed-row check most often.
+- [7 November 2026](benchmarks/results/2026-11-07-head-to-head.md), with every cell: a pre-release ruleset (`3d145eb`), Ponytail v5.3.3 and no skill on 4 tasks, with Claude Opus 5.5. Ponytail wrote fewer lines and cost less than Puritanical on all 4; Puritanical wrote fewer lines than no skill on all 4. Neither difference is significant: with 4 tasks the sign test cannot go below p = 0.125.
+- [8 November 2026](benchmarks/results/2026-11-08-v5-vs-v4.md), with every cell: the 1.0.0 ruleset against the draft before it on 47 tasks. 1.0.0 passed the hidden checks in 100 of 100 surgical cells, the draft in 97.
 
-Nothing has measured 1.0.0 against Ponytail, the other projects or no skill. The harness in [benchmarks/](benchmarks/) comes from upstream; upstream's published results measure the upstream rulesets. [Head to head](benchmarks/agentic/README.md#head-to-head) runs Puritanical, Ponytail, Superpowers, the Karpathy guidelines and no skill in one run from pinned checkouts, and [`behavior.yaml`](benchmarks/behavior.yaml) probes whether the rules this fork added change what the agent does.
+Nothing has measured 1.0.0 against Superpowers, the Karpathy guidelines or Spec Kit. The harness in [benchmarks/](benchmarks/) comes from upstream; upstream's published results measure the upstream rulesets. [Head to head](benchmarks/agentic/README.md#head-to-head) runs Puritanical, Ponytail, Superpowers, the Karpathy guidelines and no skill in one run from pinned checkouts, and [`behavior.yaml`](benchmarks/behavior.yaml) probes whether the rules this fork added change what the agent does.
 
 ## Development
 
