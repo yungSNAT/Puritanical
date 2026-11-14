@@ -6,7 +6,7 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 
 ### Added
 
-- The results of 4 head-to-head rounds of 1.0.0 against Ponytail v5.3.3 and no skill, run on 14 November 2026, with every cell of the largest. With Claude Opus 5.5 on 20 tasks, 1.0.0 passed both checks in 199 of 200 cells, Ponytail in 192 and no skill in 180; Ponytail wrote fewer lines and cost less, and all of 1.0.0's lead comes from one task this fork added ([results](benchmarks/results/2026-11-14-v1.0.0-head-to-head.md)).
+- The results of 4 head-to-head rounds of 1.0.0 against Ponytail v5.3.3 and no skill, run on 14 November 2026, with every cell of the largest. With Claude Opus 5.5 on 20 tasks, 1.0.0 passed both checks in 199 of 200 cells, Ponytail in 192 and no skill in 180; Ponytail wrote fewer lines and cost less, and all of 1.0.0's lead over Ponytail comes from one task this fork added ([results](benchmarks/results/2026-11-14-v1.0.0-head-to-head.md)).
 
 ### Fixed
 
