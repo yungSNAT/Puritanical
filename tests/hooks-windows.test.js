@@ -63,6 +63,22 @@ test('hooks.json omits commandWindows for marketplace validation (#593)', () => 
   }
 });
 
+// Under load a Node process can take tens of seconds to start; at 15 s the
+// hosts skipped the hooks (17 to 64 s seen on Windows). All 3 hosts take the
+// limit in seconds and fail open on timeout.
+test('lifecycle hooks allow at least 60 seconds', () => {
+  const read = (rel) => JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8')).hooks;
+  const limits = [
+    ...commandHooks().map((h) => [HOOKS_JSON, h.timeout]),
+    ...Object.values(read(COPILOT_HOOKS_JSON)).flat().map((h) => [COPILOT_HOOKS_JSON, h.timeoutSec]),
+    ...Object.values(read('hooks/cursor-hooks.json')).flat().map((h) => ['hooks/cursor-hooks.json', h.timeout]),
+  ];
+  assert.ok(limits.length >= 6, 'expected lifecycle hooks in all 3 host configs');
+  for (const [rel, seconds] of limits) {
+    assert.ok(seconds >= 60, `${rel} hook timeout ${seconds} s is below 60 s`);
+  }
+});
+
 test('shared hook commands avoid POSIX-only guard syntax', () => {
   const commands = commandHooks()
     .map((h) => h.command)

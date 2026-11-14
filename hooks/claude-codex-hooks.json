@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "node -e \"require(require('path').join(process.env.CLAUDE_PLUGIN_ROOT.split(String.fromCharCode(92)).join('/'), 'hooks/puritanical-activate.js'))\"",
-            "timeout": 15,
+            "timeout": 60,
             "statusMessage": "Loading puritanical mode..."
           }
         ]
@@ -19,7 +19,7 @@
           {
             "type": "command",
             "command": "node -e \"require(require('path').join(process.env.CLAUDE_PLUGIN_ROOT.split(String.fromCharCode(92)).join('/'), 'hooks/puritanical-mode-tracker.js'))\"",
-            "timeout": 15,
+            "timeout": 60,
             "statusMessage": "Tracking puritanical mode..."
           }
         ]
