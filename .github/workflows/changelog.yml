@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
 
       - name: Check for a changelog line
-        uses: yungSNAT/yungSNAT/.github/actions/changelog-line@5cd2765e4c78098b7602809e60830f07373fae44 # main
+        uses: yungSNAT/yungSNAT/.github/actions/changelog-line@5cd2765e4c78098b7602809e60830f07373fae44 # v1
         with:
           shipped: '^(skills|hooks|commands|scripts)/|^pi-extension/|^\.(agents|claude-plugin|clinerules|codex-plugin|cursor|devin-plugin|grok-plugin|kimi-plugin|kiro|openclaw|opencode|qoder|qoder-plugin|windsurf)/|^\.github/(plugin/|copilot-instructions\.md$)|^(AGENTS\.md|LICENSE|NOTICE|__init__\.py|after-install\.md|gemini-extension\.json|opencode\.json|package\.json|plugin\.json|plugin\.yaml)$'
           exclude: '^pi-extension/test/'
