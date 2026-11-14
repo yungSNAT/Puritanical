@@ -4,13 +4,13 @@
     "sessionStart": [
       {
         "command": "node \"PURITANICAL_DIR/hooks/puritanical-activate.js\"",
-        "timeout": 15
+        "timeout": 60
       }
     ],
     "beforeSubmitPrompt": [
       {
         "command": "node \"PURITANICAL_DIR/hooks/puritanical-mode-tracker.js\"",
-        "timeout": 15
+        "timeout": 60
       }
     ]
   }
