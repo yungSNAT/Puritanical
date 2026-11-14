@@ -11,6 +11,7 @@ This is a report the user asked for, so give it in full.
 
 - Review what the user names: uncommitted or staged changes, a branch, a PR
   link, or files. Nothing named: the uncommitted changes. If there are none, report the empty scope and ask for a target; never guess a last-commit review.
+- Read the issue, PR description or request the change answers, when there is one.
 - Read the diff, then the code it touches: callers of every changed function,
   the functions it calls, the tests, the README.
 - Trace the real flow: where data comes in, what is stored, what goes out.
@@ -25,19 +26,21 @@ This is a report the user asked for, so give it in full.
 1. **Bug:** wrong result, crash, missed edge case (empty, zero, last item,
    rounding, time zones), a caller broken by the change, a fix applied in one
    caller while the shared function stays broken.
-2. **Risk:** security holes (injection, weak randomness, secrets, missing
+2. **Scope:** the change misses part of what the issue, PR description or
+   request asked for, or does work it did not ask for.
+3. **Risk:** security holes (injection, weak randomness, secrets, missing
    checks on input from users), data loss (errors swallowed, writes in the
    wrong order, no transaction).
-3. **Scale:** fine for one user, wrong for many: check-then-write races, the
+4. **Scale:** fine for one user, wrong for many: check-then-write races, the
    same work done by every process, memory or lists that only grow, a query
    per item, O(n^2) on big input, per-process state that must be shared.
-4. **Weakened test:** an assertion deleted or loosened, or a new skip marker,
+5. **Weakened test:** an assertion deleted or loosened, or a new skip marker,
    in a change that does not say why the old test was wrong.
-5. **Missing test:** risky new logic (a branch, a parser, money, security,
+6. **Missing test:** risky new logic (a branch, a parser, money, security,
    data writes, a bug fix) with no test that fails when it breaks. Require proportionate regression coverage and the project's defined checks; there is no one-test ceiling.
-6. **Speed:** big slowdowns are problems. Small wins (work repeated in a hot
+7. **Speed:** big slowdowns are problems. Small wins (work repeated in a hot
    loop) are suggestions; some software counts every millisecond.
-7. **Lean:** code that should not exist or should be smaller.
+8. **Lean:** code that should not exist or should be smaller.
    - delete: dead code, unused options, speculative features
    - reuse: the repo already has this helper (name the path)
    - stdlib / native: the standard library or platform already does it; a
