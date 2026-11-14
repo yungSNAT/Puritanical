@@ -13,7 +13,7 @@ In shared gateways, restrict `/puritanical` to trusted users with Hermes slash-c
 Commands:
 
 - `/puritanical [lite|full|ultra|off]`
-- `/puritanical default [lite|full|ultra|off]`: the level new sessions start in
+- `/puritanical default <level>`: the level new sessions start in
 - `/puritanical-review [target]`
 - `/puritanical-audit [target]`
 - `/puritanical-debt`
