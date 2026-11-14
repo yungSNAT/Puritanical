@@ -272,6 +272,10 @@ def _handle_mode_command(raw_args: str, *, session_id: str | None = None) -> str
             _write_default_mode(mode)
         except (OSError, ValueError, TypeError) as e:
             return f"Puritanical default not saved: {e} Config left unchanged."
+        effective = _default_mode()  # PURITANICAL_DEFAULT_MODE outranks the saved default.
+        if effective != mode:
+            return (f"Puritanical default saved as {mode}, but PURITANICAL_DEFAULT_MODE is {effective}, "
+                    f"so new sessions start in {effective} until it is unset.")
         return f"Puritanical default set: new sessions start in {mode}, as do chats with no level of their own."
     mode = _normalize_runtime_mode(arg)
     if not mode:

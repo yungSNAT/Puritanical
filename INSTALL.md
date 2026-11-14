@@ -177,7 +177,7 @@ Merges two native hooks into `~/.cursor/hooks.json` (add `--project` to write `<
 
 ## Settings
 
-Set the level for every new session with the `PURITANICAL_DEFAULT_MODE` env var (`lite`/`full`/`ultra`/`off`), or a `defaultMode` field in `~/.config/puritanical/config.json` (`%APPDATA%\puritanical\config.json` on Windows). The default is `full`.
+Set the level for every new session with the `PURITANICAL_DEFAULT_MODE` env var (`lite`/`full`/`ultra`/`off`), or a `defaultMode` field in `~/.config/puritanical/config.json` (`%APPDATA%\puritanical\config.json` on Windows). The env var wins over the file, including a level saved with `/puritanical default`, whose reply says so when it is overridden. The default is `full`.
 
 The Claude Code and Codex plugins do not inject the ruleset into subagents, which saves about 1,400 tokens per subagent; brief a subagent yourself when it should follow the rules. The Qoder plugin injects the ruleset into every subagent it starts. To scope that to specific agent types (say, keep it off read-only search agents), set the `PURITANICAL_SUBAGENT_MATCHER` env var to a regex tested against the subagent's `agent_type`. It is unanchored and case-insensitive: `explore|general` matches either, `^general$` is exact, and plugin agent types look like `plugin:name`. Unset means inject into every subagent (the default); an invalid regex, or a subagent whose type the platform doesn't report, also falls back to injecting.
 

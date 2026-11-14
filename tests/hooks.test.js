@@ -757,7 +757,9 @@ test('hook compatibility checks', () => {
 
   // `/puritanical default lite` on Qoder: the turn still gets the live ruleset, with
   // the confirmation folded into the same JSON, and the live level stays ultra.
-  const qoderDefaultEnv = { ...qoderEnv, XDG_CONFIG_HOME: path.join(qoderHome, '.config') };
+  // qoderEnv sets PURITANICAL_DEFAULT_MODE, which outranks a saved default; clear it so
+  // the saved level is the one new sessions start in.
+  const qoderDefaultEnv = { ...qoderEnv, XDG_CONFIG_HOME: path.join(qoderHome, '.config'), PURITANICAL_DEFAULT_MODE: '' };
   result = run('puritanical-mode-tracker.js', qoderDefaultEnv, JSON.stringify({ prompt: '/puritanical default lite' }));
   assert.equal(result.status, 0, result.stderr);
   assert.equal(fs.readFileSync(qoderState, 'utf8'), 'ultra');
@@ -878,6 +880,16 @@ test('hook compatibility checks', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(fs.readFileSync(defConfig, 'utf8')).defaultMode, 'lite', '/puritanical default must persist the default');
   assert.equal(fs.existsSync(defFlag), false, '/puritanical default must not change the session mode');
+
+  // PURITANICAL_DEFAULT_MODE outranks the saved default, so the notice must not
+  // promise a level new sessions will not start in.
+  result = run('puritanical-mode-tracker.js', { ...defEnv, PURITANICAL_DEFAULT_MODE: 'ultra' }, JSON.stringify({ prompt: '/puritanical default lite' }));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(defConfig, 'utf8')).defaultMode, 'lite');
+  assert.equal(
+    result.stdout.trim(),
+    'PURITANICAL DEFAULT SAVED as lite, but PURITANICAL_DEFAULT_MODE is ultra, so new sessions start in ultra until it is unset.',
+  );
 
   // A plain switch is transient: sets the session flag, leaves the default alone.
   result = run('puritanical-mode-tracker.js', defEnv, JSON.stringify({ prompt: '/puritanical ultra' }));

@@ -436,6 +436,19 @@ print(json.dumps([off, after_off, default, command('', 'c')]))
   assert.match(fresh, /Puritanical mode: lite/, 'the default is saved and not pinned for every chat');
 });
 
+// PURITANICAL_DEFAULT_MODE outranks the saved default, so the reply must name the level
+// new sessions will actually start in (R2954).
+test('Hermes: /puritanical default names PURITANICAL_DEFAULT_MODE when it overrides the saved level', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-config-'));
+  const output = python(hermesSessions + String.raw`
+print(json.dumps([command('default lite', 'a'), command('default ultra', 'a')]))
+`, { XDG_CONFIG_HOME: tmp, PURITANICAL_DEFAULT_MODE: 'ultra' });
+  const [overridden, same] = JSON.parse(output);
+  assert.equal(overridden, 'Puritanical default saved as lite, but PURITANICAL_DEFAULT_MODE is ultra, so new sessions start in ultra until it is unset.');
+  assert.match(same, /^Puritanical default set: new sessions start in ultra/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(tmp, 'puritanical', 'config.json'), 'utf8')).defaultMode, 'ultra');
+});
+
 test('Hermes switches a session off when its message is only "stop puritanical" or "normal mode" (R1973)', () => {
   const output = python(hermesSessions + String.raw`
 print(json.dumps([turn(s, started(s), text) for s, text in [('a', 'Stop puritanical.'), ('b', 'normal mode'), ('c', 'add a normal mode toggle')]]))

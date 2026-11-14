@@ -63,7 +63,13 @@ function finish() {
           if (dmode === 'off' || dmode === 'lite' || dmode === 'full' || dmode === 'ultra') {
             try {
               writeDefaultMode(dmode);
-              defaultNotice = 'PURITANICAL DEFAULT SET — new sessions start in ' + dmode + '.';
+              // PURITANICAL_DEFAULT_MODE outranks the saved default, so name the level
+              // new sessions will actually start in.
+              const effective = getDefaultMode();
+              defaultNotice = effective === dmode
+                ? 'PURITANICAL DEFAULT SET — new sessions start in ' + dmode + '.'
+                : 'PURITANICAL DEFAULT SAVED as ' + dmode + ', but PURITANICAL_DEFAULT_MODE is ' + effective
+                  + ', so new sessions start in ' + effective + ' until it is unset.';
             } catch (e) {
               defaultNotice = 'PURITANICAL DEFAULT NOT SAVED — ' + e.message + ' Config left unchanged.';
             }
