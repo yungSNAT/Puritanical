@@ -81,13 +81,15 @@ def blind(text):
 
 def _cli_call(system, user, model):
     """No API key: the same judge through the headless claude CLI and the user's login. No tools,
-    no plugins, no CLAUDE.md, empty cwd. shortcut: the CLI has no temperature flag, so CLI judging
+    no plugins, no CLAUDE.md, empty cwd, no saved transcript, no prompt cache (each one-turn call
+    only wrote cache, never read it). shortcut: the CLI has no temperature flag, so CLI judging
     is not temperature 0; the live selftest gates it the same way."""
-    env = {**os.environ, "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
+    env = {**os.environ, "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+           "DISABLE_PROMPT_CACHING": "1"}
     with tempfile.TemporaryDirectory() as d:
         r = subprocess.run([shutil.which("claude") or "claude", "-p", "--model", model, "--system-prompt", system,
                             "--output-format", "json", "--tools", "", "--setting-sources", "project,local",
-                            "--strict-mcp-config"], input=user, cwd=d, env=env,
+                            "--strict-mcp-config", "--no-session-persistence"], input=user, cwd=d, env=env,
                            capture_output=True, text=True, timeout=300)
     return json.loads(r.stdout)["result"]
 
