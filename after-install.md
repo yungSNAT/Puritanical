@@ -8,11 +8,12 @@ hermes plugins enable puritanical
 
 Restart Hermes or the gateway after enabling.
 
-In shared gateways, restrict `/puritanical` to trusted users with Hermes slash-command access controls; runtime mode is process-local.
+In shared gateways, restrict `/puritanical` to trusted users with Hermes slash-command access controls. Each session keeps its own level where Hermes passes the calling session to plugin commands; on versions that do not, one level serves every session in the process.
 
 Commands:
 
 - `/puritanical [lite|full|ultra|off]`
+- `/puritanical default <level>`: the level new sessions start in
 - `/puritanical-review [target]`
 - `/puritanical-audit [target]`
 - `/puritanical-debt`
