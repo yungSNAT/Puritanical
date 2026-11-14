@@ -4,7 +4,7 @@
 
 **Result:** Ponytail wrote fewer lines and cost less than Puritanical on all 4 tasks. Puritanical wrote fewer lines than no skill on all 4 and cost less on 3. Every cell passed its check, and every judged cell scored complete.
 
-This run measured Puritanical at `3d145eb`, before the rulesets of #49 and #52. **Nothing has measured 1.0.0 against Ponytail or no skill.** Do not read these figures as a result for 1.0.0.
+This run measured Puritanical at `3d145eb`, before the rulesets of #49 and #52. Do not read these figures as a result for 1.0.0: [14 November 2026](2026-11-14-v1.0.0-head-to-head.md) measured 1.0.0 against Ponytail and no skill.
 
 ## Setup
 
