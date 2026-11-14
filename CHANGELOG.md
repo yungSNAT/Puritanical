@@ -6,7 +6,7 @@ This file follows the shape of [Keep a Changelog](https://keepachangelog.com/en/
 
 ### Fixed
 
-- The session-start and prompt hooks for Claude Code, Codex, Copilot CLI and Cursor now get 60 seconds instead of 15, so a busy machine no longer skips them when Node starts slowly.
+- The session-start and prompt hooks for Claude Code, Codex, Copilot CLI and Cursor now get 60 seconds instead of 15, so a busy machine no longer skips them when Node starts slowly (#76).
 - Since #62 each Hermes session keeps its own level; the message Hermes shows after install now says so, instead of 'process-local', and lists `/puritanical default <level>` (#72).
 - On a Hermes version that passes no session to plugin commands, `/puritanical default <level>` now reaches new sessions instead of pinning every session at the old default, and a bare `/puritanical` resumes every chat that 'stop puritanical' or 'normal mode' switched off, as other commands on such a version already apply to every chat (#68).
 
