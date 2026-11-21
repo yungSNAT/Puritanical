@@ -37,6 +37,7 @@ jobs:
           rustup toolchain install
           cargo test --locked
           for c in rules chart samples readme-art; do target/debug/puritanical-tools "$c" --check; done
+          npm run --prefix .. check:rules
 
   windows-installer:
     runs-on: windows-latest
