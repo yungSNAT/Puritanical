@@ -1,3 +1,15 @@
+# Puritanical
+
+Puritanical checks a reported bug against the current code before editing. Its coding rules preserve the caller’s error policy for partial imports and atomic updates.
+
+For Codex, run `node bin/install.js --only codex` from this checkout. Add `--force` to refresh an existing rules block. For a single Claude Code session, run `claude --plugin-dir .` here. The package name and commands in the upstream guide below refer to the upstream release.
+
+## Benchmarks
+
+[GPT-6.2 Astra correctness and token use across 3 coding rulesets](benchmarks/results/2026-11-21-astra/README.md)
+
+## Upstream guide
+
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-dark.svg">

@@ -17,7 +17,7 @@
     "retired_checks.py": "ece7f722871a8445068cc2e7ae753a371b8a0c1e3f8b7b09308f31310359f6d3",
     "ponytail_checks.py": "57e87f261b56360e53c86c04569b3932a9dc80158d08506cc7a9cdfdab8908cb",
     "batch_checks.py": "59add05eb109cd239a10788fcef97bc590b3a61f5d1cdbe106426552d8d70191",
-    "replay.py": "4caf3576c56694e917f8e88ee8099391ced12d696adbf9bcdf3b402c33ac2fd3"
+    "replay.py": "464d92776c564f3fcd053cc141b4d8d0c4e3b1c4231d96686d8f53378369e484"
   },
   "order": [
     {
@@ -308,5 +308,9 @@
       "repeat": 2,
       "prompt_sha256": "4f1faf376d27e868c854a8a5960b7a475470a5fd185fe811a6247a74b5f30bfb"
     }
-  ]
+  ],
+  "replay_amendment": {
+    "prior_registration_sha256": "49df9dd01e9ef594390bfb8162b4e00ff246e348181160d57b3f94517f7e6a12",
+    "change": "Independent pre-results review: distinguish a submitted program exiting or timing out from a missing sandbox or runtime. Prompts, scheduled cells, task checkers and correctness criteria are identical."
+  }
 }

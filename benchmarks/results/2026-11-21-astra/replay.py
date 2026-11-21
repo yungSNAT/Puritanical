@@ -2,12 +2,14 @@
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import shutil
 import subprocess
 import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
 CHECKERS = ("retired_checks.py", "ponytail_checks.py", "batch_checks.py")
+READY = b"benchmark runtime ready\n"
 
 
 def load(name):
@@ -29,6 +31,10 @@ def prompt(case, rules):
 
 def judge(task, answer):
     case = load("fixtures.json")[task]
+    if case["checker"] == "node" and not shutil.which("node"):
+        raise RuntimeError("Node.js is required for this fixture")
+    sys.stderr.buffer.write(READY)
+    sys.stderr.buffer.flush()
     try:
         files = json.loads(answer)["files"]
         if not isinstance(files, dict):
@@ -63,7 +69,7 @@ def judge(task, answer):
                         notice = reports_skipped(repo)
                     except Exception:
                         notice = False
-        except Exception:
+        except (Exception, SystemExit):
             # A submitted implementation may raise any application exception.
             passed = False
     return {"pass": bool(passed), "skip_notice": notice}
@@ -80,8 +86,24 @@ def score(task, answer):
     for name in ("replay.py", "fixtures.json", *CHECKERS):
         cmd.extend(["--ro-bind", str(HERE / name), "/bench/" + name])
     cmd.extend(["/usr/bin/python3", "/bench/replay.py", "--grade", task])
-    out = subprocess.run(cmd, input=answer.encode(), capture_output=True, check=True, timeout=75)
-    return json.loads(out.stdout.decode().splitlines()[-1])
+    failed = {"pass": False, "skip_notice": False if task == "csv-sum" else None}
+    try:
+        out = subprocess.run(cmd, input=answer.encode(), capture_output=True, timeout=75)
+    except subprocess.TimeoutExpired as error:
+        if READY not in (error.stderr or b""):
+            raise RuntimeError("Grader did not start") from error
+        return failed
+    if READY not in out.stderr:
+        raise RuntimeError(f"Grader setup failed: {out.stderr.decode(errors='replace')[:500]}")
+    if out.returncode or not out.stdout.strip():
+        return failed
+    try:
+        result = json.loads(out.stdout.splitlines()[-1])
+    except (ValueError, UnicodeError):
+        return failed
+    if not isinstance(result, dict) or not isinstance(result.get("pass"), bool):
+        return failed
+    return result
 
 
 def verify():
