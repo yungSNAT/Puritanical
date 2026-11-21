@@ -9,7 +9,7 @@
 
 <div align="center">
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/yungSNAT/Puritanical/test.yml?branch=main&label=tests)](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml) [![Codecov](https://codecov.io/gh/yungSNAT/Puritanical/graph/badge.svg)](https://codecov.io/gh/yungSNAT/Puritanical) [![CodeQL · no workflow](.github/assets/badges/codeql.svg)](#project-checks) [![OSV-Scanner · no workflow](.github/assets/badges/osv-scanner.svg)](#project-checks) [![SonarCloud · awaiting analysis](.github/assets/badges/sonarcloud.svg)](#project-checks) [![Codacy · awaiting analysis](.github/assets/badges/codacy.svg)](#project-checks)<br>
+[![Tests](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml) [![Codecov](https://codecov.io/gh/yungSNAT/Puritanical/graph/badge.svg)](https://codecov.io/gh/yungSNAT/Puritanical) [![CodeQL · no workflow](.github/assets/badges/codeql.svg)](#project-checks) [![OSV-Scanner · no workflow](.github/assets/badges/osv-scanner.svg)](#project-checks) [![SonarCloud · awaiting analysis](.github/assets/badges/sonarcloud.svg)](#project-checks) [![Codacy · awaiting analysis](.github/assets/badges/codacy.svg)](#project-checks)<br>
 [![OpenSSF Scorecard · awaiting assessment](.github/assets/badges/scorecard.svg)](#project-checks)<br>
 [![Code licence · MIT](.github/assets/badges/licence.svg)](#licence) [![GitHub release](https://img.shields.io/github/v/release/yungSNAT/Puritanical?color=66023C&labelColor=000000&style=flat)](https://github.com/yungSNAT/Puritanical/releases) [![Fork of Chisle](.github/assets/badges/fork-of.svg)](https://github.com/JayPokale/Chisle)
 
