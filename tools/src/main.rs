@@ -14,6 +14,7 @@ fn root() -> PathBuf {
 }
 
 fn main() -> ExitCode {
+    // nosemgrep: rust.lang.security.args-os.args-os -- names a command and its paths; nothing trusts them
     let args: Vec<String> = std::env::args_os()
         .skip(1)
         .map(|a| a.to_string_lossy().into_owned())
