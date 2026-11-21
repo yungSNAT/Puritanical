@@ -20,7 +20,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { getConfigDir, readSettingsText } = require('../../hooks/chisle-config');
+const { getConfigDir, readSettingsText, secureDirectory } = require('../../hooks/chisle-config');
 const { writeAtomically } = require('./settings');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -232,13 +232,30 @@ function writeToml(file, cfg, names) {
   writeText(file, cfg.raw, lines.join('\n'));
 }
 
+// Removes a proxy file before it is written again. A link is removed itself,
+// never followed, so a planted link cannot redirect the write outside the folder.
+function clearProxyEntry(file) {
+  let st;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A fixed proxy file name in the checked mcp-proxy folder, inspected without following links.
+  try { st = fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') return; throw e; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (!st.isFile() && !st.isSymbolicLink()) throw new Error(file + ' is not a regular file');
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes the entry itself (a file or a link, not its target) in the checked mcp-proxy folder.
+  fs.unlinkSync(file); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+}
+
 function installProxy() {
   const dir = proxyDir();
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The mcp-proxy folder inside the Chisle config directory.
-  fs.mkdirSync(dir, { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-  for (const f of PROXY_SOURCES) fs.copyFileSync(path.join(REPO_ROOT, 'hooks', f), path.join(dir, f)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- package.json in the Chisle config directory's mcp-proxy folder.
-  fs.writeFileSync(path.join(dir, 'package.json'), '{ "type": "commonjs" }\n'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (!secureDirectory(dir, getConfigDir())) throw new Error('unsafe MCP proxy folder (a link or not a folder): ' + dir);
+  for (const f of PROXY_SOURCES) {
+    const dst = path.join(dir, f);
+    clearProxyEntry(dst);
+    // Exclusive create: fails rather than follow a link planted after the removal.
+    fs.copyFileSync(path.join(REPO_ROOT, 'hooks', f), dst, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  }
+  const pkg = path.join(dir, 'package.json');
+  clearProxyEntry(pkg);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Exclusive create of package.json in the checked mcp-proxy folder.
+  fs.writeFileSync(pkg, '{ "type": "commonjs" }\n', { flag: 'wx' }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   return path.join(dir, PROXY_FILE);
 }
 

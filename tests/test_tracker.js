@@ -159,7 +159,10 @@ test('reinforcement: malformed sections value falls back to enabled, no throw', 
 
 // ── resume nudge ─────────────────────────────────────────────────────────────
 
-function runWithTranscript(minutesAgo, context) {
+// Claude Code keeps transcripts under <config dir>/projects/<project>/.
+const TRANSCRIPT = path.join('projects', 'p', 'session.jsonl');
+
+function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptPath } = {}) {
   const dir = process.cwd();
   fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
   const entry = {
@@ -167,9 +170,10 @@ function runWithTranscript(minutesAgo, context) {
     timestamp: new Date(Date.now() - minutesAgo * 60000).toISOString(),
     message: { model: 'claude-opus-5-5', usage: { input_tokens: 5, cache_creation_input_tokens: 1000, cache_read_input_tokens: context - 1005, output_tokens: 50 } },
   };
-  fs.writeFileSync('session.jsonl', JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
   const out = execFileSync(process.execPath, [TRACKER], {
-    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve('session.jsonl') }),
+    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(transcriptPath || file) }),
     env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on' },
     encoding: 'utf8',
     timeout: 5000,
@@ -187,15 +191,40 @@ test('resume nudge: big context after an expired cache warns the user', () => {
 
 test('resume nudge: silent when the transcript has no assistant usage', () => {
   fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
-  fs.writeFileSync('session.jsonl', JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
+  fs.mkdirSync(path.dirname(TRANSCRIPT), { recursive: true });
+  fs.writeFileSync(TRANSCRIPT, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
   const out = JSON.parse(execFileSync(process.execPath, [TRACKER], {
-    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve('session.jsonl') }),
+    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(TRANSCRIPT) }),
     env: { ...process.env, CLAUDE_CONFIG_DIR: process.cwd(), CHISLE_DEFAULT_MODE: 'on' },
     encoding: 'utf8',
     timeout: 5000,
   }));
   assert.equal(out.systemMessage, undefined);
   assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+});
+
+test('resume nudge: ignores a transcript outside the Claude projects folder', () => {
+  fs.mkdirSync('projects');
+  for (const file of ['session.jsonl', path.join('elsewhere', 'session.jsonl')]) {
+    const out = runWithTranscript(180, 480000, { file });
+    assert.equal(out.systemMessage, undefined, file);
+    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+  }
+});
+
+test('resume nudge: ignores a linked transcript or a linked projects subfolder', () => {
+  const outside = path.join('outside', 'session.jsonl');
+  fs.mkdirSync(path.join('projects', 'p'), { recursive: true });
+  fs.mkdirSync('outside');
+  fs.symlinkSync(path.resolve(outside), path.join('projects', 'p', 'linked.jsonl'));
+  fs.symlinkSync(path.resolve('outside'), path.join('projects', 'linked'), 'dir');
+  for (const link of [path.join('projects', 'p', 'linked.jsonl'), path.join('projects', 'linked', 'session.jsonl')]) {
+    const out = runWithTranscript(180, 480000, { file: outside, transcriptPath: link });
+    assert.equal(out.systemMessage, undefined, link);
+    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+  }
+  // The same transcript inside the tree still warns.
+  assert.match(runWithTranscript(180, 480000).systemMessage, /3 h idle/);
 });
 
 test('resume nudge: silent while the cache is warm or the context is small', () => {

@@ -24,6 +24,10 @@ const { execFile } = require('child_process');
 const [out, seeds, par, ...armSpecs] = process.argv.slice(2);
 if (!out || !armSpecs.length) { console.error('usage: run-ablation.js <out-dir> <seeds> <parallel> <arm>...'); process.exit(2); }
 const MODEL = process.env.MODEL || 'claude-haiku-4-5-20251001';
+// Arm names become file names in the private temp dir and <out-dir>; refuse any
+// that could leave them ('../x', 'a/b') before a path is built.
+const badArm = armSpecs.map((spec) => spec.split('=')[0]).find((name) => !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(name));
+if (badArm !== undefined) { console.error(`run-ablation.js: invalid arm name ${JSON.stringify(badArm)}: use letters, digits, '-', '_' and '.', not leading '.'`); process.exit(2); }
 
 const ISO = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-ablation-'));
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-ablation-work-'));
@@ -37,7 +41,7 @@ const arms = armSpecs.map((spec) => {
   const text = fs.readFileSync(file, 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   const body = /^---\s*$/m.test(text.split('\n')[0]) ? text.split(/^---\s*$/m).slice(2).join('---').trim() : text.trim();
   const prompt = path.join(ISO, `${name}.txt`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A prompt file in the private temporary config directory.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A prompt file in the private temporary config directory, named by an arm name checked above.
   fs.writeFileSync(prompt, body + '\n'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   return { name, prompt };
 });

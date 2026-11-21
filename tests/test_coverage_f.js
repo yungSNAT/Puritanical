@@ -180,3 +180,33 @@ test('install leaves the MCP proxy alone when none is installed and warns when a
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /MCP proxy refresh failed/);
 });
+
+test('update replaces a planted proxy-file link and leaves its target untouched', (t) => {
+  const home = tempRoot(t, 'chisle-cov-f-proxylink-');
+  const proxy = under(home, 'xdg', 'chisle', 'mcp-proxy');
+  const sentinel = under(home, 'sentinel.txt');
+  makeDir(proxy, { recursive: true });
+  writeText(sentinel, 'do not touch\n');
+  fs.symlinkSync(sentinel, under(proxy, 'chisle-mcp-proxy.js')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+
+  const result = runCLI(['--update'], home);
+  assert.equal(result.status, 0, result.out);
+  assert.match(result.out, /MCP proxy refreshed in/);
+  assert.equal(readText(sentinel), 'do not touch\n');
+  const st = fs.lstatSync(under(proxy, 'chisle-mcp-proxy.js')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  assert.equal(st.isFile() && !st.isSymbolicLink(), true);
+  assert.equal(readText(under(proxy, 'chisle-mcp-proxy.js')), readText(repoPath('hooks', 'chisle-mcp-proxy.js')));
+});
+
+test('update refuses an MCP proxy folder that is a link', (t) => {
+  const home = tempRoot(t, 'chisle-cov-f-proxydir-');
+  const elsewhere = under(home, 'elsewhere');
+  makeDir(elsewhere, { recursive: true });
+  makeDir(under(home, 'xdg', 'chisle'), { recursive: true });
+  fs.symlinkSync(elsewhere, under(home, 'xdg', 'chisle', 'mcp-proxy'), 'dir'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+
+  const result = runCLI(['--update'], home);
+  assert.equal(result.status, 0, result.out);
+  assert.match(result.out, /MCP proxy refresh failed: unsafe MCP proxy folder/);
+  assert.deepEqual(listDir(elsewhere), []);
+});

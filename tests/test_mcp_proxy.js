@@ -292,3 +292,23 @@ test('mcp wrap covers Antigravity mcp_config.json and VS Code Copilot mcp.json (
   assert.deepEqual(JSON.parse(fs.readFileSync('home/.gemini/config/mcp_config.json', 'utf8')), agOrig);
   assert.deepEqual(JSON.parse(fs.readFileSync('config/Code/User/mcp.json', 'utf8')), vsOrig);
 });
+
+test('mcp wrap replaces a planted proxy-file link without writing through it', () => {
+  const { env } = isolated();
+  const proxyDir = path.join('config', 'chisle', 'mcp-proxy');
+  fs.mkdirSync(proxyDir, { recursive: true });
+  fs.writeFileSync('sentinel.txt', 'do not touch\n');
+  fs.symlinkSync(path.resolve('sentinel.txt'), path.join(proxyDir, 'chisle-mcp-proxy.js'));
+  fs.symlinkSync(path.resolve('sentinel.txt'), path.join(proxyDir, 'package.json'));
+
+  assert.equal(cli(['mcp', 'wrap'], env).status, 0);
+  assert.equal(fs.readFileSync('sentinel.txt', 'utf8'), 'do not touch\n');
+  for (const [file, content] of [
+    ['chisle-mcp-proxy.js', fs.readFileSync(PROXY, 'utf8')],
+    ['package.json', '{ "type": "commonjs" }\n'],
+  ]) {
+    const st = fs.lstatSync(path.join(proxyDir, file));
+    assert.ok(st.isFile() && !st.isSymbolicLink(), file);
+    assert.equal(fs.readFileSync(path.join(proxyDir, file), 'utf8'), content, file);
+  }
+});

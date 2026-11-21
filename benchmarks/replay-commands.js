@@ -82,12 +82,15 @@ const CAP = 30000;
 const cap = (s) => (s.length > CAP ? s.slice(0, CAP) : s);
 
 function run(cmd, cwd) {
-  // The shell runs a command from the fixed CORPUS above (or RTK's rewrite of one), in a fixture repo.
+  // The shell runs either a command from the fixed CORPUS list above or, for the RTK column, the
+  // rewrite of one that the locally installed rtk binary printed (rtkRewrite). That rewrite is
+  // only as trustworthy as the rtk on PATH: this benchmark trusts it as it trusts any tool it runs.
   const r = spawnSync('bash', ['-c', `{ ${cmd}\n} 2>&1`], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } }); // nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell
   return { text: (r.stdout || '').replace(/\n$/, ''), failed: r.status !== 0 };
 }
 
-// What RTK's installed hook would turn the command into, or the command itself.
+// What RTK's installed hook would turn the command into, or the command itself. The result is
+// the local rtk binary's output for a CORPUS command, which run() then executes in a shell.
 function rtkRewrite(cmd) {
   const input = JSON.stringify({ session_id: 'bench', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: cmd } });
   const r = spawnSync('rtk', ['hook', 'claude'], { input, encoding: 'utf8' });

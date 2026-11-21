@@ -35,21 +35,31 @@ function reinforcementLine(sections) {
 const RESUME_IDLE_MS = 60 * 60 * 1000;
 const RESUME_MIN_CONTEXT = 150000;
 const TAIL_BYTES = 512 * 1024;
+// No-follow where supported, so a link swapped in after isTranscript is refused; O_NONBLOCK avoids waiting on a FIFO.
+const TRANSCRIPT_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
 
-// transcript_path from the hook payload must name a regular .jsonl file: a
-// FIFO or device there would block the synchronous read below.
-function isTranscript(p) {
+// transcript_path from the hook payload must name a regular .jsonl file, not a
+// link, inside Claude Code's transcript tree (<claude dir>/projects) once links
+// in its folders are resolved. A FIFO or device would block the synchronous
+// read below; anything else is not a transcript this hook should read.
+function isTranscript(p, claudeDir) {
   if (typeof p !== 'string' || path.extname(p) !== '.jsonl') return false;
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- transcript_path from Claude Code's hook payload, only inspected here.
-  try { return fs.statSync(p).isFile(); } catch { return false; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- transcript_path from Claude Code's hook payload, inspected without following a final link.
+    if (!fs.lstatSync(p).isFile()) return false; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolves the Claude config directory's projects folder to compare real paths.
+    const root = fs.realpathSync(path.join(claudeDir, 'projects')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolves links in the transcript's folders so a linked folder cannot leave the tree.
+    const rel = path.relative(root, fs.realpathSync(p)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
+  } catch { return false; }
 }
 
 function resumeWarning(transcriptPath, now = Date.now()) {
   try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- transcript_path from Claude Code's hook payload, checked by isTranscript as a regular .jsonl file.
-    const size = fs.statSync(transcriptPath).size; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The same checked transcript, opened read-only to read its tail.
-    const fd = fs.openSync(transcriptPath, 'r'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- transcript_path checked by isTranscript as a regular .jsonl file under the Claude projects folder, opened read-only.
+    const fd = fs.openSync(transcriptPath, TRANSCRIPT_FLAGS); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    const size = fs.fstatSync(fd).size;
     const len = Math.min(size, TAIL_BYTES);
     const buf = Buffer.alloc(len);
     fs.readSync(fd, buf, 0, len, size - len);
@@ -100,7 +110,7 @@ process.stdin.on('end', () => {
           additionalContext: reinforcementLine(resolveSections({ cwd: process.cwd(), claudeDir }))
         }
       };
-      const warning = isTranscript(data.transcript_path) ? resumeWarning(data.transcript_path) : null;
+      const warning = isTranscript(data.transcript_path, claudeDir) ? resumeWarning(data.transcript_path) : null;
       if (warning) out.systemMessage = warning;
       process.stdout.write(JSON.stringify(out));
     }
