@@ -23,15 +23,46 @@
 
 const fs = require('fs');
 const os = require('os');
+// Signal name → number, for the 128 + n exit status of a killed child.
+const SIGNALS = new Map(Object.entries(os.constants.signals));
 const path = require('path');
 const { spawn } = require('child_process');
-const { wrappable } = require('./chisle-command-filters');
+const { wrappable, envAssignEnd } = require('./chisle-command-filters');
 
 const SKIP_FIRST = new Set(['sudo', 'doas', 'time', 'command', 'exec', 'nice', 'nohup', 'timeout', 'builtin',
   'noglob', 'stdbuf', 'eval', 'source', '.', '!']);
-const ENV_PREFIX = /^\s*(?:[A-Za-z_]\w*=(?:'[^']*'|"(?:\\.|[^"\\])*"|[^\s'"\\])*\s+)*/;
 
 const quote = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+
+const ABORT = -1;
+
+// Escapes and expansions, live outside quotes and inside double quotes: the
+// index to resume from, ABORT for command substitution or an unclosed `${`,
+// null when `cmd[i]` starts neither.
+function expansionEnd(cmd, i) {
+  const c = cmd.charAt(i);
+  if (c === '\\') return i + 1;
+  if (c === '$' && cmd[i + 1] === '{') { const e = cmd.indexOf('}', i); return e < 0 ? ABORT : e; }
+  if (c === '`' || (c === '$' && cmd[i + 1] === '(')) return ABORT;
+  return null;
+}
+
+// Subshells, groups, heredocs and comments.
+function unsupportedAt(cmd, i) {
+  const c = cmd.charAt(i);
+  return '(){}'.includes(c) || (c === '<' && cmd[i + 1] === '<') || (c === '#' && (i === 0 || /\s/.test(cmd[i - 1])));
+}
+
+// Length of an unquoted && || ; or newline at i, 0 for none, ABORT for a
+// background job or `|&`. `>&` and `&>` redirects are not separators.
+function separatorAt(cmd, i) {
+  const c = cmd.charAt(i);
+  const next = cmd[i + 1];
+  if ((c === '&' && next === '&') || (c === '|' && next === '|')) return 2;
+  if (c === ';' || c === '\n') return 1;
+  if (c === '&') return cmd[i - 1] === '>' || next === '>' ? 0 : ABORT;
+  return c === '|' && next === '&' ? ABORT : 0;
+}
 
 // Top-level segments of a command as [start, end) offsets, split on && || ;
 // and newlines. null for anything we will not rewrite safely: command
@@ -41,19 +72,16 @@ function segments(cmd) {
   let start = 0;
   let q = null;
   for (let i = 0; i < cmd.length; i++) {
-    const c = cmd[i];
+    const c = cmd.charAt(i);
     if (q === "'") { if (c === "'") q = null; continue; }
-    if (c === '\\') { i++; continue; }
-    if (c === '$' && cmd[i + 1] === '{') { const e = cmd.indexOf('}', i); if (e < 0) return null; i = e; continue; }
-    if (c === '`' || (c === '$' && cmd[i + 1] === '(')) return null;
+    const skip = expansionEnd(cmd, i);
+    if (skip === ABORT) return null;
+    if (skip !== null) { i = skip; continue; }
     if (q === '"') { if (c === '"') q = null; continue; }
     if (c === "'" || c === '"') { q = c; continue; }
-    if ('(){}'.includes(c) || (c === '<' && cmd[i + 1] === '<') || (c === '#' && (i === 0 || /\s/.test(cmd[i - 1])))) return null;
-    let op = 0;
-    if ((c === '&' && cmd[i + 1] === '&') || (c === '|' && cmd[i + 1] === '|')) op = 2;
-    else if (c === ';' || c === '\n') op = 1;
-    else if (c === '&') { if (cmd[i - 1] === '>' || cmd[i + 1] === '>') continue; return null; }
-    else if (c === '|' && cmd[i + 1] === '&') return null;
+    if (unsupportedAt(cmd, i)) return null;
+    const op = separatorAt(cmd, i);
+    if (op === ABORT) return null;
     if (op) { segs.push([start, i]); start = i + op; i += op - 1; }
   }
   if (q) return null;
@@ -71,7 +99,7 @@ function rewriteCommand(cmd, prefix, guarded = new Set()) {
   let last = -1;
   for (const [a, b] of segs) {
     const text = cmd.slice(a, b);
-    const at = text.match(ENV_PREFIX)[0].length;
+    const at = envAssignEnd(text, text.length - text.trimStart().length);
     const words = text.slice(at).split(/\s+/);
     if (SKIP_FIRST.has(words[0]) || words.some(w => guarded.has(w)) || !wrappable(text)) continue;
     out += cmd.slice(Math.max(last, 0), a + at) + prefix;
@@ -83,18 +111,19 @@ function rewriteCommand(cmd, prefix, guarded = new Set()) {
 // Programs named by deny/ask Bash rules in every settings file Claude Code
 // might read for this cwd. Over-matching only means we wrap less.
 function guardedPrograms(cwd, claudeDir) {
-  const files = [path.join(claudeDir, 'settings.json'), '/etc/claude-code/managed-settings.json',
+  const files = [path.join(claudeDir, 'settings.json'), '/etc/claude-code/managed-settings.json', // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     '/Library/Application Support/ClaudeCode/managed-settings.json'];
-  for (let d = cwd ? path.resolve(cwd) : null; d; d = path.dirname(d) === d ? null : path.dirname(d)) {
-    files.push(path.join(d, '.claude', 'settings.json'), path.join(d, '.claude', 'settings.local.json'));
+  for (let d = cwd ? path.resolve(cwd) : null; d; d = path.dirname(d) === d ? null : path.dirname(d)) { // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    files.push(path.join(d, '.claude', 'settings.json'), path.join(d, '.claude', 'settings.local.json')); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   }
   const out = new Set();
   for (const f of files) {
     let perms;
-    try { perms = JSON.parse(fs.readFileSync(f, 'utf8')).permissions; } catch { continue; }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Read-only parse of the settings files Claude Code itself reads for this cwd and config directory.
+    try { perms = JSON.parse(fs.readFileSync(f, 'utf8')).permissions; } catch { continue; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     for (const rule of [].concat((perms && perms.deny) || [], (perms && perms.ask) || [])) {
       if (typeof rule !== 'string') continue;
-      const m = rule.match(/^Bash(?:\((.*)\))?$/);
+      const m = rule === 'Bash' ? [rule] : rule.match(/^Bash\((.*)\)$/);
       if (!m) continue;
       const word = (m[1] || '').trim().split(/[\s:]/)[0];
       out.add(!word || word.includes('*') ? '*' : word);
@@ -123,7 +152,8 @@ function hook(input) {
 
 function run(argv) {
   const command = argv.map(quote).join(' ');
-  const child = spawn(argv[0], argv.slice(1), { stdio: ['inherit', 'pipe', 'pipe'] });
+  // The user's own Bash command, already approved by Claude Code, run without a shell.
+  const child = spawn(argv[0], argv.slice(1), { stdio: ['inherit', 'pipe', 'pipe'] }); // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process
   // With `2>&1` (or Claude Code capturing both into one file) stdout and
   // stderr share a destination: keep them in one buffer, in arrival order,
   // so an error line stays where it happened instead of trailing the output.
@@ -159,7 +189,7 @@ function run(argv) {
     } catch { res = raw; } // filtering must never eat output
     process.stdout.write(res[0]);
     process.stderr.write(res[1]);
-    process.exitCode = code != null ? code : 128 + (os.constants.signals[signal] || 0);
+    process.exitCode = code != null ? code : 128 + (SIGNALS.get(signal) || 0);
   });
 }
 

@@ -1,9 +1,10 @@
 /* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Reveal from "./Reveal";
 import CopyCmd from "./CopyCmd";
+import Step from "./Step";
 
 // Every install path the project documents. Kept in sync with the README's
 // Install section. If a command changes there, it changes here.
@@ -35,24 +36,12 @@ const INSTALLS = [
   },
 ];
 
-function Step({ n, title, children }: Readonly<{ n: number; title: string; children: React.ReactNode }>): React.JSX.Element {
-  return (
-    <li className="relative grid gap-4 pb-12 pl-14 last:pb-0">
-      <span
-        aria-hidden
-        className="absolute left-0 top-0 grid size-9 place-items-center rounded-full border border-brand-hover/60 bg-accent-soft font-mono text-sm font-semibold text-accent"
-      >
-        {n}
-      </span>
-      <h3 className="pt-1 text-lg font-semibold tracking-tight">{title}</h3>
-      {children}
-    </li>
-  );
-}
-
 export default function GetStarted(): React.JSX.Element {
   const [active, setActive] = useState(INSTALLS[0].id);
-  const current = INSTALLS.find((i) => i.id === active)!;
+  const current = INSTALLS.find((i) => i.id === active) ?? INSTALLS[0];
+  const choose = useCallback((event: React.MouseEvent<HTMLButtonElement>): void => {
+    setActive(event.currentTarget.value);
+  }, []);
 
   return (
     <section id="get-started" className="mx-auto max-w-6xl px-5 py-28">
@@ -86,7 +75,8 @@ export default function GetStarted(): React.JSX.Element {
                     key={i.id}
                     role="tab"
                     aria-selected={i.id === active}
-                    onClick={() => { setActive(i.id); }}
+                    value={i.id}
+                    onClick={choose}
                     className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                       i.id === active ? "bg-raised text-fg shadow-sm" : "text-dim hover:text-fg"
                     }`}

@@ -8,7 +8,7 @@ import SectionHead from "./SectionHead";
 // Command-aware filters (hooks/chisle-command-filters.js) on real output, Chisle
 // 3.14: raw chars → what the model reads, from benchmarks/replay-commands.js. The
 // failing run goes through chisle-run.js, as on Claude Code in bypass mode.
-// Same numbers as the README's filters card (scripts/build-readme-art.js).
+// Same numbers as the README's filters card (tools/src/readme_art/race.rs).
 const ROWS = [
   { cmd: "npm test", raw: 19374, kept: 445, note: "256 passing tests hidden, summary kept" },
   { cmd: "npm test  # 1 failing", raw: 16107, kept: 309, note: "400 passes hidden, the failure kept whole" },
@@ -16,9 +16,22 @@ const ROWS = [
   { cmd: "git log -n 15", raw: 6561, kept: 3784, note: "one line per commit, long messages counted" },
 ];
 
-const fmt = (n: number) => n.toLocaleString("en-US");
+const fmt = (n: number): string => n.toLocaleString("en-US");
 
-export default function Filters() {
+const EASE = [0.16, 1, 0.3, 1] as const;
+const BAR_START = { width: "100%" };
+const BAR_IDLE = {};
+const BARS = ROWS.map((r, i) => {
+  const pct = Math.max(0.6, (r.kept / r.raw) * 100);
+  return {
+    ...r,
+    grown: { width: `${pct}%` },
+    transition: { duration: 1, delay: 0.2 + i * 0.12, ease: EASE },
+    saved: Math.round(100 * (1 - r.kept / r.raw)),
+  };
+});
+
+export default function Filters(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-100px" });
 
@@ -31,8 +44,7 @@ export default function Filters() {
       </SectionHead>
 
       <div ref={ref} className="mt-10 space-y-6 rounded-xl border border-line bg-surface p-6 sm:p-8">
-        {ROWS.map((r, i) => {
-          const pct = Math.max(0.6, (r.kept / r.raw) * 100);
+        {BARS.map((r) => {
           return (
             <div key={r.cmd} className="grid gap-2 sm:grid-cols-[15rem_1fr_4rem] sm:items-center sm:gap-5">
               <div>
@@ -42,9 +54,9 @@ export default function Filters() {
               <div>
                 <div className="h-4 overflow-hidden rounded-md bg-raised">
                   <motion.div
-                    initial={{ width: "100%" }}
-                    animate={inView ? { width: `${pct}%` } : {}}
-                    transition={{ duration: 1, delay: 0.2 + i * 0.12, ease: [0.16, 1, 0.3, 1] }}
+                    initial={BAR_START}
+                    animate={inView ? r.grown : BAR_IDLE}
+                    transition={r.transition}
                     className="h-full rounded-md bg-gradient-to-r from-brand to-[#ffc56b]"
                   />
                 </div>
@@ -53,7 +65,7 @@ export default function Filters() {
                 </p>
               </div>
               <p className="text-lg font-bold text-accent sm:text-right">
-                −{Math.round(100 * (1 - r.kept / r.raw))}%
+                −{r.saved}%
               </p>
             </div>
           );

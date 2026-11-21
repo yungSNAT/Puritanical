@@ -28,11 +28,23 @@ jobs:
           cp .github/tools/codacy/package*.json "$RUNNER_TEMP/codacy/"
           npm ci --prefix "$RUNNER_TEMP/codacy" --ignore-scripts --no-audit --no-fund
           echo "$RUNNER_TEMP/codacy/node_modules/.bin" >> "$GITHUB_PATH"
+      # .codacy/codacy.config.json pins the pattern set, so a change in the
+      # CLI's automatic selection cannot change the gate unannounced. It is the
+      # `codacy-analysis init --auto` selection with these changes:
+      # - Dropped react-in-jsx-scope: the site uses the automatic JSX runtime.
+      # - Dropped jsx-no-literals, jsx-max-depth, prefer-readonly-parameter-types,
+      #   no-magic-numbers and the Tailwind no-arbitrary-value and
+      #   no-custom-classname rules: style rules that do not fit an
+      #   untranslated marketing site built on Tailwind theme tokens.
+      # - Replaced PMD7, whose JavaScript parser fails on modern syntax, with
+      #   the ESLint rules for its 4 patterns (eqeqeq, radix, consistent-return;
+      #   no-with was already on).
+      # Every security pattern stays on. Reviewed exceptions are inline, each
+      # naming its rule and reason.
       - name: Analyse the repository
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          codacy-analysis init --auto
           scope=()
           if [[ -n "$BASE_SHA" ]]; then
             scope=(--diff "$BASE_SHA")

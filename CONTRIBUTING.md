@@ -15,8 +15,8 @@ Small focused PRs beat big rewrites. Chisle is a small package. Keep it that way
 | `hooks/chisle-mode.js` | Shared natural-language mode-directive parser. |
 | `pi-extension/index.js` | Pi lifecycle, command, status, and `tool_result` adapter; reuses hook core. |
 | `hooks/chisle-statusline.sh` / `.ps1` | Statusline badge: mode + measured input-side savings |
-| `bin/install.js` + `bin/lib/settings.js` | Multi-agent installer, JSONC-safe settings merge |
-| `bin/install.js` (opencode/hermes paths) | Fenced global ruleset + verbatim skill copies; `CHISLE_HOME` redirects home in tests |
+| `bin/install.js` + `bin/lib/` | Multi-agent installer (`agents.js`, `claude.js`, `uninstall.js`), JSONC-safe settings merge (`settings.js`) |
+| `bin/lib/agents.js` + `bin/lib/fence.js` (opencode/hermes paths) | Fenced global ruleset + verbatim skill copies; `CHISLE_HOME` redirects home in tests |
 
 ## What to edit
 

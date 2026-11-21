@@ -18,7 +18,7 @@ export default function SectionHead({
       <div className={center ? "mx-auto max-w-2xl text-center" : "max-w-2xl"}>
         <p className="text-sm font-medium text-accent">{eyebrow}</p>
         <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">{title}</h2>
-        {children && <p className="mt-4 text-dim">{children}</p>}
+        {children === undefined ? null : <p className="mt-4 text-dim">{children}</p>}
       </div>
     </Reveal>
   );

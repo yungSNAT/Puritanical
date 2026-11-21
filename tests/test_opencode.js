@@ -658,7 +658,7 @@ test('OpenCode-native tool_output truncation remains recoverable before the hook
   const output = { output: native };
   await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'ordered', callID: 'ordered-1' }, output);
   assert.ok(output.output.length <= THRESHOLDS.maxChars);
-  assert.match(output.output, new RegExp(nativePath));
+  assert.ok(output.output.includes(nativePath));
 });
 
 test('OpenCode dedup is isolated across interleaved sessions and calls', () => {

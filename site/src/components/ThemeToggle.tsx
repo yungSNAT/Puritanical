@@ -1,21 +1,26 @@
 /* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+
+// The theme lives on <html data-theme>. The server snapshot is null, so the
+// first client render matches the server HTML; React then reads the real value.
+function subscribe(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return (): void => { observer.disconnect(); };
+}
+const readTheme = (): string => document.documentElement.dataset.theme ?? "dark";
+const serverTheme = (): null => null;
 
 export default function ThemeToggle(): React.JSX.Element {
-  const [theme, setTheme] = useState<string | null>(null);
+  const theme = useSyncExternalStore(subscribe, readTheme, serverTheme);
 
-  useEffect(() => {
-    setTheme(document.documentElement.dataset.theme ?? "dark");
-  }, []);
-
-  const flip = () => {
+  const flip = useCallback((): void => {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     localStorage.setItem("chisle-theme", next);
-    setTheme(next);
-  };
+  }, [theme]);
 
   return (
     <button

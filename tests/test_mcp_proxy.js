@@ -143,6 +143,9 @@ test('mcp wrap routes stdio servers through the proxy; unwrap restores them exac
   assert.deepEqual(wrapped.remote, original.mcpServers.remote, 'url server untouched');
   assert.ok(fs.existsSync('config/chisle/mcp-proxy/chisle-mcp-proxy.js'));
   assert.ok(fs.existsSync('config/chisle/mcp-proxy/chisle-compress-output.js'));
+  // The installed copy must load on its own, without the repository's hooks/.
+  const load = spawnSync(process.execPath, ['-e', 'require(process.argv[1])', path.resolve(proxyPath)], { encoding: 'utf8' });
+  assert.equal(load.status, 0, load.stderr);
   assert.equal(fs.readFileSync('home/.cursor/mcp.json.chisle-bak', 'utf8'), originalText);
 
   assert.match(cli(['mcp', 'wrap'], env).out, /nothing to wrap/, 'idempotent');

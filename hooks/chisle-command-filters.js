@@ -26,18 +26,130 @@
 //   - Output already filtered by rtk (`rtk git status`) is left alone.
 //   - The result is used only if it is shorter.
 
+// CSI and OSC escapes; chisle-compress-output.js shares this.
+// eslint-disable-next-line no-control-regex -- ANSI escapes are delimited by the ESC and BEL control characters.
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 
 // Wrappers that run another program: skip them to find the real one.
 const RUNNERS = new Set(['sudo', 'time', 'command', 'exec', 'nice', 'env', 'npx', 'bunx', 'pnpx']);
 const RUNNER_PAIRS = /^(?:(?:pnpm|yarn) (?:exec|dlx)|(?:uv|poetry|pipenv|rye|hatch|pdm) run|bundle exec|python[\d.]* -m|py -m)\s+/;
-const ENV_ASSIGN = /^(?:[A-Za-z_]\w*=(?:'[^']*'|"(?:\\.|[^"\\])*"|[^\s'"\\])*\s+)+/;
+
+// `NAME=value ` assignments: a name, then quoted or bare value pieces, then
+// whitespace. Sticky regexes walk them one piece at a time.
+const ENV_NAME = /[A-Za-z_]\w*=/y;
+const ENV_VALUE = /'[^']*'|"(?:\\.|[^"\\])*"|[^\s'"\\]+/y;
+const ENV_SPACE = /\s+/y;
+
+function stickyEnd(re, s, i) {
+  re.lastIndex = i;
+  return re.test(s) ? re.lastIndex : -1;
+}
+
+// End offset of the run of env assignments starting at `start` (start if none).
+function envAssignEnd(s, start) {
+  let end = start;
+  for (;;) {
+    let i = stickyEnd(ENV_NAME, s, end);
+    if (i < 0) return end;
+    for (let next = stickyEnd(ENV_VALUE, s, i); next >= 0; next = stickyEnd(ENV_VALUE, s, i)) i = next;
+    i = stickyEnd(ENV_SPACE, s, i);
+    if (i < 0) return end;
+    end = i;
+  }
+}
 
 const TEST_PROGRAMS = new Set(['pytest', 'py.test', 'jest', 'vitest', 'mocha', 'ava', 'tap', 'rspec', 'phpunit']);
 const PKG_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
 
+// Subcommands that mean "run the tests" / "download or build", per program.
+const TEST_SUBCOMMANDS = new Map([
+  ['go', /^test$/], ['deno', /^test$/], ['dotnet', /^test$/], ['bun', /^(?:test|t)$/],
+  ['npm', /^(?:test|t)$/], ['pnpm', /^(?:test|t)$/], ['yarn', /^(?:test|t)$/],
+  ['cargo', /^(?:test|nextest)$/], ['make', /\b(?:test|check)\b/],
+]);
+const PKG_INSTALL = /^(?:install|i|ci|add|update|upgrade)$/;
+const PROGRESS_SUBCOMMANDS = new Map([
+  ['npm', PKG_INSTALL], ['pnpm', PKG_INSTALL], ['yarn', PKG_INSTALL], ['bun', PKG_INSTALL],
+  ['uv', /^(?:pip|sync|add)$/], ['poetry', /^(?:install|add|update)$/],
+  ['cargo', /^(?:build|check|run|test|nextest|clippy|install|update|fetch|doc)$/],
+  ['go', /^(?:build|test|get|mod|run|install|vet)$/], ['docker', /^(?:build|pull|compose|buildx)$/],
+  ['bundle', /^(?:install|update)$/], ['composer', /^(?:install|update)$/],
+]);
+
 function stripQuotes(command) {
   return command.replace(/'[^']*'|"(?:\\.|[^"\\])*"/g, '""');
+}
+
+function subcommandMatches(table, { prog, sub }) {
+  const re = table.get(prog);
+  return !!re && re.test(sub);
+}
+
+function isTest(c) {
+  if (TEST_PROGRAMS.has(c.prog) || (c.prog === 'node' && /\s--test\b/.test(c.text))) return true;
+  if (PKG_MANAGERS.has(c.prog) && /^run(?:-script)?$/.test(c.sub) && /\s(?:run|run-script)\s+test/.test(c.text)) return true;
+  return subcommandMatches(TEST_SUBCOMMANDS, c);
+}
+
+function isProgress(c) {
+  return c.prog === 'docker-compose' || /^pip(?:\d*|\d*\.\d+)$/.test(c.prog) || subcommandMatches(PROGRESS_SUBCOMMANDS, c);
+}
+
+function isGrep({ prog, flags }) {
+  if (prog === 'rg') return true;
+  return (prog === 'grep' || prog === 'egrep') && (flags.has('n') || flags.has('--line-number')) &&
+    ['r', 'R', 'H', '--recursive'].some(f => flags.has(f));
+}
+
+const isGit = (c, sub) => c.prog === 'git' && sub.test(c.sub);
+
+// [kind, test] over { prog, sub, flags, text }; a segment gets every kind that matches.
+const KIND_RULES = [
+  ['git-status', c => isGit(c, /^status$/) && !['s', '--short', '--porcelain'].some(f => c.flags.has(f))],
+  ['progress', c => isGit(c, /^(?:push|pull|fetch|clone)$/)],
+  ['git-log', c => isGit(c, /^(?:log|show)$/) && !/--(?:format|pretty|oneline)\b|--graph\b/.test(c.text)],
+  ['git-diff', c => isGit(c, /^(?:diff|show|log)$/)],
+  ['git-branch', c => isGit(c, /^branch$/) && !c.flags.has('v') && !c.flags.has('--verbose')],
+  ['ls', c => c.prog === 'ls' && c.flags.has('l')],
+  ['wc', c => c.prog === 'wc'],
+  ['grep', isGrep],
+  ['test', isTest],
+  ['progress', isProgress],
+];
+
+// Drop env assignments and runner wrappers (`sudo`, `npx`, `uv run`, ...).
+function stripRunners(segment) {
+  let s = segment.slice(envAssignEnd(segment, 0));
+  for (;;) {
+    const word = s.split(/\s+/)[0];
+    if (RUNNERS.has(word)) {
+      s = s.slice(word.length).trim();
+      s = s.slice(envAssignEnd(s, 0));
+      continue;
+    }
+    const pair = s.match(RUNNER_PAIRS);
+    if (!pair) return s;
+    s = s.slice(pair[0].length);
+  }
+}
+
+// First non-option argument after the program, skipping `-C dir`-style pairs.
+function subcommand(words) {
+  for (let i = 1; i < words.length; i++) {
+    if (/^-[Cc]$/.test(words.at(i))) { i++; continue; }
+    if (!words.at(i).startsWith('-')) return words.at(i);
+  }
+  return '';
+}
+
+// Short-flag letters (`-la` → l, a) plus long flags, for ls/grep/git branch.
+function flagSet(words) {
+  const flags = new Set();
+  for (const w of words.slice(1)) {
+    if (/^--\w/.test(w)) flags.add(w.replace(/=.*/, ''));
+    else if (/^-[A-Za-z]+$/.test(w)) for (const c of w.slice(1)) flags.add(c);
+  }
+  return flags;
 }
 
 // One command segment → { kinds, prog, sub, flags }, or null if unknown/piped.
@@ -46,57 +158,13 @@ function classify(segment) {
   const pipedTo = parts.slice(1).map(p => p.split(/\s+/)[0]);
   if (pipedTo.some(p => p !== 'head' && p !== 'tail')) return null;
 
-  let s = parts[0].replace(ENV_ASSIGN, '');
-  for (;;) {
-    const word = s.split(/\s+/)[0];
-    if (RUNNERS.has(word)) { s = s.slice(word.length).trim().replace(ENV_ASSIGN, ''); continue; }
-    const pair = s.match(RUNNER_PAIRS);
-    if (pair) { s = s.slice(pair[0].length); continue; }
-    break;
-  }
+  const s = stripRunners(parts[0]);
   const words = s.split(/\s+/).filter(w => w && !/^[<>&]|^\d>/.test(w));
   const prog = (words[0] || '').replace(/^.*[\\/]/, '').replace(/\.(?:exe|cmd)$/i, '');
   if (prog === 'rtk') return null;
-  // First non-option argument after the program, skipping `-C dir`-style pairs.
-  let sub = '';
-  for (let i = 1; i < words.length; i++) {
-    if (/^-[Cc]$/.test(words[i])) { i++; continue; }
-    if (!words[i].startsWith('-')) { sub = words[i]; break; }
-  }
-  // Short-flag letters (`-la` → l, a) plus long flags, for ls/grep/git branch.
-  const flags = new Set();
-  for (const w of words.slice(1)) {
-    if (/^--\w/.test(w)) flags.add(w.replace(/=.*/, ''));
-    else if (/^-[A-Za-z]+$/.test(w)) for (const c of w.slice(1)) flags.add(c);
-  }
-
-  const kinds = new Set();
-  if (prog === 'git') {
-    const fmt = /--(?:format|pretty|oneline)\b|--graph\b/.test(s);
-    if (sub === 'status' && !flags.has('s') && !flags.has('--short') && !flags.has('--porcelain')) kinds.add('git-status');
-    if (/^(?:push|pull|fetch|clone)$/.test(sub)) kinds.add('progress');
-    if ((sub === 'log' || sub === 'show') && !fmt) kinds.add('git-log');
-    if (/^(?:diff|show|log)$/.test(sub)) kinds.add('git-diff');
-    if (sub === 'branch' && !flags.has('v') && !flags.has('--verbose')) kinds.add('git-branch');
-  }
-  if (prog === 'ls' && flags.has('l')) kinds.add('ls');
-  if (prog === 'wc') kinds.add('wc');
-  if ((prog === 'grep' || prog === 'egrep' || prog === 'rg') &&
-      (flags.has('n') || flags.has('--line-number') || prog === 'rg') &&
-      (flags.has('r') || flags.has('R') || flags.has('H') || flags.has('--recursive') || prog === 'rg')) kinds.add('grep');
-  if (TEST_PROGRAMS.has(prog) || (prog === 'node' && /\s--test\b/.test(s)) ||
-      (['go', 'deno', 'bun', 'dotnet'].includes(prog) && sub === 'test') ||
-      (prog === 'cargo' && /^(?:test|nextest)$/.test(sub)) ||
-      (PKG_MANAGERS.has(prog) && (/^(?:test|t)$/.test(sub) || (/^run(?:-script)?$/.test(sub) && /\s(?:run|run-script)\s+test/.test(s)))) ||
-      (prog === 'make' && /\b(?:test|check)\b/.test(sub))) kinds.add('test');
-  if ((PKG_MANAGERS.has(prog) && /^(?:install|i|ci|add|update|upgrade)$/.test(sub)) ||
-      /^pip\d*(?:\.\d+)?$/.test(prog) || (prog === 'uv' && /^(?:pip|sync|add)$/.test(sub)) ||
-      (prog === 'poetry' && /^(?:install|add|update)$/.test(sub)) ||
-      (prog === 'cargo' && /^(?:build|check|run|test|nextest|clippy|install|update|fetch|doc)$/.test(sub)) ||
-      (prog === 'go' && /^(?:build|test|get|mod|run|install|vet)$/.test(sub)) ||
-      (prog === 'docker' && /^(?:build|pull|compose|buildx)$/.test(sub)) || prog === 'docker-compose' ||
-      (['bundle', 'composer'].includes(prog) && /^(?:install|update)$/.test(sub))) kinds.add('progress');
-  return kinds.size ? { kinds, prog, sub, flags, text: s } : null;
+  const c = { prog, sub: subcommand(words), flags: flagSet(words), text: s };
+  const kinds = new Set(KIND_RULES.filter(([, matches]) => matches(c)).map(([kind]) => kind));
+  return kinds.size ? { kinds, ...c } : null;
 }
 
 function kindsFor(command) {
@@ -131,7 +199,7 @@ const DROP = [
   // docker pull / buildkit
   ['progress', /^[0-9a-f]{12}: (?:Pulling fs layer|Waiting|Verifying Checksum|Download complete|Pull complete|Already exists|Downloading|Extracting)|^#\d+ (?:sha256:[0-9a-f]+ [\d.]+[kMG]?B \/|transferring |extracting sha256:)/],
   // passing tests: pytest dots/-v, jest/vitest/mocha/node spec ticks, cargo, go
-  ['test', /^\S+\.py\s+[.sx]+\s*\[\s*\d+%\]$|^\S+::\S.*\sPASSED(?:\s+\[\s*\d+%\])?$|^\s*[✓✔√]\s|^\s*PASS\s+\S|^\s*▶\s|^test \S+ \.\.\. ok$|^\s*--- PASS: |^\s*# Subtest: /],
+  ['test', /^\S+\.py\s+[.sx]+\s*\[\s*\d+%\]$|^\S+::\S.*\sPASSED$|^\S+::\S.*\sPASSED\s+\[\s*\d+%\]$|^\s*[✓✔√]\s|^\s*PASS\s+\S|^\s*▶\s|^test \S+ \.\.\. ok$|^\s*--- PASS: |^\s*# Subtest: /],
   // cargo test scaffolding: build/run banners, per-suite headers, empty suites,
   // and the backtrace hint
   ['test', /^\s+Finished `|^\s+Running \S.* \(target[\\/]|^\s+Doc-tests \S+$|^running \d+ tests?$|^test result: ok\. 0 passed; 0 failed;|^note: run with `RUST_BACKTRACE=1`/],
@@ -159,15 +227,15 @@ function goVerbose(lines) {
 function dropTapPasses(lines) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
-    if (/^\s*ok \d+ - /.test(lines[i])) {
+    if (/^\s*ok \d+ - /.test(lines.at(i))) {
       if (lines[i + 1] && /^\s*---$/.test(lines[i + 1])) {
         let j = i + 2;
-        while (j < lines.length && !/^\s*\.\.\.$/.test(lines[j])) j++;
+        while (j < lines.length && !/^\s*\.\.\.$/.test(lines.at(j))) j++;
         i = j;
       }
       continue;
     }
-    out.push(lines[i]);
+    out.push(lines.at(i));
   }
   return out;
 }
@@ -177,7 +245,7 @@ function dropTapPasses(lines) {
 function compactCargo(lines) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
+    const l = lines.at(i);
     if (l === 'failures:' && /^ {4}\S+$/.test(lines[i + 1] || '')) {
       while (/^ {4}\S+$/.test(lines[i + 1] || '')) i++;
       continue;
@@ -243,13 +311,13 @@ function shortStatus(lines) {
 function compactDiff(lines) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^diff --git a\/(.*) b\/(.*)$/);
-    if (!m) { out.push(lines[i]); continue; }
+    const m = lines.at(i).match(/^diff --git a\/(.*) b\/(.*)$/);
+    if (!m) { out.push(lines.at(i)); continue; }
     let path = m[2];
     const notes = [];
     let j = i + 1;
     for (; j < lines.length; j++) {
-      const h = lines[j];
+      const h = lines.at(j);
       let x;
       if (/^index [0-9a-f]+\.\.[0-9a-f]+/.test(h) || /^similarity index /.test(h) || /^dissimilarity index /.test(h)) continue;
       if ((x = h.match(/^new file mode (\d+)/))) { notes.push('new'); continue; }
@@ -272,13 +340,29 @@ function compactDiff(lines) {
 // the run right above a ` N files changed` summary count, so a diff context
 // line that happens to read ` Total | 42` is never touched.
 const STAT_RE = /^ (\S.*?)\s+\|\s+(\d+(?= ?[+-]*$)|Bin .*)/;
+const STAT_FILES = /^ (\d+) files? changed(.*)$/;
+const STAT_INSERTIONS = /^, (\d+) insertions?\(\+\)/;
+const STAT_DELETIONS = /^, (\d+) deletions?\(-\)$/;
+
+// ` N files changed[, N insertions(+)][, N deletions(-)]` → [line, files, ins, del].
+function statSummary(line) {
+  const t = line.match(STAT_FILES);
+  if (!t) return null;
+  let rest = t[2];
+  const ins = rest.match(STAT_INSERTIONS);
+  if (ins) rest = rest.slice(ins[0].length);
+  const del = rest.match(STAT_DELETIONS);
+  if (rest && !del) return null;
+  return [line, t[1], ins ? ins[1] : undefined, del ? del[1] : undefined];
+}
+
 function compactStat(lines) {
   const out = lines.slice();
   for (let i = 0; i < lines.length; i++) {
-    const t = lines[i].match(/^ (\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?$/);
+    const t = statSummary(lines.at(i));
     if (!t) continue;
-    out[i] = `${t[1]} file${t[1] === '1' ? '' : 's'}${t[2] ? ` +${t[2]}` : ''}${t[3] ? ` -${t[3]}` : ''}`;
-    for (let j = i - 1, m; j >= 0 && (m = lines[j].match(STAT_RE)); j--) out[j] = `${m[1]} | ${m[2]}`;
+    out.splice(i, 1, `${t[1]} file${t[1] === '1' ? '' : 's'}${t[2] ? ` +${t[2]}` : ''}${t[3] ? ` -${t[3]}` : ''}`);
+    for (let j = i - 1, m; j >= 0 && (m = lines.at(j).match(STAT_RE)); j--) out.splice(j, 1, `${m[1]} | ${m[2]}`);
   }
   return out;
 }
@@ -293,43 +377,60 @@ const BODY_CAP = 3;
 // than one commit, bodies past a cap become a count (`git show <hash>` has
 // the rest). --stat file lists are never capped: a hidden file would read
 // as "this commit did not touch it".
+const authorName = (raw) => raw.replace(/\s*<[^>]*>$/, '');
+
+// `Mon Jan 2 15:04:05 2006 -0700` → `2006-01-02`; anything else unchanged.
+function shortDate(raw) {
+  const d = raw.match(/^\w{3} (\w{3}) (\d{1,2}) [\d:]+ (\d{4}) [+-]\d{4}$/);
+  return d && MONTHS[d[1]] ? `${d[3]}-${MONTHS[d[1]]}-${d[2].padStart(2, '0')}` : raw;
+}
+
+// `Merge:`/`Author:`/`Date:` lines from `start` → { merge, meta, end }.
+function commitMeta(lines, start, oneAuthor) {
+  let meta = '';
+  let merge = '';
+  let j = start;
+  for (; j < lines.length; j++) {
+    const h = lines.at(j).match(/^(Merge|Author|Date):\s+(.*)$/);
+    if (!h) break;
+    if (h[1] === 'Merge') merge = ` merge ${h[2]}`;
+    else if (h[1] === 'Author') meta += oneAuthor ? '' : ` ${authorName(h[2])}`;
+    else meta = ` ${shortDate(h[2])}` + meta;
+  }
+  return { merge, meta, end: j };
+}
+
+// Message: 4-space-indented lines (blank lines inside it dropped) → { body, end }.
+function commitBody(lines, start) {
+  let j = lines.at(start) === '' ? start + 1 : start;
+  const body = [];
+  for (; j < lines.length && (lines.at(j).startsWith('    ') || lines.at(j).trim() === ''); j++) {
+    if (lines.at(j).trim()) body.push(lines.at(j).slice(4));
+    else if (j + 1 < lines.length && !lines[j + 1].startsWith('    ')) { j++; break; }
+  }
+  return { body, end: j };
+}
+
 function compactGitLog(lines) {
   const commits = lines.filter(l => /^commit [0-9a-f]{40}/.test(l)).length;
   const many = commits > 1;
-  const authors = new Set(lines.filter(l => /^Author:\s/.test(l)).map(l => l.replace(/^Author:\s+/, '').replace(/\s*<[^>]*>$/, '')));
+  const authors = new Set(lines.filter(l => /^Author:\s/.test(l)).map(l => authorName(l.replace(/^Author:\s+/, ''))));
   const oneAuthor = many && authors.size === 1 ? [...authors][0] : null;
   const out = oneAuthor ? [`(all by ${oneAuthor})`] : [];
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^commit ([0-9a-f]{40})(.*)$/);
-    if (!m) { out.push(lines[i]); continue; }
-    let meta = '';
-    let merge = '';
-    let j = i + 1;
-    for (; j < lines.length; j++) {
-      const h = lines[j].match(/^(Merge|Author|Date):\s+(.*)$/);
-      if (!h) break;
-      if (h[1] === 'Merge') merge = ` merge ${h[2]}`;
-      else if (h[1] === 'Author') meta += oneAuthor ? '' : ` ${h[2].replace(/\s*<[^>]*>$/, '')}`;
-      else {
-        const d = h[2].match(/^\w{3} (\w{3}) (\d{1,2}) [\d:]+ (\d{4}) [+-]\d{4}$/);
-        meta = ` ${d && MONTHS[d[1]] ? `${d[3]}-${MONTHS[d[1]]}-${d[2].padStart(2, '0')}` : h[2]}` + meta;
-      }
-    }
-    if (lines[j] === '') j++;
-    // Message: 4-space-indented lines (blank lines inside it dropped).
-    const body = [];
-    for (; j < lines.length && (lines[j].startsWith('    ') || lines[j].trim() === ''); j++) {
-      if (lines[j].trim()) body.push(lines[j].slice(4));
-      else if (j + 1 < lines.length && !lines[j + 1].startsWith('    ')) { j++; break; }
-    }
+    const m = lines.at(i).match(/^commit ([0-9a-f]{40})(.*)$/);
+    if (!m) { out.push(lines.at(i)); continue; }
+    const { merge, meta, end } = commitMeta(lines, i + 1, oneAuthor);
+    const { body, end: bodyEnd } = commitBody(lines, end);
     out.push(`${m[1].slice(0, 10)}${m[2]}${merge} ${body.shift() || ''} (${meta.trim()})`);
     const keep = many ? body.slice(0, BODY_CAP) : body;
     for (const b of keep) out.push(`  ${b}`);
     if (keep.length < body.length) out.push(`  [+${body.length - keep.length} lines]`);
     // Stat block or patch (if any) follows.
-    for (; j < lines.length && !/^commit [0-9a-f]{40}/.test(lines[j]); j++) {
-      if (many && !lines[j].trim()) continue;
-      out.push(lines[j]);
+    let j = bodyEnd;
+    for (; j < lines.length && !/^commit [0-9a-f]{40}/.test(lines.at(j)); j++) {
+      if (many && !lines.at(j).trim()) continue;
+      out.push(lines.at(j));
     }
     i = j - 1;
   }
@@ -341,7 +442,7 @@ function compactBranches(lines, allRemote) {
   const out = [];
   const remotes = new Map();
   for (const l of lines) {
-    const m = allRemote ? l.match(/^ {2}([^/\s]+)\/(\S+(?: -> \S+)?)$/) : l.match(/^ {2}remotes\/([^/\s]+)\/(\S+(?: -> \S+)?)$/);
+    const m = allRemote ? l.match(/^ {2}([^/\s]+)\/(\S+|\S+ -> \S+)$/) : l.match(/^ {2}remotes\/([^/\s]+)\/(\S+|\S+ -> \S+)$/);
     if (!m) { out.push(l); continue; }
     if (!remotes.has(m[1])) { remotes.set(m[1], []); out.push(m[1]); }
     remotes.get(m[1]).push(m[2].replace(` -> ${m[1]}/`, ' -> '));
@@ -353,7 +454,18 @@ function compactBranches(lines, allRemote) {
 // for every entry, then only where an entry differs; date only with -t
 // (sorted by it). Link count, `total` and `..` dropped; `.` kept (the
 // directory's own mode); ACL/xattr marks (`+`, `@`) kept on the mode.
-const LS_RE = /^([-dlcbps])([rwxsStT-]{9})([.+@]?)\s+\d+\s+(\S+)\s+(\S+)\s+(\d+|\d+,\s*\d+|[\d.]+[KMGTP]?)\s+(\w{3}\s+\d{1,2}\s+(?:\d{1,2}:\d{2}|\d{4})|\d{4}-\d{2}-\d{2}(?: [\d:.]+(?: [+-]\d{4})?)?)\s(.+)$/;
+// Split in two: mode, links, owner, group and size, then date and name. The
+// ISO date lists its time/zone variants longest first, as the optional
+// groups they replace would try them.
+const LS_HEAD = /^([-dlcbps])([rwxsStT-]{9})([.+@]?)\s+\d+\s+(\S+)\s+(\S+)\s+(\d+|\d+,\s*\d+|[\d.]+[KMGTP]?)\s+/;
+const LS_TAIL = /^(\w{3}\s+\d{1,2}\s+(?:\d{1,2}:\d{2}|\d{4})|\d{4}-\d{2}-\d{2} [\d:.]+ [+-]\d{4}|\d{4}-\d{2}-\d{2} [\d:.]+|\d{4}-\d{2}-\d{2})\s(.+)$/;
+
+// One `ls -l` row → [row, type, perm, mark, owner, group, size, date, name].
+function lsRow(line) {
+  const head = line.match(LS_HEAD);
+  const tail = head && line.slice(head[0].length).match(LS_TAIL);
+  return tail ? [line, ...head.slice(1), tail[1], tail[2]] : null;
+}
 let me = null;
 try { me = require('os').userInfo().username; } catch {}
 
@@ -364,21 +476,21 @@ function octal(perm) {
     const t = perm.slice(k * 3, k * 3 + 3);
     let v = (t[0] === 'r' ? 4 : 0) + (t[1] === 'w' ? 2 : 0);
     if ('xst'.includes(t[2])) v += 1;
-    if ('sStT'.includes(t[2])) special += [4, 2, 1][k];
+    if ('sStT'.includes(t[2])) special += [4, 2, 1].at(k);
     digits += v;
   }
   return special ? special + digits : digits;
 }
 
 function compactLs(lines, keepDate) {
-  const parsed = lines.map(l => l.match(LS_RE));
+  const parsed = lines.map(lsRow);
   const owners = new Map();
   for (const p of parsed) if (p) owners.set(`${p[4]}:${p[5]}`, (owners.get(`${p[4]}:${p[5]}`) || 0) + 1);
   const main = [...owners.entries()].sort((a, b) => b[1] - a[1])[0];
   const out = [];
   if (main && (owners.size > 1 || main[0].split(':')[0] !== me)) out.push(`(owner ${main[0]}${owners.size > 1 ? ' unless shown' : ''})`);
   lines.forEach((l, i) => {
-    const p = parsed[i];
+    const p = parsed.at(i);
     if (!p) { if (!/^total \d/.test(l)) out.push(l); return; }
     let name = p[8];
     if (name === '..') return;
@@ -451,4 +563,4 @@ function filterCommand(command, text) {
   return out.length < text.replace(/^\n+|\n+$/g, '').length ? out : null;
 }
 
-module.exports = { filterCommand, kindsFor, wrappable };
+module.exports = { filterCommand, kindsFor, wrappable, envAssignEnd, ANSI_RE };

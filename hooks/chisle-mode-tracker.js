@@ -36,17 +36,27 @@ const RESUME_IDLE_MS = 60 * 60 * 1000;
 const RESUME_MIN_CONTEXT = 150000;
 const TAIL_BYTES = 512 * 1024;
 
+// transcript_path from the hook payload must name a regular .jsonl file: a
+// FIFO or device there would block the synchronous read below.
+function isTranscript(p) {
+  if (typeof p !== 'string' || path.extname(p) !== '.jsonl') return false;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- transcript_path from Claude Code's hook payload, only inspected here.
+  try { return fs.statSync(p).isFile(); } catch { return false; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+}
+
 function resumeWarning(transcriptPath, now = Date.now()) {
   try {
-    const size = fs.statSync(transcriptPath).size;
-    const fd = fs.openSync(transcriptPath, 'r');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- transcript_path from Claude Code's hook payload, checked by isTranscript as a regular .jsonl file.
+    const size = fs.statSync(transcriptPath).size; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The same checked transcript, opened read-only to read its tail.
+    const fd = fs.openSync(transcriptPath, 'r'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     const len = Math.min(size, TAIL_BYTES);
     const buf = Buffer.alloc(len);
     fs.readSync(fd, buf, 0, len, size - len);
     fs.closeSync(fd);
     const lines = buf.toString('utf8').split('\n');
     for (let i = lines.length - 1; i >= (len === size ? 0 : 1); i--) { // line 0 of a partial tail is cut
-      let e; try { e = JSON.parse(lines[i]); } catch { continue; }
+      let e; try { e = JSON.parse(lines.at(i)); } catch { continue; }
       const u = e && e.type === 'assistant' && e.message && e.message.model !== '<synthetic>' && e.message.usage;
       if (!u) continue;
       const context = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
@@ -74,7 +84,8 @@ process.stdin.on('end', () => {
     const request = requestedMode(prompt);
 
     if (request === 'off') {
-      try { fs.unlinkSync(flagPath); } catch {}
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- The fixed .chisle-active flag in the Claude config directory.
+      try { fs.unlinkSync(flagPath); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     } else if (request === 'on') {
       safeWriteFlag(flagPath, 'on');
     }
@@ -89,7 +100,7 @@ process.stdin.on('end', () => {
           additionalContext: reinforcementLine(resolveSections({ cwd: process.cwd(), claudeDir }))
         }
       };
-      const warning = data.transcript_path ? resumeWarning(data.transcript_path) : null;
+      const warning = isTranscript(data.transcript_path) ? resumeWarning(data.transcript_path) : null;
       if (warning) out.systemMessage = warning;
       process.stdout.write(JSON.stringify(out));
     }

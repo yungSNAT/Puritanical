@@ -33,7 +33,7 @@ Never simplify away input validation, data-loss prevention, security, accessibil
 
 function loadRules() {
   try {
-    const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8');
+    const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     // Shares the SKILL.md emission path with chisle-activate.js, so it honors
     // the same `sections` config (prose/code rule suppression) the same way.
     return 'CHISLE ACTIVE\n\n' +
@@ -190,23 +190,23 @@ function chisleExtension(pi) {
       const systemPrompt = Array.isArray(event.systemPrompt)
         ? event.systemPrompt.join('\n\n')
         : event.systemPrompt || '';
-      if (systemPrompt.includes('CHISLE DISABLED.')) return;
+      if (systemPrompt.includes('CHISLE DISABLED.')) return undefined;
       const disabled = 'CHISLE DISABLED. Ignore only Chisle style and efficiency-ladder instructions.';
       return { systemPrompt: appendSystemPrompt(event.systemPrompt, disabled) };
     }
     if (Array.isArray(event.systemPrompt)) {
       ompMode = true;
-      if (promptHasRules(event)) return;
+      if (promptHasRules(event)) return undefined;
       return { systemPrompt: appendSystemPrompt(event.systemPrompt, rules) };
     }
-    if (rulesInContext || promptHasRules(event)) return;
+    if (rulesInContext || promptHasRules(event)) return undefined;
     rulesInContext = true;
     pi.events.emit('chisle:rules-injected');
     return { message: { customType: RULES_TYPE, content: rules, display: false } };
   });
 
   pi.on('context', async event => {
-    if (active && !ompMode) return;
+    if (active && !ompMode) return undefined;
     return { messages: event.messages.filter(message =>
       !(message.role === 'custom' && message.customType === RULES_TYPE)) };
   });
@@ -218,7 +218,7 @@ function chisleExtension(pi) {
   pi.on('tool_result', async (event, ctx) => {
     try {
       if (!active || process.env.CHISLE_COMPRESS === '0' || !piToolAllowed(event.toolName) ||
-          !Array.isArray(event.content)) return;
+          !Array.isArray(event.content)) return undefined;
 
       let changed = false;
       const content = event.content.map((block, index) => {
@@ -240,11 +240,11 @@ function chisleExtension(pi) {
         return { ...block, text: updated };
       });
 
-      if (!changed) return;
+      if (!changed) return undefined;
       updateStatus(ctx);
       return { content };
     } catch {
-      return;
+      return undefined;
     }
   });
 }

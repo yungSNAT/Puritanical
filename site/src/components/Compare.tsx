@@ -3,44 +3,19 @@
 import { useState } from "react";
 import Reveal from "./Reveal";
 import SectionHead from "./SectionHead";
-import Markdown from "./Markdown";
-import samples from "@/data/samples.json";
+import ArmPicker from "./ArmPicker";
+import CompareNote from "./CompareNote";
+import TaskPicker from "./TaskPicker";
+import TranscriptPane from "./TranscriptPane";
+import { TASKS, pct } from "./compare-data";
 
-// Live before/after built from benchmarks/results/raw-nov/default-s1/ via scripts/build-samples.js.
-// Every word and number below is the committed transcript. No mock-ups, no
-// hand-written "illustrative" rewrites. That is the whole differentiator, so the
-// basis label stays visible at all times.
-
-// tokens = billed output; answerTokens = tokens minus hidden thinking (what you
-// read). The page compares answer tokens.
-type Cell = {
-  tokens: number; answerTokens: number; thinkingTokens: number;
-  lines: number; chars: number; truncated: boolean; text: string;
-};
-type Task = { id: string; kind: string; prompt: string; arms: Record<string, Cell> };
-
-// The showcase: prompts where Chisle wrote the fewest answer tokens of any arm.
-// Every cell is still the verbatim transcript; the full set is in the repo.
-const TASKS = (samples.tasks as Task[]).filter((t) =>
-  Object.entries(t.arms).every(([k, c]) => k === "chisle" || t.arms.chisle.answerTokens <= c.answerTokens),
-);
-const RIVALS = [
-  { key: "caveman", label: "caveman" },
-  { key: "ponytail", label: "ponytail" },
-  { key: "chisle", label: "chisle" },
-] as const;
-
-function pct(a: number, b: number) {
-  return Math.round((a / b) * 100);
-}
-
-export default function Compare() {
+export default function Compare(): React.JSX.Element {
   const [taskId, setTaskId] = useState(TASKS[0].id);
   const [arm, setArm] = useState<string>("chisle");
 
-  const task = TASKS.find((t) => t.id === taskId)!;
-  const base = task.arms.vanilla;
-  const cur = task.arms[arm] ?? task.arms.chisle;
+  const task = TASKS.find((t) => t.id === taskId) ?? TASKS[0];
+  const base = task.base;
+  const cur = task.arms.get(arm) ?? task.chisle;
   const share = pct(cur.answerTokens, base.answerTokens);
 
   return (
@@ -53,24 +28,7 @@ export default function Compare() {
         </SectionHead>
 
         <Reveal delay={0.06}>
-          <div className="mt-8 flex flex-wrap gap-2">
-            {TASKS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTaskId(t.id)}
-                aria-pressed={t.id === taskId}
-                className={`rounded-md border px-3 py-1.5 font-mono text-xs transition-colors ${
-                  t.id === taskId
-                    ? "border-brand-hover bg-accent-soft text-accent"
-                    : "border-line text-dim hover:border-brand-hover/50 hover:text-fg"
-                }`}
-              >
-                {t.id}
-                <span className="ml-1.5 opacity-60">{t.kind}</span>
-              </button>
-            ))}
-          </div>
-
+          <TaskPicker selected={taskId} onSelect={setTaskId} />
           <p className="mt-5 border-l-2 border-line pl-4 text-sm italic text-dim">
             &ldquo;{task.prompt}&rdquo;
           </p>
@@ -78,86 +36,37 @@ export default function Compare() {
 
         <Reveal delay={0.1}>
           <div className="mt-8 grid gap-4 lg:grid-cols-2">
-            {/* baseline */}
-            <div className="flex min-w-0 flex-col rounded-xl border border-line bg-surface">
-              <header className="flex items-baseline justify-between border-b border-line px-4 py-3">
-                <span className="text-sm font-semibold">bare model</span>
-                <span className="font-mono text-xs text-dim">
-                  {base.answerTokens.toLocaleString()} answer tok · {base.lines} lines
+            <TranscriptPane
+              cell={base}
+              frameClass="border border-line"
+              headerClass=""
+              bodyClass="text-dim"
+            >
+              <span className="text-sm font-semibold">bare model</span>
+              <span className="font-mono text-xs text-dim">
+                {base.answerTokens.toLocaleString()} answer tok · {base.lines} lines
+              </span>
+            </TranscriptPane>
+            <TranscriptPane
+              cell={cur}
+              frameClass="border border-brand-hover/60 shadow-[0_0_40px_-12px_#ffa028]"
+              headerClass="flex-wrap gap-x-3 gap-y-2"
+              bodyClass=""
+            >
+              <ArmPicker task={task} selected={arm} onSelect={setArm} />
+              <span className="shrink-0 font-mono text-xs">
+                <span className={share > 100 ? "text-waste" : "text-accent"}>{share}%</span>
+                <span className="text-dim">
+                  {" "}
+                  · {cur.answerTokens.toLocaleString()} answer tok · {cur.lines} lines
                 </span>
-              </header>
-              <div className="pane-scroll max-h-96 flex-1 overflow-auto px-4 py-3 text-[12px] leading-relaxed text-dim">
-                <Markdown>{base.text}</Markdown>
-                {base.truncated && (
-                  <p className="mt-3 border-t border-line pt-2 font-mono text-[10.5px] text-dim">
-                    … truncated for the page; token counts are the full response
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* selected arm */}
-            <div className="flex min-w-0 flex-col rounded-xl border border-brand-hover/60 bg-surface shadow-[0_0_40px_-12px_#ffa028]">
-              <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-3">
-                <div className="flex gap-1.5">
-                  {RIVALS.filter((r) => task.arms[r.key]).map((r) => (
-                    <button
-                      key={r.key}
-                      onClick={() => setArm(r.key)}
-                      aria-pressed={r.key === arm}
-                      className={`rounded px-2 py-0.5 font-mono text-xs transition-colors ${
-                        r.key === arm
-                          ? "bg-accent-soft text-accent"
-                          : "text-dim hover:text-fg"
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-                <span className="shrink-0 font-mono text-xs">
-                  <span className={share > 100 ? "text-waste" : "text-accent"}>{share}%</span>
-                  <span className="text-dim">
-                    {" "}
-                    · {cur.answerTokens.toLocaleString()} answer tok · {cur.lines} lines
-                  </span>
-                </span>
-              </header>
-              <div className="pane-scroll max-h-96 flex-1 overflow-auto px-4 py-3 text-[12px] leading-relaxed">
-                <Markdown>{cur.text}</Markdown>
-                {cur.truncated && (
-                  <p className="mt-3 border-t border-line pt-2 font-mono text-[10.5px] text-dim">
-                    … truncated for the page; token counts are the full response
-                  </p>
-                )}
-              </div>
-            </div>
+              </span>
+            </TranscriptPane>
           </div>
         </Reveal>
 
         <Reveal delay={0.14}>
-          <p className="mt-5 max-w-3xl text-xs text-dim">
-            <span className="mr-2 rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] text-accent">
-              basis: measured
-            </span>
-            {samples.suite} Percentages are answer tokens against the bare model&apos;s.{" "}
-            {task.id === "cache" && (
-              <>
-                <strong className="text-fg">Read this one carefully:</strong> the prompt ships with
-                no codebase attached, so every arm, the bare model included, asks for the stack
-                instead of writing a cache. This cell measures how briefly each one asks, not how
-                much code it writes.{" "}
-              </>
-            )}
-            Browse every cell in{" "}
-            <a
-              className="text-accent underline-offset-4 hover:underline"
-              href="https://github.com/JayPokale/Chisle/tree/main/benchmarks/results/raw-nov/default-s1"
-            >
-              benchmarks/results/raw-nov/default-s1
-            </a>
-            .
-          </p>
+          <CompareNote taskId={task.id} />
         </Reveal>
       </div>
     </section>

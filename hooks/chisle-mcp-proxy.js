@@ -128,6 +128,20 @@ function quoteWin(a) {
   return a;
 }
 
+// Stream error handlers. Writes to a server that has exited fail with EPIPE;
+// the child's close handler reports its exit status, so that error is dropped.
+function ignoreServerGone() {
+  return function serverGone() {};
+}
+
+// The host stopped reading: stop the server and exit quietly.
+function exitWhenHostGone(child) {
+  return function hostGone() {
+    try { child.kill(); } catch {}
+    process.exit(0);
+  };
+}
+
 function main(argv) {
   const sep = argv.indexOf('--');
   const cmd = sep === -1 ? argv : argv.slice(sep + 1);
@@ -138,9 +152,12 @@ function main(argv) {
 
   // Windows MCP commands are usually npx/uvx shims (.cmd), which Node refuses
   // to spawn without a shell; elsewhere spawn directly, no shell parsing.
+  // The proxy exists to run the MCP server command from the user's own agent
+  // configuration, so the command is trusted; quoteWin quotes each argument.
   const child = IS_WIN
-    ? cp.spawn(cmd.map(quoteWin).join(' '), [], { stdio: ['pipe', 'pipe', 'inherit'], shell: true, windowsHide: true })
-    : cp.spawn(cmd[0], cmd.slice(1), { stdio: ['pipe', 'pipe', 'inherit'] });
+    // eslint-disable-next-line security-node/detect-child-process -- .cmd shims need cmd.exe; the command comes from the user's MCP config.
+    ? cp.spawn(cmd.map(quoteWin).join(' '), [], { stdio: ['pipe', 'pipe', 'inherit'], shell: true, windowsHide: true }) // nosemgrep: javascript_exec_rule-child-process, javascript.lang.security.audit.spawn-shell-true.spawn-shell-true, javascript.lang.security.detect-child-process.detect-child-process
+    : cp.spawn(cmd[0], cmd.slice(1), { stdio: ['pipe', 'pipe', 'inherit'] }); // nosemgrep: javascript_exec_rule-child-process, javascript.lang.security.detect-child-process.detect-child-process
 
   const enabled = process.env.CHISLE_COMPRESS !== '0' && getDefaultMode() !== 'off';
   const pending = new Map();
@@ -149,8 +166,8 @@ function main(argv) {
     process.stderr.write('chisle-mcp-proxy: cannot start ' + cmd[0] + ': ' + e.message + '\n');
     process.exit(127);
   });
-  child.stdin.on('error', () => {}); // server gone; exit handler reports it
-  process.stdout.on('error', () => { try { child.kill(); } catch {} process.exit(0); }); // host gone
+  child.stdin.on('error', ignoreServerGone());
+  process.stdout.on('error', exitWhenHostGone(child));
 
   // Host → server: forward raw, observe tool calls on the side.
   const reqLines = lineSplitter(line => observeRequest(line, pending));
@@ -186,7 +203,7 @@ function main(argv) {
   }
 
   child.on('close', (code, signal) => {
-    const status = code != null ? code : (signal ? 128 + (require('os').constants.signals[signal] || 1) : 1);
+    const status = code != null ? code : (signal ? 128 + (new Map(Object.entries(require('os').constants.signals)).get(signal) || 1) : 1);
     process.stdout.write('', () => process.exit(status));
   });
 }

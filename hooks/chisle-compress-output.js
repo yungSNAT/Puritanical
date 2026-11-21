@@ -66,8 +66,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { getClaudeDir, getCopilotDir, getOpencodeStateDir, readFlag, readRegularFile, getDefaultMode } = require('./chisle-config');
-const { filterCommand } = require('./chisle-command-filters');
+const { getClaudeDir, getCopilotDir, getOpencodeStateDir, readFlag, readRegularFile, getDefaultMode,
+  secureDirectory, safeAtomicWrite } = require('./chisle-config');
+const { filterCommand, ANSI_RE } = require('./chisle-command-filters');
 
 // One threshold. Env overrides all.
 // These are the values the old 'full' level used — the default,
@@ -223,12 +224,25 @@ function boundForOpencode(text, spillPath, maxChars) {
 // mutation persists to the tool part's state.output) and again, request-time,
 // in experimental.chat.messages.transform. Larger outputs arrive as OpenCode's
 // notice plus a retained tail; the tail still compresses here.
+function opencodeEligible(toolName, text, opts) {
+  return opts.mode !== 'off' && process.env.CHISLE_COMPRESS !== '0' && opencodeToolAllowed(toolName) &&
+    typeof text === 'string' && !!text;
+}
+
+// Scrub, then elide when there are more lines than head + tail keep.
+function scrubAndElide(text, limits, spillPath) {
+  let updated = text;
+  if (updated.length > SCRUB_MIN && process.env.CHISLE_COMPRESS_SCRUB !== '0') updated = scrub(updated);
+  if (updated.length > limits.maxChars && updated.split('\n').length > limits.headLines + limits.tailLines) {
+    const elided = compress(updated, limits, spillPath);
+    if (elided != null) updated = elided;
+  }
+  return updated;
+}
+
 function compressForOpencode(toolName, text, opts) {
   opts = opts || {};
-  if (opts.mode === 'off') return null;
-  if (process.env.CHISLE_COMPRESS === '0') return null;
-  if (!opencodeToolAllowed(toolName)) return null;
-  if (typeof text !== 'string' || !text) return null;
+  if (!opencodeEligible(toolName, text, opts)) return null;
   const stateDir = opts.stateDir || getOpencodeStateDir();
   const limits = limitsFor();
   const dup = dedupCheck(toolName, text, opts.sessionId, opts.callId, stateDir, true);
@@ -236,13 +250,7 @@ function compressForOpencode(toolName, text, opts) {
   const filtered = commandFilter(opts.command, text);
   if (filtered == null && text.length <= SCRUB_MIN && text.length <= limits.maxChars) return null;
   const spillPath = text.length > limits.maxChars && toolName ? spill(text, toolName, stateDir) : null;
-  let updated = filtered || text;
-  if (updated.length > SCRUB_MIN && process.env.CHISLE_COMPRESS_SCRUB !== '0') updated = scrub(updated);
-  if (updated.length > limits.maxChars && updated.split('\n').length > limits.headLines + limits.tailLines) {
-    const elided = compress(updated, limits, spillPath);
-    if (elided != null) updated = elided;
-  }
-  updated = boundForOpencode(updated, spillPath, limits.maxChars);
+  const updated = boundForOpencode(scrubAndElide(filtered || text, limits, spillPath), spillPath, limits.maxChars);
   if (text.length > limits.maxChars) return updated;
   return text.length - updated.length >= MIN_WIN ? updated : null;
 }
@@ -259,17 +267,17 @@ function isCopilotPayload(payload) {
     payload.toolResult && typeof payload.toolResult.textResultForLlm === 'string');
 }
 
-function envInt(name, fallback) {
-  const n = parseInt(process.env[name], 10);
+function envInt(value, fallback) {
+  const n = parseInt(value, 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
 function limitsFor() {
   const base = THRESHOLDS;
   return {
-    maxChars: envInt('CHISLE_COMPRESS_MAX_CHARS', base.maxChars),
-    headLines: envInt('CHISLE_COMPRESS_HEAD_LINES', base.headLines),
-    tailLines: envInt('CHISLE_COMPRESS_TAIL_LINES', base.tailLines),
+    maxChars: envInt(process.env.CHISLE_COMPRESS_MAX_CHARS, base.maxChars),
+    headLines: envInt(process.env.CHISLE_COMPRESS_HEAD_LINES, base.headLines),
+    tailLines: envInt(process.env.CHISLE_COMPRESS_TAIL_LINES, base.tailLines),
   };
 }
 
@@ -284,8 +292,8 @@ function extractText(response) {
   }
   if (typeof response === 'object') {
     const parts = [];
-    for (const key of ['stdout', 'stderr', 'output', 'content', 'text', 'result']) {
-      const val = response[key];
+    const { stdout, stderr, output, content, text, result } = response;
+    for (const val of [stdout, stderr, output, content, text, result]) {
       if (typeof val === 'string' && val) parts.push(val);
       else if (val && typeof val === 'object') { const t = extractText(val); if (t) parts.push(t); }
     }
@@ -298,7 +306,6 @@ function extractText(response) {
 // ── Tier 1: lossless scrub ───────────────────────────────────────────────────
 // ANSI/OSC escapes are invisible to the model; blank runs and identical
 // consecutive lines carry their information in one copy.
-const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const SCRUB_MIN = 1024;      // below this, not worth a hook round-trip
 const REPEAT_MIN = 4;        // identical consecutive lines before collapsing
 const MIN_WIN = 64;          // emit updated output only if it saves this much
@@ -317,7 +324,7 @@ function minifyJson(text) {
   try { JSON.parse(s); } catch { return text; }
   let out = '', inStr = false;
   for (let i = 0; i < s.length; i++) {
-    const c = s[i];
+    const c = s.charAt(i);
     if (inStr) {
       out += c;
       if (c === '\\') out += s[++i];
@@ -337,12 +344,12 @@ function scrub(text) {
   const out = [];
   for (let i = 0; i < lines.length; ) {
     let j = i;
-    while (j < lines.length && lines[j] === lines[i]) j++;
+    while (j < lines.length && lines.at(j) === lines.at(i)) j++;
     const n = j - i;
-    if (n >= REPEAT_MIN && lines[i].trim()) {
-      out.push(lines[i], `... [chisle: line repeated ${n}×] ...`);
+    if (n >= REPEAT_MIN && lines.at(i).trim()) {
+      out.push(lines.at(i), `... [chisle: line repeated ${n}×] ...`);
     } else {
-      for (let k = 0; k < n; k++) out.push(lines[i]);
+      for (let k = 0; k < n; k++) out.push(lines.at(i));
     }
     i = j;
   }
@@ -351,12 +358,12 @@ function scrub(text) {
   const kept = [];
   for (let i = 0; i < out.length; ) {
     let j = i;
-    while (j < out.length && noisy(out[j])) j++;
+    while (j < out.length && noisy(out.at(j))) j++;
     if (j - i >= NOISE_MIN) {
-      kept.push(out[i], out[i + 1], `... [chisle: ${j - i - 3} more passing/progress lines like these] ...`, out[j - 1]);
+      kept.push(out.at(i), out[i + 1], `... [chisle: ${j - i - 3} more passing/progress lines like these] ...`, out[j - 1]);
     } else {
       j = Math.max(j, i + 1);
-      for (let k = i; k < j; k++) kept.push(out[k]);
+      for (let k = i; k < j; k++) kept.push(out.at(k));
     }
     i = j;
   }
@@ -384,71 +391,12 @@ const DEDUP_SESSION_KEEP = 20;
 const DEDUP_DIR = 'chisle-dedup';
 const MAX_STATE_BYTES = 1024 * 1024;
 
-// `root` (the user-owned state root) may itself be a symlink (e.g. dotfiles
-// managed with GNU stow), so it is resolved with stat — but every subdirectory
-// beneath it and the target file are verified with lstat and must not be links.
-function secureDirectory(dir, root) {
-  try {
-    dir = path.resolve(dir);
-    root = root ? path.resolve(root) : dir;
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    let cur = dir;
-    while (cur !== root && cur.length > 1) {
-      const st = fs.lstatSync(cur);
-      if (!st.isDirectory() || st.isSymbolicLink()) return false;
-      const parent = path.dirname(cur);
-      if (parent === cur) break;
-      cur = parent;
-    }
-    const st = fs.statSync(root);
-    return st.isDirectory();
-  } catch { return false; }
-}
-
 function safeReadText(p) {
   try {
     const text = readRegularFile(p, MAX_STATE_BYTES);
     return { text, unsafe: text === null };
   } catch (error) {
     return { text: null, unsafe: error.code !== 'ENOENT' };
-  }
-}
-
-function safeAtomicWrite(p, content, root) {
-  const dir = path.dirname(p);
-  if (!secureDirectory(dir, root)) return false;
-  try {
-    const st = fs.lstatSync(p);
-    if (st.isSymbolicLink() || !st.isFile()) return false;
-  } catch (e) {
-    if (e.code !== 'ENOENT') return false;
-  }
-  const tmp = p + '.' + process.pid + '.' + crypto.randomBytes(6).toString('hex') + '.tmp';
-  const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | noFollow;
-  let fd;
-  let created = false;
-  try {
-    fd = fs.openSync(tmp, flags, 0o600);
-    created = true;
-    fs.writeFileSync(fd, content);
-    try { fs.fchmodSync(fd, 0o600); } catch {}
-    fs.closeSync(fd);
-    fd = undefined;
-    try {
-      const st = fs.lstatSync(p);
-      if (st.isSymbolicLink() || !st.isFile()) return false;
-    } catch (e) {
-      if (e.code !== 'ENOENT') return false;
-    }
-    fs.renameSync(tmp, p);
-    created = false;
-    return true;
-  } catch {
-    return false;
-  } finally {
-    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
-    if (created) { try { fs.unlinkSync(tmp); } catch {} }
   }
 }
 
@@ -461,7 +409,7 @@ function readDedupFile(p) {
 
 function dedupStateDir(stateDir) {
   const root = stateDir || getClaudeDir();
-  const dir = path.join(root, DEDUP_DIR);
+  const dir = path.join(root, DEDUP_DIR); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   return secureDirectory(dir, root) ? dir : null;
 }
 
@@ -471,17 +419,20 @@ function writeDedupState(p, state, root) {
 
 function pruneDedupSessions(dir) {
   try {
-    const files = fs.readdirSync(dir)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The dedup folder under the hook's state directory, verified by secureDirectory.
+    const files = fs.readdirSync(dir) // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       .filter(name => /^[a-f0-9]{64}\.json$/.test(name))
       .map(name => {
-        const p = path.join(dir, name);
-        const st = fs.lstatSync(p);
+        const p = path.join(dir, name); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- A hashed session file name inside the verified dedup folder; links are pruned, not followed.
+        const st = fs.lstatSync(p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
         return st.isFile() || st.isSymbolicLink() ? { p, t: st.mtimeMs } : null;
       })
       .filter(Boolean)
       .sort((a, b) => b.t - a.t || a.p.localeCompare(b.p));
     for (const file of files.slice(DEDUP_SESSION_KEEP)) {
-      try { fs.unlinkSync(file.p); } catch {}
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes an old hashed session file from the verified dedup folder.
+      try { fs.unlinkSync(file.p); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     }
   } catch {}
 }
@@ -489,6 +440,35 @@ function pruneDedupSessions(dir) {
 // `stateDir` defaults to getClaudeDir() so existing Claude/Pi callers keep
 // their prior storage path. Copilot passes getCopilotDir(); OpenCode passes
 // getOpencodeStateDir() and opts into per-session files for interleaved sessions.
+const sha256 = (text) => crypto.createHash('sha256').update(text).digest('hex');
+
+// This session's dedup state, reset when the file belongs to another session.
+function sessionState(state, sessionId) {
+  if (!state || state.session !== sessionId) state = { session: sessionId, tools: {} };
+  if (!state.tools || typeof state.tools !== 'object' || Array.isArray(state.tools)) state.tools = {};
+  return state;
+}
+
+// Store this tool's hash; true when it repeats the previous one.
+//
+// A second hook invocation for the SAME tool call is not the model seeing
+// the output twice. That happens whenever this hook is registered more than
+// once (plugin manifest + a leftover settings.json entry), because both
+// copies share this state file: copy A stores the hash, copy B matches it
+// and reports first-seen output as a duplicate of itself. Old string-valued
+// entries read through `rec`, so an existing state file needs no migration,
+// and a payload with no tool_use_id keeps today's exact behaviour.
+function recordToolHash(tools, toolName, hash, toolUseId) {
+  const prev = Object.getOwnPropertyDescriptor(tools, toolName)?.value;
+  const rec = (prev && typeof prev === 'object') ? prev : { hash: prev, id: null };
+  const sameCall = !!(toolUseId && rec.id && rec.id === toolUseId);
+  Object.defineProperty(tools, toolName, {
+    value: { hash, id: toolUseId || rec.id || null },
+    enumerable: true, writable: true, configurable: true,
+  });
+  return rec.hash === hash && !sameCall;
+}
+
 function dedupCheck(toolName, text, sessionId, toolUseId, stateDir, perSession) {
   if (process.env.CHISLE_COMPRESS_DEDUP === '0') return null;
   if (!sessionId || typeof sessionId !== 'string') return null;
@@ -496,30 +476,11 @@ function dedupCheck(toolName, text, sessionId, toolUseId, stateDir, perSession) 
   try {
     const dir = perSession ? dedupStateDir(stateDir) : stateDir || getClaudeDir();
     if (!dir) return null;
-    const p = path.join(dir, perSession
-      ? crypto.createHash('sha256').update(sessionId).digest('hex') + '.json'
-      : '.chisle-compress-last.json');
+    const p = path.join(dir, perSession ? sha256(sessionId) + '.json' : '.chisle-compress-last.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     const loaded = readDedupFile(p);
     if (loaded.unsafe) return null;
-    let state = loaded.state;
-    if (!state || state.session !== sessionId) state = { session: sessionId, tools: {} };
-    if (!state.tools || typeof state.tools !== 'object' || Array.isArray(state.tools)) state.tools = {};
-    const hash = crypto.createHash('sha256').update(text).digest('hex');
-    // A second hook invocation for the SAME tool call is not the model seeing
-    // the output twice. That happens whenever this hook is registered more than
-    // once (plugin manifest + a leftover settings.json entry), because both
-    // copies share this state file: copy A stores the hash, copy B matches it
-    // and reports first-seen output as a duplicate of itself. Old string-valued
-    // entries read through `rec`, so an existing state file needs no migration,
-    // and a payload with no tool_use_id keeps today's exact behaviour.
-    const prev = Object.getOwnPropertyDescriptor(state.tools, toolName)?.value;
-    const rec = (prev && typeof prev === 'object') ? prev : { hash: prev, id: null };
-    const sameCall = !!(toolUseId && rec.id && rec.id === toolUseId);
-    const dup = rec.hash === hash && !sameCall;
-    Object.defineProperty(state.tools, toolName, {
-      value: { hash, id: toolUseId || rec.id || null },
-      enumerable: true, writable: true, configurable: true,
-    });
+    const state = sessionState(loaded.state, sessionId);
+    const dup = recordToolHash(state.tools, toolName, sha256(text), toolUseId);
     writeDedupState(p, state, stateDir || getClaudeDir());
     if (perSession) pruneDedupSessions(dir);
     return dup ? duplicateMarker(toolName, text) : null;
@@ -541,23 +502,26 @@ const SPILL_DIR = 'chisle-spill';
 const SPILL_KEEP = 40;
 
 function spillDir(stateDir) {
-  return path.join(stateDir || getClaudeDir(), SPILL_DIR);
+  return path.join(stateDir || getClaudeDir(), SPILL_DIR); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 // Keep the directory bounded. Oldest-first by mtime; cheap enough at this size
 // and it runs at most once per elided output.
 function pruneSpill(dir) {
   try {
-    const files = fs.readdirSync(dir)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The chisle-spill folder under the hook's state directory, verified by secureDirectory.
+    const files = fs.readdirSync(dir) // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       .filter(f => f.endsWith('.txt'))
       .map(f => {
-        const p = path.join(dir, f);
-        const st = fs.lstatSync(p);
+        const p = path.join(dir, f); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- A .txt spill file inside the verified spill folder; links are skipped.
+        const st = fs.lstatSync(p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
         return st.isFile() && !st.isSymbolicLink() ? { p, t: st.mtimeMs } : null;
       })
       .filter(Boolean)
       .sort((a, b) => b.t - a.t);
-    for (const f of files.slice(SPILL_KEEP)) { try { fs.unlinkSync(f.p); } catch {} }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes an old regular spill file from the verified spill folder.
+    for (const f of files.slice(SPILL_KEEP)) { try { fs.unlinkSync(f.p); } catch {} } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   } catch {}
 }
 
@@ -567,14 +531,15 @@ function spill(text, toolName, stateDir) {
     const root = stateDir || getClaudeDir();
     const dir = spillDir(stateDir);
     if (!secureDirectory(dir, root)) return null;
-    const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
+    const hash = sha256(text).slice(0, 12);
     const safeTool = String(toolName || 'tool').replace(/[^A-Za-z0-9_-]/g, '') || 'tool';
-    const file = path.join(dir, `${safeTool}-${hash}.txt`);
+    const file = path.join(dir, `${safeTool}-${hash}.txt`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     // Same hash → same content (atomic writes never leave a partial file), so
     // an existing regular file is reused. Re-reading to compare would also
     // fail on lone surrogates, which UTF-8 cannot round-trip.
     let st = null;
-    try { st = fs.lstatSync(file); } catch (e) { if (e.code !== 'ENOENT') return null; }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Spill file named from a sanitised tool name and content hash in the verified spill folder.
+    try { st = fs.lstatSync(file); } catch (e) { if (e.code !== 'ENOENT') return null; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     if (st ? st.isSymbolicLink() || !st.isFile() : !safeAtomicWrite(file, text, root)) return null;
     pruneSpill(dir);
     return file;
@@ -622,7 +587,7 @@ function recordSavings(saved, stateDir) {
   try {
     const root = stateDir || getClaudeDir();
     if (!secureDirectory(root, root)) return;
-    const p = path.join(root, '.chisle-compress-stats.json');
+    const p = path.join(root, '.chisle-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     const current = safeReadText(p);
     if (current.unsafe) return;
     let stats = { savedChars: 0, events: 0 };
@@ -678,8 +643,9 @@ function transform(text, limits, toolName, stateDir, command) {
 function rebuildResponse(response, updated) {
   if (response == null || typeof response === 'string') return updated;
   if (typeof response === 'object' && !Array.isArray(response)) {
-    for (const key of ['stdout', 'output', 'content', 'text', 'result']) {
-      if (typeof response[key] === 'string') {
+    const { stdout, output, content, text, result } = response;
+    for (const [key, val] of [['stdout', stdout], ['output', output], ['content', content], ['text', text], ['result', result]]) {
+      if (typeof val === 'string') {
         const out = { ...response, [key]: updated };
         // extractText already folded stderr into the compressed text; leaving
         // the original stderr in place would duplicate it.

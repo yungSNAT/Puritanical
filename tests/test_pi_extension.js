@@ -17,12 +17,14 @@ const ENV_KEYS = [
   'CHISLE_COMPRESS', 'CHISLE_COMPRESS_DEDUP', 'CHISLE_COMPRESS_SCRUB',
   'CHISLE_COMPRESS_TOOLS', 'CHISLE_DEFAULT_MODE',
 ];
-const originalEnv = Object.fromEntries(ENV_KEYS.map(key => [key, process.env[key]]));
+// eslint-disable-next-line security/detect-object-injection -- Keys come from the fixed ENV_KEYS list.
+const originalEnv = new Map(ENV_KEYS.map(key => [key, process.env[key]]));
 
 afterEach(() => {
-  for (const key of ENV_KEYS) {
-    if (originalEnv[key] === undefined) delete process.env[key];
-    else process.env[key] = originalEnv[key];
+  for (const [key, value] of originalEnv) {
+    // eslint-disable-next-line security/detect-object-injection -- Keys come from the fixed ENV_KEYS list.
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value; // eslint-disable-line security/detect-object-injection -- Same fixed key.
   }
 });
 

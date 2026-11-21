@@ -1,5 +1,5 @@
 /* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
-import { Logo } from "./Nav";
+import Logo from "./Logo";
 
 const COLS = [
   {

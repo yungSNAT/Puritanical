@@ -43,9 +43,9 @@ export default function Terminal(): React.JSX.Element {
   const phase = !inView ? "idle" : summaryVisible ? "done" : "flood";
 
   useEffect(() => {
-    if (!inView) return;
+    if (!inView) return undefined;
     let n = 0;
-    let summaryTimer: ReturnType<typeof setTimeout> | undefined;
+    let summaryTimer: ReturnType<typeof setTimeout> | undefined = undefined;
     const tick = setInterval(() => {
       n += LINES_PER_FRAME;
       if (n >= NOISE_COUNT) {
@@ -58,7 +58,7 @@ export default function Terminal(): React.JSX.Element {
         setFlood(n);
       }
     }, FRAME_MS);
-    return () => {
+    return (): void => {
       clearInterval(tick);
       clearTimeout(summaryTimer);
     };

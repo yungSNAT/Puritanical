@@ -23,6 +23,12 @@ const AGENTS = [
   { name: "Copilot", level: "rules+mcp", logo: "githubcopilot" },
 ] as const;
 
+// Each logo's mask style, built once rather than on every render.
+const TILES = AGENTS.map((a) => {
+  const mask = `url(/logos/${a.logo}.svg) center / contain no-repeat`;
+  return { ...a, mask: { WebkitMask: mask, mask } };
+});
+
 const LEVEL = {
   full: { label: "persona + compressor", cls: "bg-accent-soft text-accent" },
   skills: { label: "/chisle skills", cls: "bg-raised text-fg" },
@@ -48,7 +54,7 @@ export default function Agents(): React.JSX.Element {
         </Reveal>
 
         <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {AGENTS.map((a, i) => (
+          {TILES.map((a, i) => (
             <Reveal key={a.name} delay={0.03 * i}>
               <div className="lift flex h-full items-center gap-3 rounded-lg border border-line bg-bg p-4">
                 <span
@@ -57,10 +63,7 @@ export default function Agents(): React.JSX.Element {
                 >
                   <span
                     className="size-5 bg-fg"
-                    style={{
-                      WebkitMask: `url(/logos/${a.logo}.svg) center / contain no-repeat`,
-                      mask: `url(/logos/${a.logo}.svg) center / contain no-repeat`,
-                    }}
+                    style={a.mask}
                   />
                 </span>
                 <div className="min-w-0">

@@ -17,6 +17,18 @@ const ARMS = [
   { name: "bare model", pct: 100 },
 ];
 
+// Motion props per bar, built once rather than on every render.
+const EASE = [0.16, 1, 0.3, 1] as const;
+const BAR_START = { width: 0 };
+const BAR_IDLE = {};
+const BARS = ARMS.map((a, i) => ({
+  name: a.name,
+  pct: a.pct,
+  self: a.self === true,
+  grown: { width: `${a.pct}%` },
+  transition: { duration: 1, delay: i * 0.12, ease: EASE },
+}));
+
 // % of the bare model. Claude Code rows from benchmarks/results/raw-314-sidebyside/
 // (Chisle 3.14, Haiku 4.5, 26 answers in one run, tools off). Billed tokens tie
 // with caveman; answers are shortest.
@@ -53,19 +65,18 @@ export default function Benchmarks(): React.JSX.Element {
             rel="noopener noreferrer"
           >
             ship in the repo
-          </a>
-          .
+          </a>.
         </SectionHead>
 
         <div ref={ref} className="mt-12 space-y-5 rounded-xl border border-line bg-bg p-6 sm:p-8">
-          {ARMS.map((a, i) => (
+          {BARS.map((a) => (
             <div key={a.name} className="grid grid-cols-[7.5rem_1fr] items-center gap-4 text-sm">
               <span className={a.self ? "font-semibold" : "text-dim"}>{a.name}</span>
               <div className="h-8 overflow-hidden rounded-md bg-raised">
                 <motion.div
-                  initial={{ width: 0 }}
-                  animate={inView ? { width: `${a.pct}%` } : {}}
-                  transition={{ duration: 1, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
+                  initial={BAR_START}
+                  animate={inView ? a.grown : BAR_IDLE}
+                  transition={a.transition}
                   className={`flex h-full items-center justify-end rounded-md pr-2.5 text-xs font-semibold ${
                     a.self ? "bg-gradient-to-r from-brand to-[#ffc56b] text-on-brand" : "bg-dim/35 text-fg"
                   }`}

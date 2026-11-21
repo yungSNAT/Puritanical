@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 // One mode. The intensity levels are gone: three dials on a tool whose whole
 // argument is "fewer knobs" was the joke writing itself, and the middle setting
@@ -47,8 +48,8 @@ function getOpencodeDir(opts) {
   const env = options.env || process.env;
   const home = options.home || os.homedir();
   if (env.OPENCODE_CONFIG_DIR) return env.OPENCODE_CONFIG_DIR;
-  if (env.XDG_CONFIG_HOME) return path.join(env.XDG_CONFIG_HOME, 'opencode');
-  return path.join(home, '.config', 'opencode');
+  if (env.XDG_CONFIG_HOME) return path.join(env.XDG_CONFIG_HOME, 'opencode'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  return path.join(home, '.config', 'opencode'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 function getOpencodeStateDir(opts) {
@@ -247,9 +248,9 @@ function outputStyleSources(opts) {
   const cwd = o.cwd || process.cwd();
   const claudeDir = o.claudeDir || getClaudeDir();
   return [
-    path.join(cwd, '.claude', 'settings.local.json'),
-    path.join(cwd, '.claude', 'settings.json'),
-    path.join(claudeDir, 'settings.json'),
+    path.join(cwd, '.claude', 'settings.local.json'), // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    path.join(cwd, '.claude', 'settings.json'), // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    path.join(claudeDir, 'settings.json'), // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   ];
 }
 
@@ -335,28 +336,28 @@ function safeWriteFlag(flagPath, content) {
     const realFlagDir = flagWriteDirectory(flagPath);
     if (!realFlagDir) return;
 
-    const realFlagPath = path.join(realFlagDir, path.basename(flagPath));
+    const realFlagPath = path.join(realFlagDir, path.basename(flagPath)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- Check the destination entry itself and refuse a final symlink.
-      if (fs.lstatSync(realFlagPath).isSymbolicLink()) return;
+      if (fs.lstatSync(realFlagPath).isSymbolicLink()) return; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     } catch (e) {
       if (e.code !== 'ENOENT') return;
     }
 
-    const tempPath = path.join(realFlagDir, `.chisle-active.${process.pid}.${Date.now()}`);
+    const tempPath = path.join(realFlagDir, `.chisle-active.${process.pid}.${Date.now()}`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
     const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW;
     let fd;
     try {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- Create a new private file exclusively in the configured directory used for state.
-      fd = fs.openSync(tempPath, flags, 0o600);
+      fd = fs.openSync(tempPath, flags, 0o600); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       fs.writeSync(fd, String(content));
       try { fs.fchmodSync(fd, 0o600); } catch {}
     } finally {
       if (fd !== undefined) fs.closeSync(fd);
     }
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Atomically replace the destination entry in the same directory as the private file.
-    fs.renameSync(tempPath, realFlagPath);
+    fs.renameSync(tempPath, realFlagPath); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   } catch {}
 }
 
@@ -373,9 +374,76 @@ function readFlag(flagPath) {
   } catch { return null; }
 }
 
+// State files under a user-owned root (compression dedup, spill, stats).
+// `root` may itself be a symlink (e.g. dotfiles managed with GNU stow), so it
+// is resolved with stat — but every subdirectory beneath it and the target
+// file are verified with lstat and must not be links.
+function secureDirectory(dir, root) {
+  try {
+    dir = path.resolve(dir); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    root = root ? path.resolve(root) : dir; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- State directory chosen by the hook (Claude, OpenCode or Copilot); every level up to its root is checked below.
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    let cur = dir;
+    while (cur !== root && cur.length > 1) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Walks from the state directory up to its root and refuses any link on the way.
+      const st = fs.lstatSync(cur); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      if (!st.isDirectory() || st.isSymbolicLink()) return false;
+      const parent = path.dirname(cur);
+      if (parent === cur) break;
+      cur = parent;
+    }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The configured state root itself, which may be a deliberate symlink such as a stow-managed dotfile.
+    const st = fs.statSync(root); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    return st.isDirectory();
+  } catch { return false; }
+}
+
+// A path that exists must be a regular file, not a link; a missing one is fine.
+function replaceableFile(p) {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- State file inside a checked directory; a link or non-file is refused.
+    const st = fs.lstatSync(p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    return !st.isSymbolicLink() && st.isFile();
+  } catch (e) {
+    return e.code === 'ENOENT';
+  }
+}
+
+function safeAtomicWrite(p, content, root) {
+  const dir = path.dirname(p);
+  if (!secureDirectory(dir, root) || !replaceableFile(p)) return false;
+  const tmp = p + '.' + process.pid + '.' + crypto.randomBytes(6).toString('hex') + '.tmp';
+  const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | noFollow;
+  let fd;
+  let created = false;
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Exclusive no-follow create of a random temporary file beside the checked state file.
+    fd = fs.openSync(tmp, flags, 0o600); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    created = true;
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Writes through the descriptor opened exclusively above.
+    fs.writeFileSync(fd, content); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    try { fs.fchmodSync(fd, 0o600); } catch {}
+    fs.closeSync(fd);
+    fd = undefined;
+    if (!replaceableFile(p)) return false;
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Atomically replaces the state file, rechecked as replaceable just above.
+    fs.renameSync(tmp, p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    created = false;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes this process's own temporary file after a failed write.
+    if (created) { try { fs.unlinkSync(tmp); } catch {} } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  }
+}
+
 module.exports = {
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
-  VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readRegularFile, readSettingsText,
+  VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readRegularFile, readSettingsText, secureDirectory, safeAtomicWrite,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,
   getActiveOutputStyle, explicitSections, resolveSections,
 };

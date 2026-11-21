@@ -1,9 +1,9 @@
 /* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Reveal from "./Reveal";
-import { Glyph } from "./icons";
+import Icon from "./Icon";
 
 const AXES = [
   {
@@ -48,16 +48,12 @@ const EXTRAS = [
   { icon: "off", name: "Easy off-switch", body: "\"stop chisle\" for the persona, CHISLE_COMPRESS=0 for the hook, npx chisle --uninstall for everything." },
 ];
 
-function Icon({ name }: Readonly<{ name: string }>): React.JSX.Element {
-  return (
-    <span className="grid size-10 place-items-center rounded-lg border border-brand-hover/40 bg-accent-soft text-accent">
-      <Glyph name={name} />
-    </span>
-  );
-}
-
 export default function Axes(): React.JSX.Element {
   const [open, setOpen] = useState<number | null>(null);
+  const toggle = useCallback((event: React.MouseEvent<HTMLButtonElement>): void => {
+    const i = Number(event.currentTarget.value);
+    setOpen((current) => (current === i ? null : i));
+  }, []);
   return (
     <section id="features" className="mx-auto max-w-6xl px-5 py-28">
       <Reveal>
@@ -81,7 +77,8 @@ export default function Axes(): React.JSX.Element {
               <p className="mt-3 flex-1 text-sm leading-relaxed text-dim">{a.body}</p>
               <button
                 type="button"
-                onClick={() => { setOpen(open === i ? null : i); }}
+                value={i}
+                onClick={toggle}
                 aria-expanded={open === i}
                 className="mt-5 w-fit text-sm font-medium text-accent hover:underline underline-offset-4"
               >

@@ -1,7 +1,7 @@
 /* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const COPY_NOTICE_MS = 1600;
 
@@ -10,15 +10,15 @@ export function useCopyText(noticeMs = COPY_NOTICE_MS): readonly [boolean, (text
   const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const attempt = useRef(0);
 
-  useEffect(() => () => {
+  useEffect(() => (): void => {
     attempt.current++;
     clearTimeout(reset.current);
   }, []);
 
-  function copyText(text: string): void {
+  const copyText = useCallback((text: string): void => {
     clearTimeout(reset.current);
     const request = ++attempt.current;
-    void (async () => {
+    void (async (): Promise<void> => {
       try {
         await navigator.clipboard.writeText(text);
         if (request !== attempt.current) return;
@@ -28,14 +28,14 @@ export function useCopyText(noticeMs = COPY_NOTICE_MS): readonly [boolean, (text
         if (request === attempt.current) setCopied(false);
       }
     })();
-  }
+  }, [noticeMs]);
   return [copied, copyText];
 }
 
 // One-click copy for a shell command. Multi-line commands keep their breaks.
 export default function CopyCmd({ cmd, label }: Readonly<{ cmd: string; label: string }>): React.JSX.Element {
   const [copied, copyText] = useCopyText();
-  const copyCommand = (): void => { copyText(cmd); };
+  const copyCommand = useCallback((): void => { copyText(cmd); }, [copyText, cmd]);
   return (
     <button
       type="button"

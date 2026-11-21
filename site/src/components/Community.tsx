@@ -2,7 +2,7 @@
 import { getRepoStats } from "@/lib/github";
 import Reveal from "./Reveal";
 import CopyCmd from "./CopyCmd";
-import { GitHubIcon } from "./Nav";
+import GitHubIcon from "./GitHubIcon";
 
 export default async function Community(): Promise<React.JSX.Element> {
   const stats = await getRepoStats();
@@ -57,8 +57,7 @@ export default async function Community(): Promise<React.JSX.Element> {
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 rounded-md bg-[#FFDD00] px-5 py-2.5 text-sm font-semibold text-black transition-transform hover:-translate-y-0.5"
               >
-                <span aria-hidden>☕</span>
-                Buy me a coffee
+                <span aria-hidden>☕</span>Buy me a coffee
               </a>
             </div>
             <p className="mt-6 text-xs text-dim">
