@@ -9,9 +9,9 @@
 
 <div align="center">
 
-[![Tests](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml) [![Codecov](https://codecov.io/gh/yungSNAT/Puritanical/graph/badge.svg)](https://codecov.io/gh/yungSNAT/Puritanical) [![CodeQL · no workflow](.github/assets/badges/codeql.svg)](#project-checks) [![OSV-Scanner · no workflow](.github/assets/badges/osv-scanner.svg)](#project-checks) [![SonarCloud · awaiting analysis](.github/assets/badges/sonarcloud.svg)](#project-checks) [![Codacy · awaiting analysis](.github/assets/badges/codacy.svg)](#project-checks)<br>
-[![OpenSSF Scorecard · awaiting assessment](.github/assets/badges/scorecard.svg)](#project-checks)<br>
-[![Code licence · MIT](.github/assets/badges/licence.svg)](#licence) [![GitHub release](https://img.shields.io/github/v/release/yungSNAT/Puritanical?color=66023C&labelColor=000000&style=flat)](https://github.com/yungSNAT/Puritanical/releases) [![Fork of Chisle](.github/assets/badges/fork-of.svg)](https://github.com/JayPokale/Chisle)
+[![Tests](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml) [![Codecov](https://codecov.io/gh/yungSNAT/Puritanical/branch/main/graph/badge.svg)](https://app.codecov.io/gh/yungSNAT/Puritanical/tree/main) [![CodeQL](https://github.com/yungSNAT/Puritanical/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/codeql.yml) [![OSV-Scanner](https://github.com/yungSNAT/Puritanical/actions/workflows/osv-scanner.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/osv-scanner.yml) [![SonarQube Cloud quality gate](https://sonarcloud.io/api/project_badges/measure?project=yungSNAT_Puritanical&metric=alert_status)](https://sonarcloud.io/dashboard?id=yungSNAT_Puritanical) [![Codacy · awaiting analysis](.github/assets/badges/codacy.svg)](#project-checks)<br>
+[![OpenSSF Scorecard](https://github.com/yungSNAT/Puritanical/actions/workflows/scorecard.yml/badge.svg?branch=main)](https://github.com/yungSNAT/Puritanical/actions/workflows/scorecard.yml)<br>
+[![Code licence](https://img.shields.io/github/license/yungSNAT/Puritanical?label=licence&color=66023C&labelColor=000000)](LICENSE) [![GitHub release](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fgithub.com%2FyungSNAT%2FPuritanical%2Freleases.atom&query=concat%28substring%28%27none%20published%27%2C1%2C14%20%2A%20not%28%2F%2F%2A%5Blocal-name%28%29%3D%27entry%27%5D%29%29%2Csubstring-after%28%2F%2F%2A%5Blocal-name%28%29%3D%27entry%27%5D%5B1%5D%2F%2A%5Blocal-name%28%29%3D%27link%27%5D%2F%40href%2C%27%2Freleases%2Ftag%2F%27%29%29&label=release&color=66023C&labelColor=000000)](https://github.com/yungSNAT/Puritanical/releases) [![Fork parent](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FyungSNAT%2FPuritanical&query=%24.parent.full_name&label=fork%20of&color=66023C&labelColor=000000)](https://github.com/JayPokale/Chisle)
 
 [Install](#install) · [Use](#use) · [The rules](#the-rules) · [Benchmarks](#benchmarks) · [Development](#development) · [Credits](#credits) · [Licence](#licence)
 
@@ -75,7 +75,7 @@ npm run check:samples
 
 ### Project checks
 
-The test workflow covers Node.js 18, 20 and 22. Codecov has no coverage upload for this fork yet. It has no CodeQL or OSV-Scanner workflow. The SonarCloud, Codacy and OpenSSF badges are awaiting results for the replacement repository. [Test workflow](.github/workflows/test.yml) · [Workflow history](https://github.com/yungSNAT/Puritanical/actions)
+The test suite runs on Node.js 18, 20 and 22. The [coverage workflow](.github/workflows/coverage.yml) sends the Node 22 line coverage report to Codecov. CodeQL scans JavaScript, TypeScript, Python and GitHub Actions. OSV-Scanner checks dependency lockfiles for published advisories. OpenSSF Scorecard assesses repository practices. The release badge reads the GitHub release feed.
 
 ## Credits
 
