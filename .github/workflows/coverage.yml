@@ -28,7 +28,10 @@ jobs:
           --test-reporter=lcov --test-reporter-destination=coverage.lcov
           tests/*.js
       - name: Check the report contains production lines
-        run: grep -q '^DA:' coverage.lcov && grep -Eq '^SF:(\./)?(bin|hooks|pi-extension)/' coverage.lcov
+        run: |
+          for source in bin/install.js hooks/chisle-activate.js pi-extension/index.js .opencode/plugins/chisle.mjs; do
+            grep -Fx "SF:$source" coverage.lcov
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: node-coverage

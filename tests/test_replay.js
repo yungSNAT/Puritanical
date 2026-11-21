@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -105,18 +106,21 @@ test('Claude replay reports per-tool compression savings', () => {
   fs.writeFileSync(path.join(dir, 'session.jsonl'), [
     use('bash-1', 'Bash'),
     result('bash-1'),
+    use('bash-2', 'Bash'),
+    result('bash-2'),
     use('grep-1', 'Grep'),
     result('grep-1'),
-  ].map(JSON.stringify).join('\n'));
+  ].map(message => JSON.stringify(message)).join('\n'));
 
   const out = execFileSync(
     process.execPath,
     [REPLAY, 'claude', dir],
-    { encoding: 'utf8' }
+    { encoding: 'utf8', env: { ...process.env, CHISLE_COMPRESS_DEDUP: '1' } }
   );
 
   assert.match(out, /per-tool breakdown \(incl\. dedup\):/);
-  assert.match(out, /Bash\s+\d+ outputs\s+[\d,]+ → [\d,]+ chars\s+saved [\d,]+ chars/);
+  assert.match(out, /deduped repeat outputs:\s+1 /);
+  assert.match(out, /Bash\s+2 outputs\s+[\d,]+ → [\d,]+ chars\s+saved [\d,]+ chars/);
   assert.match(out, /Grep\s+\d+ outputs\s+[\d,]+ → [\d,]+ chars\s+saved [\d,]+ chars/);
 
   fs.rmSync(dir, { recursive: true, force: true });
