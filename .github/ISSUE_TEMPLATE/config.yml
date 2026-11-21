@@ -18,5 +18,5 @@ contact_links:
     url: https://github.com/JayPokale/Chisle/discussions/categories/show-and-tell
     about: Post your own before/after token counts, or a setup that worked well.
   - name: Security vulnerability
-    url: https://github.com/JayPokale/Chisle/security/policy
-    about: Report privately. Never open a public issue for a vulnerability.
+    url: https://github.com/yungSNAT/Puritanical/security/advisories/new
+    about: Send a private vulnerability report to the Puritanical maintainer.

@@ -1,30 +1,7 @@
-# Security Policy
+# Security policy
 
-## Supported versions
+Puritanical accepts security fixes on `main`. When reporting a problem, identify the commit or tag you installed.
 
-Only the latest published release on npm receives security fixes. Chisle is a
-zero-dependency tool with no long-term support branches — upgrade rather than
-expect a backport.
+Submit a private report with the affected agent, operating system, component and the behaviour you observed. Remove credentials and personal configuration from examples. [Report a vulnerability privately](https://github.com/yungSNAT/Puritanical/security/advisories/new)
 
-| Version | Supported |
-|---------|-----------|
-| latest `3.x` | ✅ |
-| older `3.x` | ❌ |
-| `2.x` and earlier | ❌ |
-
-## Reporting a vulnerability
-
-**Do not open a public issue for security problems.**
-
-Email **jay.pokale.35@gmail.com** with:
-
-- what the vulnerability is and where (file / function),
-- steps to reproduce,
-- impact (what an attacker gains).
-
-You'll get an acknowledgement within 72 hours. Fixes for confirmed issues ship in the
-next patch release, with credit unless you ask otherwise.
-
-## Why this matters here
-
-Chisle runs hooks or a Pi extension inside your agent process. Pi extensions have full user permissions; review source before installing, and trust project-local `.pi` resources only from repositories you trust. The config layer (`hooks/chisle-config.js`) is symlink-safe by design (`O_NOFOLLOW`, `0600`). If you find path traversal, symlink following, unsafe tool-result mutation, or installer privilege escalation, report it here.
+The installer writes to your agent's configuration directory. Hooks and extensions run with your user permissions. Review the source and install from a revision you trust.
