@@ -133,10 +133,10 @@ run_cell() {
     local args=(-p --mode json --model "$MODEL" --no-session --no-tools --no-extensions --no-skills --no-prompt-templates --no-themes --no-context-files)
     [ "$arm" != "vanilla" ] && args+=(--append-system-prompt "$ISO/${arm}.txt")
     args+=(-- "$prompt")
-    ( cd /tmp && run_timed env HOME=/tmp PI_CODING_AGENT_DIR="$ISO" PI_OFFLINE=1 pi "${args[@]}" </dev/null ) > "$events" 2>/dev/null \
-      && cargo run --quiet --locked --manifest-path "$HERE/../tools/Cargo.toml" -- normalize-pi "$events" > "$tmp" \
-      && mv -f "$tmp" "$out" \
-      || { rm -f "$tmp"; echo "    (call failed for $task_id/$arm)"; }
+    if ( cd /tmp && run_timed env HOME=/tmp PI_CODING_AGENT_DIR="$ISO" PI_OFFLINE=1 pi "${args[@]}" </dev/null ) > "$events" 2>/dev/null &&
+       cargo run --quiet --locked --manifest-path "$HERE/../tools/Cargo.toml" -- normalize-pi "$events" > "$tmp" && mv -f "$tmp" "$out"; then
+      return 0
+    fi
   else
     # No tools, matching Pi's --no-tools (#37). Without this the model tried
     # Write/Bash, was denied, then re-emitted the code: answers counted twice.
@@ -144,10 +144,13 @@ run_cell() {
     local args=(-p "$prompt" --model "$MODEL" --output-format json --tools "" --strict-mcp-config)
     [ "$arm" != "vanilla" ] && args+=(--append-system-prompt-file "$ISO/${arm}.txt")
     # </dev/null is critical: otherwise the CLI consumes the task heredoc.
-    ( cd /tmp && run_timed env HOME=/tmp CLAUDE_CONFIG_DIR="$ISO" claude "${args[@]}" </dev/null ) > "$tmp" 2>/dev/null \
-      && mv -f "$tmp" "$out" \
-      || { rm -f "$tmp"; echo "    (call failed for $task_id/$arm)"; }
+    if ( cd /tmp && run_timed env HOME=/tmp CLAUDE_CONFIG_DIR="$ISO" claude "${args[@]}" </dev/null ) > "$tmp" 2>/dev/null &&
+       mv -f "$tmp" "$out"; then
+      return 0
+    fi
   fi
+  rm -f "$tmp"
+  echo "    (call failed for $task_id/$arm)"
 }
 
 echo "harness: $HARNESS"

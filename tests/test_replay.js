@@ -1,20 +1,24 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const REPLAY = path.join(__dirname, '..', 'benchmarks', 'replay-compress.js');
+
+isolateWorkingDirectory();
 
 function output(lines) {
   return Array.from({ length: lines }, (_, i) => `line ${i} ${'x'.repeat(80)}`).join('\n');
 }
 
 test('Pi replay reads toolResult messages and reports marginal post-truncation savings', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-pi-replay-'));
+  const dir = path.resolve('sessions');
+  fs.mkdirSync('sessions');
   const entries = [
     { type: 'session', version: 3, id: 'session', cwd: '/tmp' },
     { type: 'message', id: '1', parentId: null, message: {
@@ -40,12 +44,11 @@ test('Pi replay reads toolResult messages and reports marginal post-truncation s
   );
   assert.match(result, /read\s+[\d,]+ chars/);
   assert.doesNotMatch(result, /saved:\s+0 chars/);
-
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('Claude replay never counts a failed tool call as compressible', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-claude-replay-'));
+  const dir = path.resolve('sessions');
+  fs.mkdirSync('sessions');
   const use = (id) => ({ message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: {} }] } });
   const result = (id, isError) => ({ message: { role: 'user', content: [
     { type: 'tool_result', tool_use_id: id, is_error: isError, content: output(500) },
@@ -57,12 +60,11 @@ test('Claude replay never counts a failed tool call as compressible', () => {
   assert.match(out, /tool_results scanned:\s+2/);
   assert.match(out, /scrubbed\/elided outputs:\s+1 /);
   assert.match(out, /big failed outputs, unreachable: 1 /);
-
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('Claude replay reports per-tool compression savings', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-claude-breakdown-'));
+  const dir = path.resolve('sessions');
+  fs.mkdirSync('sessions');
 
   const use = (id, name) => ({
     message: {
@@ -86,19 +88,20 @@ test('Claude replay reports per-tool compression savings', () => {
   fs.writeFileSync(path.join(dir, 'session.jsonl'), [
     use('bash-1', 'Bash'),
     result('bash-1'),
+    use('bash-2', 'Bash'),
+    result('bash-2'),
     use('grep-1', 'Grep'),
     result('grep-1'),
-  ].map(JSON.stringify).join('\n'));
+  ].map(message => JSON.stringify(message)).join('\n'));
 
   const out = execFileSync(
     process.execPath,
     [REPLAY, 'claude', dir],
-    { encoding: 'utf8' }
+    { encoding: 'utf8', env: { ...process.env, CHISLE_COMPRESS_DEDUP: '1' } }
   );
 
   assert.match(out, /per-tool breakdown \(incl\. dedup\):/);
-  assert.match(out, /Bash\s+\d+ outputs\s+[\d,]+ → [\d,]+ chars\s+saved [\d,]+ chars/);
+  assert.match(out, /deduped repeat outputs:\s+1 /);
+  assert.match(out, /Bash\s+2 outputs\s+[\d,]+ → [\d,]+ chars\s+saved [\d,]+ chars/);
   assert.match(out, /Grep\s+\d+ outputs\s+[\d,]+ → [\d,]+ chars\s+saved [\d,]+ chars/);
-
-  fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, AbortSignal, fetch, module, process, require -- Node.js runtime */
 // chisle — SessionStart hook
 //
 // 1. Writes flag at $CLAUDE_CONFIG_DIR/.chisle-active
@@ -9,7 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getDefaultMode, getClaudeDir, safeWriteFlag, legacySetting, resolveSections, filterSections } = require('./chisle-config');
+const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, readSettingsText, legacySetting, resolveSections, filterSections } = require('./chisle-config');
 
 // ── Update-notice helpers (pure — tested directly) ─────────────────────────
 // Minor/patch releases stay quiet: a nudge per major is signal, more is spam.
@@ -24,6 +25,7 @@ function majorOf(v) {
 function majorUpdateNotice(installed, latest) {
   const i = majorOf(installed), l = majorOf(latest);
   if (i == null || l == null || l <= i) return null;
+  if (typeof latest !== 'string' || latest.length > 128 || /[^0-9A-Za-z.+-]/.test(latest)) return null;
   return '\n\nCHISLE UPDATE AVAILABLE: v' + latest + ' (major; you run v' + installed + '). ' +
     'Mention this to the user once: update with `claude plugin update chisle@chisle` or `npx chisle`.';
 }
@@ -32,27 +34,21 @@ function installedVersion() {
   try {
     return JSON.parse(fs.readFileSync(
       path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version;
-  } catch (e) { return null; } // standalone-hooks install → no manifest → skip
+  } catch { return null; } // standalone-hooks install → no manifest → skip
 }
 
 // Registry lookup, cached on disk. Network capped at 1.5s inside the 5s hook budget.
 async function latestVersion(cachePath) {
+  const cached = readJsonFile(cachePath, 1024);
+  if (cached && Date.now() - cached.checkedAt < UPDATE_CACHE_MS) return cached.latest;
   try {
-    const c = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    if (c && Date.now() - c.checkedAt < UPDATE_CACHE_MS) return c.latest;
-  } catch (e) {}
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 1500);
-    const res = await fetch('https://registry.npmjs.org/chisle/latest', { signal: ctrl.signal });
-    clearTimeout(t);
+    const res = await fetch('https://registry.npmjs.org/chisle/latest', { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return null;
     const latest = (await res.json()).version;
-    try {
-      fs.writeFileSync(cachePath, JSON.stringify({ checkedAt: Date.now(), latest }), { mode: 0o600 });
-    } catch (e) {}
+    if (typeof latest !== 'string' || latest.length > 128) return null;
+    safeWriteFlag(cachePath, JSON.stringify({ checkedAt: Date.now(), latest }));
     return latest;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 // SessionStart fires on startup, resume, clear and compact. Only a genuinely
@@ -63,6 +59,24 @@ async function latestVersion(cachePath) {
 // the user actually asked for. Measured and reported by @enc0ded (#2).
 const FULL_INJECT_SOURCES = new Set(['startup']);
 
+function statuslineNotice(settingsPath) {
+  try {
+    const raw = readSettingsText(settingsPath);
+    if (raw === null || JSON.parse(raw.replace(/^\uFEFF/, '')).statusLine) return '';
+  } catch (error) {
+    // A missing file needs setup. Leave unreadable or malformed settings alone.
+    if (error.code !== 'ENOENT') return '';
+  }
+  const scriptPath = path.join(__dirname, 'chisle-statusline.sh');
+  const command = `bash "${scriptPath}"`;
+  const snippet = '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
+  return '\n\n' +
+    'STATUSLINE SETUP NEEDED: The chisle plugin includes a statusline badge ' +
+    '([CHISLE]) with token savings. It is not configured yet. ' +
+    'To enable, add this to ' + settingsPath + ': ' + snippet + ' ' +
+    'Proactively offer to set this up for the user on first interaction.';
+}
+
 // ── Hook body ───────────────────────────────────────────────────────────────
 function run(source) {
   const claudeDir = getClaudeDir();
@@ -72,7 +86,8 @@ function run(source) {
   const mode = getDefaultMode();
 
   if (mode === 'off') {
-    try { fs.unlinkSync(flagPath); } catch (e) {}
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The fixed .chisle-active entry is unlinked without following its target.
+    try { fs.unlinkSync(flagPath); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     process.stdout.write('OK');
     process.exit(0);
   }
@@ -98,7 +113,7 @@ function run(source) {
     skillContent = fs.readFileSync(
       path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'
     );
-  } catch (e) {}
+  } catch {}
 
   // Yields the prose section to an active Claude Code output style, which
   // governs the same thing and would otherwise contradict it (#15/#17).
@@ -123,28 +138,7 @@ function run(source) {
     output = 'CHISLE ACTIVE\n\n' + filterSections(fallbackBody, sections, ['Prose'], ['Code']);
   }
 
-  // 3. Detect missing statusline config
-  try {
-    let hasStatusline = false;
-    if (fs.existsSync(settingsPath)) {
-      const raw = fs.readFileSync(settingsPath, 'utf8').replace(/^﻿/, '');
-      const settings = JSON.parse(raw);
-      if (settings.statusLine) hasStatusline = true;
-    }
-
-    if (!hasStatusline) {
-      const scriptPath = path.join(__dirname, 'chisle-statusline.sh');
-      const command = `bash "${scriptPath}"`;
-      const statusLineSnippet =
-        '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
-      output += '\n\n' +
-        'STATUSLINE SETUP NEEDED: The chisle plugin includes a statusline badge ' +
-        '([CHISLE]) with token savings. It is not configured yet. ' +
-        'To enable, add this to ' + settingsPath + ': ' +
-        statusLineSnippet + ' ' +
-        'Proactively offer to set this up for the user on first interaction.';
-    }
-  } catch (e) {}
+  output += statuslineNotice(settingsPath);
 
   // 3b. One-time courtesy for the 3.0.0 upgrade: a lite/full/ultra setting is
   // no longer meaningful. Chisle still runs (the value falls through to the
@@ -168,7 +162,7 @@ function run(source) {
           if (notice) output += notice;
         }
       }
-    } catch (e) {}
+    } catch {}
     process.stdout.write(output);
   })();
 }
@@ -182,9 +176,9 @@ function main() {
   process.stdin.on('end', () => {
     let source = 'startup';
     try {
-      const parsed = JSON.parse(input.replace(/^﻿/, ''));
+      const parsed = JSON.parse(input.replace(/^\uFEFF/, ''));
       if (parsed && typeof parsed.source === 'string') source = parsed.source;
-    } catch (e) {}
+    } catch {}
     run(source);
   });
   // stdin never opened (manual run): behave like a fresh session.
@@ -193,4 +187,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { majorOf, majorUpdateNotice };
+module.exports = { majorOf, majorUpdateNotice, latestVersion };
