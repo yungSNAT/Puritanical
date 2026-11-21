@@ -303,11 +303,20 @@ function printSummary({ say, c, results }) {
   say('');
 }
 
+function refreshMcpProxy({ note, warn }) {
+  try {
+    const dir = MCP.refreshProxy();
+    if (dir) note(`  MCP proxy refreshed in ${dir}`);
+  } catch (e) { warn(`  MCP proxy refresh failed: ${e.message}`); }
+}
+
 function install(ctx) {
   const { say, opts, results, c } = ctx;
   say(c.orange(opts.update ? '╭─ Chisle updater ─╮' : '╭─ Chisle installer ─╮'));
   say(c.dim(opts.dryRun ? '  (dry run, nothing will change)' : '  maximum signal, minimum noise'));
   say('');
+
+  if (!opts.dryRun) refreshMcpProxy(ctx);
 
   let targets = PROVIDERS.filter(p => opts.only.length ? opts.only.includes(p.id) : providerDetected(p));
   if (opts.update) targets = targets.filter(p => installedFor(p, opts));

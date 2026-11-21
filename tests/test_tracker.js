@@ -185,6 +185,19 @@ test('resume nudge: big context after an expired cache warns the user', () => {
   assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
 });
 
+test('resume nudge: silent when the transcript has no assistant usage', () => {
+  fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
+  fs.writeFileSync('session.jsonl', JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
+  const out = JSON.parse(execFileSync(process.execPath, [TRACKER], {
+    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve('session.jsonl') }),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: process.cwd(), CHISLE_DEFAULT_MODE: 'on' },
+    encoding: 'utf8',
+    timeout: 5000,
+  }));
+  assert.equal(out.systemMessage, undefined);
+  assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+});
+
 test('resume nudge: silent while the cache is warm or the context is small', () => {
   assert.equal(runWithTranscript(20, 480000).systemMessage, undefined);
   assert.equal(runWithTranscript(180, 60000).systemMessage, undefined);

@@ -4,7 +4,6 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const Module = require('node:module');
 const { pathToFileURL } = require('node:url');
 const { spawnSync } = require('node:child_process');
@@ -197,11 +196,11 @@ test('OpenCode plugin falls back to its config root when config has no state acc
 });
 
 test('OpenCode v2 setup rethrows non-module loading failures', () => {
-  const localHookDir = under(path.dirname(OPENCODE_SETUP), 'chisle-hooks') + path.sep;
   const originalLoad = Module._load;
 
   Module._load = function loadWithDeniedHooks(request, parent, isMain) {
-    if (typeof request === 'string' && request.startsWith(localHookDir)) {
+    if (parent && parent.filename === OPENCODE_SETUP
+      && typeof request === 'string' && request.startsWith('./chisle-hooks/')) {
       const error = new Error('local hook access denied');
       error.code = 'EACCES';
       throw error;
@@ -243,11 +242,11 @@ test('OpenCode v2 setup falls back after a falsy load error and safely handles e
   process.env.CHISLE_COMPRESS_TOOLS = 'shell';
   delete process.env.CHISLE_COMPRESS;
 
-  const localHookDir = under(path.dirname(OPENCODE_SETUP), 'chisle-hooks') + path.sep;
   let setup;
 
   Module._load = function loadWithFalsyLocalFailure(request, parent, isMain) {
-    if (typeof request === 'string' && request.startsWith(localHookDir)) throw null;
+    if (parent && parent.filename === OPENCODE_SETUP
+      && typeof request === 'string' && request.startsWith('./chisle-hooks/')) throw null;
     return originalLoad.call(this, request, parent, isMain);
   };
 

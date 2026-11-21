@@ -108,9 +108,7 @@ function writeAtomically(p, text, { mode = 0o600, noReplace = false } = {}) {
     } finally {
       fs.closeSync(fd);
     }
-    // Publishing a complete backup with a hard link preserves the first copy.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Publishes the complete temporary file at the backup path without replacing an existing file.
-    if (noReplace) fs.linkSync(tmp, p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    if (noReplace) publishNew(tmp, p);
     else {
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- Atomically replaces the installer's target file with the complete temporary file.
       fs.renameSync(tmp, p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -119,6 +117,19 @@ function writeAtomically(p, text, { mode = 0o600, noReplace = false } = {}) {
   } finally {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes this process's own temporary file after a failed publish.
     if (!renamed) { try { fs.unlinkSync(tmp); } catch {} } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  }
+}
+
+// Publishes a complete backup without replacing an existing one: a hard link,
+// or an exclusive copy on filesystems without hard links (exFAT, some SMB or
+// 9p shares). EEXIST from either means the backup already exists.
+function publishNew(tmp, p) {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Publishes the complete temporary file at the backup path without replacing an existing file.
+    fs.linkSync(tmp, p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  } catch (error) {
+    if (error.code === 'EEXIST') throw error;
+    fs.copyFileSync(tmp, p, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   }
 }
 

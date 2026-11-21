@@ -46,6 +46,6 @@ if ($sitem -and -not ($sitem.Attributes -band [IO.FileAttributes]::ReparsePoint)
 }
 
 # One mode, one badge.
-# Console.Out.Write emits the same bytes as Write-Host -NoNewline: no newline,
+# [Console]::Out.Write writes the text unchanged to stdout, without a newline,
 # which the statusline needs.
 [Console]::Out.Write("$orange[CHISLE]$reset$suffix")

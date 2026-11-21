@@ -186,7 +186,8 @@ function uninstall(ctx, providers) {
 }
 
 function piSources(output) {
-  return String(output || '').split('\n').map(line => line.trim())
+  // `pi list` may print more after the source (`npm:chisle@3.0.0 (user)`).
+  return String(output || '').split('\n').map(line => line.trim().split(/\s+/)[0])
     .filter(line => /^npm:chisle(?:@|$)/i.test(line) || /^git:.*github\.com\/JayPokale\/Chisle(?:@|$)/i.test(line))
     // The source is passed to `pi remove` through cmd.exe on Windows: refuse
     // anything beyond package-spec characters.

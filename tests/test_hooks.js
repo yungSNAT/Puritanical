@@ -5,9 +5,11 @@
 
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+const {
+  absolutePath, exists, makeDir, readJson, readText, remove, under, writeText,
+} = require('./helpers/sandbox');
 const fs = require('fs');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
-const path = require('path');
 
 const { VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText, getDefaultMode } = require('../hooks/chisle-config');
 const { symlinkSkip } = require('./fixtures/symlinks');
@@ -16,7 +18,7 @@ isolateWorkingDirectory();
 
 beforeEach(t => {
   const previous = process.env.XDG_CONFIG_HOME;
-  process.env.XDG_CONFIG_HOME = path.resolve('test-config');
+  process.env.XDG_CONFIG_HOME = absolutePath('test-config');
   t.after(() => {
     if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = previous;
@@ -34,9 +36,9 @@ test('VALID_MODES contains on and off', () => {
 // ── safeWriteFlag / readFlag ─────────────────────────────────────────────────
 
 test('safeWriteFlag writes and readFlag reads back', () => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const flagPath = path.join(dir, '.chisle-active');
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const flagPath = under(dir, '.chisle-active');
   safeWriteFlag(flagPath, 'on');
   assert.equal(readFlag(flagPath), 'on');
 });
@@ -46,77 +48,79 @@ test('readFlag returns null for missing file', () => {
 });
 
 test('readFlag returns null for unknown mode', () => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const flagPath = path.join(dir, '.chisle-active');
-  fs.writeFileSync(flagPath, 'wenyan-ultra', { mode: 0o600 });
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const flagPath = under(dir, '.chisle-active');
+  writeText(flagPath, 'wenyan-ultra', { mode: 0o600 });
   assert.equal(readFlag(flagPath), null);
 });
 
 test('readFlag returns null for symlink', { skip: symlinkSkip }, () => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const flagPath = path.join(dir, '.chisle-active');
-  const target = path.join(dir, 'target');
-  fs.writeFileSync(target, 'on', { mode: 0o600 });
-  fs.symlinkSync(target, flagPath);
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const flagPath = under(dir, '.chisle-active');
+  const target = under(dir, 'target');
+  writeText(target, 'on', { mode: 0o600 });
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
+  fs.symlinkSync(target, flagPath); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   assert.equal(readFlag(flagPath), null);
 });
 
 test('readFlag returns null for oversized file', () => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const flagPath = path.join(dir, '.chisle-active');
-  fs.writeFileSync(flagPath, 'on' + 'x'.repeat(100), { mode: 0o600 });
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const flagPath = under(dir, '.chisle-active');
+  writeText(flagPath, 'on' + 'x'.repeat(100), { mode: 0o600 });
   assert.equal(readFlag(flagPath), null);
 });
 
 test('safeWriteFlag refuses to overwrite a symlink', { skip: symlinkSkip }, () => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const flagPath = path.join(dir, '.chisle-active');
-  const target = path.join(dir, 'target');
-  fs.writeFileSync(target, '', { mode: 0o600 });
-  fs.symlinkSync(target, flagPath);
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const flagPath = under(dir, '.chisle-active');
+  const target = under(dir, 'target');
+  writeText(target, '', { mode: 0o600 });
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
+  fs.symlinkSync(target, flagPath); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   safeWriteFlag(flagPath, 'on'); // must not throw, must not overwrite
-  assert.equal(fs.readFileSync(target, 'utf8'), ''); // target untouched
+  assert.equal(readText(target), ''); // target untouched
 });
 
 test('cached JSON accepts the byte limit and rejects larger files and directories', () => {
-  fs.writeFileSync('cache.json', '{"v":1}');
+  writeText('cache.json', '{"v":1}');
   assert.deepEqual(readJsonFile('cache.json', 7), { v: 1 });
   assert.equal(readJsonFile('cache.json', 6), null);
   assert.equal(readJsonFile('.', 1024), null);
 });
 
 test('cached JSON refuses symlinks', { skip: symlinkSkip }, () => {
-  fs.writeFileSync('cache.json', '{"v":1}');
+  writeText('cache.json', '{"v":1}');
   fs.symlinkSync('cache.json', 'linked-cache.json');
   assert.equal(readJsonFile('linked-cache.json'), null);
 });
 
 test('settings reads skip oversized files and directories', () => {
-  fs.writeFileSync('oversize.json', ' '.repeat(4 * 1024 * 1024 + 1));
+  writeText('oversize.json', ' '.repeat(4 * 1024 * 1024 + 1));
   assert.equal(readSettingsText('oversize.json'), null);
   assert.equal(readSettingsText('.'), null);
 });
 
 test('settings reads accept user-managed dotfile links', { skip: symlinkSkip }, () => {
-  fs.writeFileSync('dotfile.json', '{"statusLine":true}');
+  writeText('dotfile.json', '{"statusLine":true}');
   fs.symlinkSync('dotfile.json', 'settings.json');
   assert.equal(readSettingsText('settings.json'), '{"statusLine":true}');
 });
 
 test('flag writes accept a configured directory link to a user-owned directory', { skip: symlinkSkip }, () => {
-  fs.mkdirSync('state');
+  makeDir('state');
   fs.symlinkSync('state', 'linked-state', 'dir');
-  const flag = path.resolve('linked-state', '.chisle-active');
+  const flag = absolutePath('linked-state', '.chisle-active');
   // Windows accepts linked state only under the configured home.
   const previous = process.env.USERPROFILE;
   try {
     if (process.platform === 'win32') process.env.USERPROFILE = process.cwd();
     safeWriteFlag(flag, 'on');
-    assert.equal(fs.readFileSync('state/.chisle-active', 'utf8'), 'on');
+    assert.equal(readText('state/.chisle-active'), 'on');
   } finally {
     if (previous === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = previous;
@@ -124,8 +128,8 @@ test('flag writes accept a configured directory link to a user-owned directory',
 });
 
 test('systems without a user ID limit linked state directories to the home', { skip: symlinkSkip }, () => {
-  fs.mkdirSync('home');
-  fs.mkdirSync('outside');
+  makeDir('home');
+  makeDir('outside');
   fs.symlinkSync('home', 'in-home', 'dir');
   fs.symlinkSync('outside', 'out-of-home', 'dir');
   // Exercise the platform fallback in a child, without changing the test runner.
@@ -137,10 +141,10 @@ test('systems without a user ID limit linked state directories to the home', { s
     'safeWriteFlag("out-of-home/.chisle-active", "off");',
   ].join('\n');
   execFileSync(process.execPath, ['-e', script, config], {
-    env: { ...process.env, HOME: path.resolve('home'), USERPROFILE: path.resolve('home') },
+    env: { ...process.env, HOME: absolutePath('home'), USERPROFILE: absolutePath('home') },
   });
-  assert.equal(fs.readFileSync('home/.chisle-active', 'utf8'), 'on');
-  assert.equal(fs.existsSync('outside/.chisle-active'), false);
+  assert.equal(readText('home/.chisle-active'), 'on');
+  assert.equal(exists('outside/.chisle-active'), false);
 });
 
 // ── getDefaultMode ───────────────────────────────────────────────────────────
@@ -174,9 +178,9 @@ test('getDefaultMode ignores invalid CHISLE_DEFAULT_MODE', () => {
 const { majorOf, majorUpdateNotice, latestVersion } = require('../hooks/chisle-activate');
 
 test('update lookup refreshes stale cache and reuses a fresh result offline', async (t) => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const cache = path.join(dir, 'update.json');
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const cache = under(dir, 'update.json');
   safeWriteFlag(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true, json: async () => ({ version: '4.0.0' }),
@@ -188,9 +192,9 @@ test('update lookup refreshes stale cache and reuses a fresh result offline', as
 });
 
 test('update lookup bounds the response body and preserves cache on failure', async (t) => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const cache = path.join(dir, 'update.json');
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const cache = under(dir, 'update.json');
   const stale = { checkedAt: 0, latest: '1.0.0' };
   safeWriteFlag(cache, JSON.stringify(stale));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false }));
@@ -240,11 +244,11 @@ test('requiring chisle-activate has no side effects', () => {
 // most of what the compressor saved.
 
 const { execFileSync } = require('child_process');
-const ACTIVATE = path.join(__dirname, '..', 'hooks', 'chisle-activate.js');
+const ACTIVATE = under(__dirname, '..', 'hooks', 'chisle-activate.js');
 
 function activate(stdin, extraEnv = {}) {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
+  const dir = absolutePath('hook');
+  makeDir('hook');
   try {
     return execFileSync(process.execPath, [ACTIVATE], {
       input: stdin,
@@ -253,7 +257,7 @@ function activate(stdin, extraEnv = {}) {
       timeout: 5000,
     });
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 }
 
@@ -304,9 +308,9 @@ test('every manifest carries the same version', () => {
 });
 
 test('the changelog documents the shipped version', () => {
-  const root = path.join(__dirname, '..');
-  const v = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
-  const log = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+  const root = under(__dirname, '..');
+  const v = readJson(under(root, 'package.json')).version;
+  const log = readText(under(root, 'CHANGELOG.md'));
   assert.ok(log.includes(`## [${v}]`), `CHANGELOG.md has no section for ${v}`);
 });
 
@@ -346,15 +350,12 @@ test('a current setting reports no legacy value', () => {
 const { getSections, filterSections, PROSE_HEADINGS, CODE_HEADINGS } = require('../hooks/chisle-config');
 
 function withSectionsConfig(sectionsValue, fn) {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const chisleDir = path.join(dir, 'chisle');
-  fs.mkdirSync(chisleDir, { recursive: true });
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const chisleDir = under(dir, 'chisle');
+  makeDir(chisleDir, { recursive: true });
   if (sectionsValue !== undefined) {
-    fs.writeFileSync(
-      path.join(chisleDir, 'config.json'),
-      JSON.stringify({ defaultMode: 'on', sections: sectionsValue })
-    );
+    writeText(under(chisleDir, 'config.json'), JSON.stringify({ defaultMode: 'on', sections: sectionsValue }));
   }
   const saved = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = dir;
@@ -363,7 +364,7 @@ function withSectionsConfig(sectionsValue, fn) {
   } finally {
     if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = saved;
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 }
 
@@ -400,11 +401,11 @@ test('getSections: malformed sections values fall back to enabled, never throw',
 });
 
 test('getSections: malformed config.json (invalid JSON) falls back to enabled, never throws', () => {
-  const dir = path.resolve('hook');
-  fs.mkdirSync('hook');
-  const chisleDir = path.join(dir, 'chisle');
-  fs.mkdirSync(chisleDir, { recursive: true });
-  fs.writeFileSync(path.join(chisleDir, 'config.json'), '{ not json');
+  const dir = absolutePath('hook');
+  makeDir('hook');
+  const chisleDir = under(dir, 'chisle');
+  makeDir(chisleDir, { recursive: true });
+  writeText(under(chisleDir, 'config.json'), '{ not json');
   const saved = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = dir;
   try {
@@ -412,13 +413,11 @@ test('getSections: malformed config.json (invalid JSON) falls back to enabled, n
   } finally {
     if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = saved;
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 });
 
-const SKILL_BODY = fs.readFileSync(
-  path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'
-).replace(/^---[\s\S]*?---\s*/, '');
+const SKILL_BODY = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md')).replace(/^---[\s\S]*?---\s*/, '');
 const ALWAYS_ON_HEADINGS = [
   'Persistence', 'Thinking Is Billed Too', 'Auto-Clarity', 'When NOT to be lazy', 'Boundaries',
 ];
@@ -456,62 +455,62 @@ test('filterSections: malformed sections values fall back to enabled (identity)'
 // ── SessionStart end-to-end: sections config wired into the emitted ruleset ──
 
 test('activate: no config file → full ruleset, all headings present (default unchanged)', () => {
-  const dir = path.resolve('xdg');
-  fs.mkdirSync('xdg');
+  const dir = absolutePath('xdg');
+  makeDir('xdg');
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) {
       assert.ok(out.includes(`## ${h}`), `missing ${h}`);
     }
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 });
 
 test('activate: config file present but no sections key → full ruleset (default unchanged)', () => {
-  const dir = path.resolve('xdg');
-  fs.mkdirSync('xdg');
-  const chisleDir = path.join(dir, 'chisle');
-  fs.mkdirSync(chisleDir, { recursive: true });
-  fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ defaultMode: 'on' }));
+  const dir = absolutePath('xdg');
+  makeDir('xdg');
+  const chisleDir = under(dir, 'chisle');
+  makeDir(chisleDir, { recursive: true });
+  writeText(under(chisleDir, 'config.json'), JSON.stringify({ defaultMode: 'on' }));
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) {
       assert.ok(out.includes(`## ${h}`), `missing ${h}`);
     }
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 });
 
 test('activate: sections.prose false → emitted ruleset drops prose headings only', () => {
-  const dir = path.resolve('xdg');
-  fs.mkdirSync('xdg');
-  const chisleDir = path.join(dir, 'chisle');
-  fs.mkdirSync(chisleDir, { recursive: true });
-  fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ sections: { prose: false } }));
+  const dir = absolutePath('xdg');
+  makeDir('xdg');
+  const chisleDir = under(dir, 'chisle');
+  makeDir(chisleDir, { recursive: true });
+  writeText(under(chisleDir, 'config.json'), JSON.stringify({ sections: { prose: false } }));
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of PROSE_HEADINGS) assert.ok(!out.includes(`## ${h}`), `still has ${h}`);
     for (const h of [...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) assert.ok(out.includes(`## ${h}`), `missing ${h}`);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 });
 
 test('activate: malformed sections value falls back to enabled, does not throw', () => {
-  const dir = path.resolve('xdg');
-  fs.mkdirSync('xdg');
-  const chisleDir = path.join(dir, 'chisle');
-  fs.mkdirSync(chisleDir, { recursive: true });
-  fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ sections: 'nope' }));
+  const dir = absolutePath('xdg');
+  makeDir('xdg');
+  const chisleDir = under(dir, 'chisle');
+  makeDir(chisleDir, { recursive: true });
+  writeText(under(chisleDir, 'config.json'), JSON.stringify({ sections: 'nope' }));
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) {
       assert.ok(out.includes(`## ${h}`), `missing ${h}`);
     }
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 });
 
@@ -522,8 +521,7 @@ test('activate: malformed sections value falls back to enabled, does not throw',
 // it — the section just keeps shipping, with no error and no failing assertion,
 // because every other test checks "is it absent" against the same stale string.
 test('every PROSE/CODE heading constant still exists in SKILL.md', () => {
-  const md = fs.readFileSync(
-    path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8');
+  const md = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md'));
   const present = [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
   for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS]) {
     assert.ok(present.includes(h),
@@ -539,8 +537,7 @@ test('every SKILL.md heading is classified: prose, code, or deliberately always-
     'Persistence', 'Thinking Is Billed Too', 'Auto-Clarity',
     'When NOT to be lazy', 'Boundaries',
   ];
-  const md = fs.readFileSync(
-    path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8');
+  const md = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md'));
   const classified = new Set([...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON]);
   for (const m of md.matchAll(/^## (.+)$/gm)) {
     const h = m[1].trim();
@@ -552,8 +549,7 @@ test('every SKILL.md heading is classified: prose, code, or deliberately always-
 // filterSections splits on /^## /m, so a "## " line inside a fenced code block
 // would cut the fence in half and emit broken markdown into the model's context.
 test('no SKILL.md heading-like line hides inside a fenced code block', () => {
-  const md = fs.readFileSync(
-    path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8');
+  const md = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md'));
   let inFence = false;
   md.split('\n').forEach((line, i) => {
     if (line.trim().startsWith('```')) { inFence = !inFence; return; }
@@ -576,16 +572,16 @@ function settingsText(value) {
 }
 
 function styleFixture() {
-  const root = path.resolve('style');
-  fs.mkdirSync('style');
-  fs.mkdirSync(path.join(root, 'proj', '.claude'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'home', '.claude'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'cfg', 'chisle'), { recursive: true });
+  const root = absolutePath('style');
+  makeDir('style');
+  makeDir(under(root, 'proj', '.claude'), { recursive: true });
+  makeDir(under(root, 'home', '.claude'), { recursive: true });
+  makeDir(under(root, 'cfg', 'chisle'), { recursive: true });
   return {
     root,
-    cwd: path.join(root, 'proj'),
-    claudeDir: path.join(root, 'home', '.claude'),
-    cfg: path.join(root, 'cfg'),
+    cwd: under(root, 'proj'),
+    claudeDir: under(root, 'home', '.claude'),
+    cfg: under(root, 'cfg'),
   };
 }
 
@@ -594,40 +590,40 @@ test('getActiveOutputStyle honours Claude Code precedence: local > project > use
   try {
     const at = () => getActiveOutputStyle({ cwd: f.cwd, claudeDir: f.claudeDir });
     assert.equal(at(), null, 'nothing set');
-    fs.writeFileSync('style/home/.claude/settings.json', settingsText({ outputStyle: 'Explanatory' }));
+    writeText('style/home/.claude/settings.json', settingsText({ outputStyle: 'Explanatory' }));
     assert.equal(at(), 'Explanatory');
-    fs.writeFileSync('style/proj/.claude/settings.json', settingsText({ outputStyle: 'Learning' }));
+    writeText('style/proj/.claude/settings.json', settingsText({ outputStyle: 'Learning' }));
     assert.equal(at(), 'Learning', 'project must beat user');
-    fs.writeFileSync('style/proj/.claude/settings.local.json', settingsText({ outputStyle: 'concise' }));
+    writeText('style/proj/.claude/settings.local.json', settingsText({ outputStyle: 'concise' }));
     assert.equal(at(), 'concise', 'local must beat project — /output-style writes here');
-  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+  } finally { remove(f.root, { recursive: true, force: true }); }
 });
 
 test('getActiveOutputStyle treats the built-in "default" as no style', () => {
   const f = styleFixture();
   try {
     for (const v of ['default', 'Default', 'DEFAULT']) {
-      fs.writeFileSync('style/proj/.claude/settings.local.json', settingsText({ outputStyle: v }));
+      writeText('style/proj/.claude/settings.local.json', settingsText({ outputStyle: v }));
       assert.equal(getActiveOutputStyle({ cwd: f.cwd, claudeDir: f.claudeDir }), null, v);
     }
-  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+  } finally { remove(f.root, { recursive: true, force: true }); }
 });
 
 test('getActiveOutputStyle falls through junk without throwing', () => {
   const f = styleFixture();
   try {
     const at = () => getActiveOutputStyle({ cwd: f.cwd, claudeDir: f.claudeDir });
-    fs.writeFileSync('style/home/.claude/settings.json', settingsText({ outputStyle: 'Explanatory' }));
+    writeText('style/home/.claude/settings.json', settingsText({ outputStyle: 'Explanatory' }));
     for (const junk of ['{ not json', JSON.stringify({ outputStyle: '   ' }),
                         JSON.stringify({ outputStyle: 42 }), JSON.stringify({ outputStyle: null }),
                         JSON.stringify([]), '']) {
-      fs.writeFileSync('style/proj/.claude/settings.local.json', settingsText(junk));
+      writeText('style/proj/.claude/settings.local.json', settingsText(junk));
       assert.equal(at(), 'Explanatory', `should fall through: ${junk.slice(0, 24)}`);
     }
     // JSONC: Claude parses strict JSON but users leave comments in settings.
-    fs.writeFileSync('style/proj/.claude/settings.local.json', settingsText('{ /* mine */ "outputStyle": "Proactive" } '));
+    writeText('style/proj/.claude/settings.local.json', settingsText('{ /* mine */ "outputStyle": "Proactive" } '));
     assert.equal(at(), 'Proactive');
-  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+  } finally { remove(f.root, { recursive: true, force: true }); }
 });
 
 test('resolveSections: an active style suppresses prose but never code', () => {
@@ -637,12 +633,12 @@ test('resolveSections: an active style suppresses prose but never code', () => {
   try {
     const r = () => resolveSections({ cwd: f.cwd, claudeDir: f.claudeDir });
     assert.deepEqual(r(), { prose: true, code: true, outputStyle: null }, 'no style = untouched');
-    fs.writeFileSync('style/proj/.claude/settings.local.json', settingsText({ outputStyle: 'Explanatory' }));
+    writeText('style/proj/.claude/settings.local.json', settingsText({ outputStyle: 'Explanatory' }));
     assert.deepEqual(r(), { prose: false, code: true, outputStyle: 'Explanatory' });
   } finally {
     if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = saved;
-    fs.rmSync(f.root, { recursive: true, force: true });
+    remove(f.root, { recursive: true, force: true });
   }
 });
 
@@ -651,26 +647,26 @@ test('resolveSections: an explicit sections.prose always beats detection', () =>
   const saved = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = f.cfg;
   try {
-    fs.writeFileSync('style/proj/.claude/settings.local.json', settingsText({ outputStyle: 'Explanatory' }));
+    writeText('style/proj/.claude/settings.local.json', settingsText({ outputStyle: 'Explanatory' }));
     const r = () => resolveSections({ cwd: f.cwd, claudeDir: f.claudeDir });
 
     // The important one: a user who asked for prose rules keeps them.
-    fs.writeFileSync('style/cfg/chisle/config.json', settingsText({ sections: { prose: true } }));
+    writeText('style/cfg/chisle/config.json', settingsText({ sections: { prose: true } }));
     assert.equal(r().prose, true, 'explicit true must survive an active style');
 
-    fs.writeFileSync('style/cfg/chisle/config.json', settingsText({ sections: { prose: false } }));
+    writeText('style/cfg/chisle/config.json', settingsText({ sections: { prose: false } }));
     assert.equal(r().prose, false);
 
     // Only `code` set: prose is still unset, so detection applies.
-    fs.writeFileSync('style/cfg/chisle/config.json', settingsText({ sections: { code: false } }));
+    writeText('style/cfg/chisle/config.json', settingsText({ sections: { code: false } }));
     assert.deepEqual(r(), { prose: false, code: false, outputStyle: 'Explanatory' });
 
     // Non-boolean is not "explicit" — it falls back and detection applies.
-    fs.writeFileSync('style/cfg/chisle/config.json', settingsText({ sections: { prose: 'yes' } }));
+    writeText('style/cfg/chisle/config.json', settingsText({ sections: { prose: 'yes' } }));
     assert.equal(r().prose, false);
   } finally {
     if (saved === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = saved;
-    fs.rmSync(f.root, { recursive: true, force: true });
+    remove(f.root, { recursive: true, force: true });
   }
 });

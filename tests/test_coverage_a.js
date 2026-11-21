@@ -7,11 +7,12 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const Module = require('module');
 const {
-  clearModule, exists, listDir, makeDir, readJson, readText,
+  clearModule, exists, loadFresh, listDir, makeDir, readJson, readText,
   repoPath, tempRoot, under, writeJson, writeText,
 } = require('./helpers/sandbox');
 
 const CLI = repoPath('bin', 'install.js');
+const ENV_PATH = repoPath('bin', 'lib', 'env.js');
 const SETTINGS = require('../bin/lib/settings');
 const TOOLS = require('../bin/lib/tools');
 
@@ -81,18 +82,8 @@ function withEnv(changes, fn) {
   }
 }
 
-function loadInstallerInternals(platform) {
-  clearModule(CLI);
-  let source = readText(CLI).replace(/^#!/, '//');
-  const replacement = [
-    'module.exports = {',
-    '  quoteWin, claudeDir, installedFor, installClaude,',
-    '  setInstallClaudeHooks: (fn) => { installClaudeHooks = fn; },',
-    '};',
-  ].join(' ');
-  assert.match(source, /\nmain\(\);\s*$/);
-  source = source.replace(/\nmain\(\);\s*$/, `\n${replacement}\n`);
-
+// env.js reads process.platform once, at load.
+function loadEnvFor(platform) {
   const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', {
     configurable: true,
@@ -100,25 +91,34 @@ function loadInstallerInternals(platform) {
     value: platform,
   });
   try {
-    const mod = new Module(CLI, module);
-    mod.filename = CLI;
-    mod.paths = Module._nodeModulePaths(path.dirname(CLI));
-    mod._compile(source, CLI);
-    return mod.exports;
+    return loadFresh(ENV_PATH);
   } finally {
     Object.defineProperty(process, 'platform', descriptor);
+    clearModule(ENV_PATH);
   }
 }
 
-test('Windows command quoting quotes empty and spaced arguments while preserving plain arguments', () => {
-  const windowsInstaller = loadInstallerInternals('win32');
-  assert.equal(windowsInstaller.quoteWin(''), '""');
-  assert.equal(windowsInstaller.quoteWin('two words'), '"two words"');
-  assert.equal(windowsInstaller.quoteWin('a"b'), '"a\\"b"');
-  assert.equal(windowsInstaller.quoteWin('plain'), 'plain');
+function loadInstallerInternals() {
+  clearModule(CLI);
+  let source = readText(CLI).replace(/^#!/, '//');
+  assert.match(source, /\nmain\(\);\s*$/);
+  source = source.replace(/\nmain\(\);\s*$/, '\nmodule.exports = { installedFor };\n');
+  const mod = new Module(CLI, module);
+  mod.filename = CLI;
+  mod.paths = Module._nodeModulePaths(path.dirname(CLI));
+  mod._compile(source, CLI);
+  return mod.exports;
+}
 
-  const nonWindowsInstaller = loadInstallerInternals('linux');
-  assert.equal(nonWindowsInstaller.quoteWin('two words'), 'two words');
+test('Windows command quoting quotes empty and spaced arguments while preserving plain arguments', () => {
+  const windowsEnv = loadEnvFor('win32');
+  assert.equal(windowsEnv.quoteWin(''), '""');
+  assert.equal(windowsEnv.quoteWin('two words'), '"two words"');
+  assert.equal(windowsEnv.quoteWin('a"b'), '"a\\"b"');
+  assert.equal(windowsEnv.quoteWin('plain'), 'plain');
+
+  const nonWindowsEnv = loadEnvFor('linux');
+  assert.equal(nonWindowsEnv.quoteWin('two words'), 'two words');
 });
 
 test('default Claude directory uses the isolated home and foreign hooks are not treated as installed', (t) => {
@@ -135,7 +135,8 @@ test('default Claude directory uses the isolated home and foreign hooks are not 
     },
   });
 
-  const installer = loadInstallerInternals(process.platform);
+  const installer = loadInstallerInternals();
+  const claude = { id: 'claude' };
   withEnv({
     HOME: home,
     USERPROFILE: home,
@@ -144,62 +145,15 @@ test('default Claude directory uses the isolated home and foreign hooks are not 
     CLAUDE_CONFIG_DIR: undefined,
     PATH: emptyPath,
   }, () => {
-    assert.equal(installer.claudeDir({}), cfg);
-    assert.equal(installer.installedFor('claude', {}), false);
+    assert.equal(loadEnvFor(process.platform).claudeDir({}), cfg);
+    assert.equal(installer.installedFor(claude, {}), false);
     writeJson(settingsPath, {
       hooks: {
         SessionStart: [{ hooks: [{ type: 'command', command: 'node chisle-activate.js' }] }],
       },
     });
-    assert.equal(installer.installedFor('claude', {}), true);
+    assert.equal(installer.installedFor(claude, {}), true);
   });
-});
-
-test('Claude standalone skip result is recorded as skipped rather than installed or failed', (t) => {
-  const root = tempDir(t);
-  const home = under(root, 'home');
-  const emptyPath = under(root, 'empty-path');
-  makeDir(home);
-  makeDir(emptyPath);
-
-  const installer = loadInstallerInternals(process.platform);
-  installer.setInstallClaudeHooks(() => 'skip');
-
-  const results = { detected: 0, installed: [], skipped: [], failed: [] };
-  const notes = [];
-  const writes = [];
-  const originalWrite = process.stdout.write;
-  process.stdout.write = function capture(chunk) {
-    writes.push(String(chunk));
-    return true;
-  };
-
-  try {
-    withEnv({
-      HOME: home,
-      USERPROFILE: home,
-      XDG_CONFIG_HOME: under(home, 'xdg'),
-      CLAUDE_CONFIG_DIR: undefined,
-      PATH: emptyPath,
-    }, () => {
-      installer.installClaude({
-        opts: { force: false, dryRun: false, configDir: null },
-        results,
-        say: (s) => notes.push(s),
-        note: (s) => notes.push(s),
-        warn: (s) => notes.push(s),
-      });
-    });
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-
-  assert.equal(results.detected, 1);
-  assert.deepEqual(results.installed, []);
-  assert.deepEqual(results.failed, []);
-  assert.deepEqual(results.skipped, [['claude-hooks', 'already wired']]);
-  assert.ok(notes.some((line) => /CLI not on PATH/.test(line)));
-  assert.equal(writes.join(''), '\n');
 });
 
 function fakeClaude(t, logName, unixLines, windowsLines) {

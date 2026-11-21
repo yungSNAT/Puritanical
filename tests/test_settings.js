@@ -35,6 +35,15 @@ test('readSettings returns {} for missing, null for garbage', () => {
   assert.equal(S.readSettings('s.json'), null);
 });
 
+test('stripJsonComments keeps an unterminated string to the end of the input', () => {
+  assert.equal(S.stripJsonComments('{"a": "open // not a comment'), '{"a": "open // not a comment');
+});
+
+test('readSettings returns null for a path that is not a regular file', () => {
+  fs.mkdirSync('settings-dir.json');
+  assert.equal(S.readSettings('settings-dir.json'), null);
+});
+
 // ── addCommandHook idempotency ───────────────────────────────────────────────
 
 test('addCommandHook adds once, second call is a no-op', () => {

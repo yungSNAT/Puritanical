@@ -21,9 +21,14 @@ function repoPath(...parts) {
   return under(REPO_ROOT, ...parts);
 }
 
-function tempRoot(t, prefix) {
+// A new private directory under os.tmpdir(); the caller removes it.
+function makeTempDir(prefix) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  const root = fs.mkdtempSync(under(os.tmpdir(), prefix));
+  return fs.mkdtempSync(under(os.tmpdir(), prefix));
+}
+
+function tempRoot(t, prefix) {
+  const root = makeTempDir(prefix);
   t.after(() => remove(root, { recursive: true, force: true }));
   return root;
 }
@@ -120,6 +125,7 @@ module.exports = {
   under,
   absolutePath,
   repoPath,
+  makeTempDir,
   tempRoot,
   readText,
   writeText,

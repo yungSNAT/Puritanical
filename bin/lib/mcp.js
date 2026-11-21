@@ -242,6 +242,17 @@ function installProxy() {
   return path.join(dir, PROXY_FILE);
 }
 
+// Proxies copied by an older version can lack newer sources
+// (chisle-command-filters.js), so an install or update refreshes an existing
+// copy. Returns its folder, or null when no proxy is installed.
+function refreshProxy() {
+  const dir = proxyDir();
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The mcp-proxy folder inside the Chisle config directory.
+  if (!fs.existsSync(dir)) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  installProxy();
+  return dir;
+}
+
 function parse(argv) {
   const o = { action: argv[0], dryRun: false, only: [], files: [] };
   const args = argv.slice(1);
@@ -339,4 +350,4 @@ function main(argv) {
   catch (e) { process.stderr.write('error: ' + e.message + '\n'); process.exit(2); }
 }
 
-module.exports = { main, run, targets, isWrapped, isStdio, proxyDir };
+module.exports = { main, run, targets, isWrapped, isStdio, proxyDir, refreshProxy };

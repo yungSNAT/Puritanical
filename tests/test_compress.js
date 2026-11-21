@@ -5,6 +5,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const {
+  exists, listDir, makeTempDir, readText, remove, under, writeText,
+} = require('./helpers/sandbox');
 
 const {
   extractText, rebuildResponse, scrub, compress, transform, limitsFor, toolAllowed, processPayload, THRESHOLDS,
@@ -304,18 +307,16 @@ test('unknown shapes are skipped, never guessed', () => {
 // non-idempotent. These cover the escape hatch that replaced that.
 
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 function withSpillDir(fn) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-spill-test-'));
+  const dir = makeTempDir('chisle-spill-test-');
   const prev = process.env.CLAUDE_CONFIG_DIR;
   process.env.CLAUDE_CONFIG_DIR = dir;
   try { return fn(dir); }
   finally {
     if (prev === undefined) delete process.env.CLAUDE_CONFIG_DIR;
     else process.env.CLAUDE_CONFIG_DIR = prev;
-    fs.rmSync(dir, { recursive: true, force: true });
+    remove(dir, { recursive: true, force: true });
   }
 }
 
@@ -328,7 +329,7 @@ test('an elided output spills in full and the marker points at it', () => {
     const m = marker.match(/Full output: (\S+)/);
     assert.ok(m, `marker carries no path: ${marker}`);
 
-    const spilled = fs.readFileSync(m[1], 'utf8');
+    const spilled = readText(m[1]);
     assert.equal(spilled, text, 'spill is not the complete output');
     assert.ok(out.length < text.length, 'compression did not shrink');
 
@@ -336,7 +337,8 @@ test('an elided output spills in full and the marker points at it', () => {
     assert.ok(!out.includes('line 250 '), 'middle was not actually elided');
     assert.ok(spilled.includes('line 250 '), 'middle is not recoverable');
 
-    if (process.platform !== 'win32') assert.equal(fs.statSync(m[1]).mode & 0o777, 0o600, 'spill is not owner-only'); // NTFS has no POSIX mode bits
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Inspects a file this test created under os.tmpdir().
+    if (process.platform !== 'win32') assert.equal(fs.statSync(m[1]).mode & 0o777, 0o600, 'spill is not owner-only'); // NTFS has no POSIX mode bits // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   });
 });
 
@@ -344,7 +346,7 @@ test('spilling is off for callers that pass no tool name', () => {
   withSpillDir((dir) => {
     const out = transform(bigOutput(500), FULL);
     assert.doesNotMatch(out, /Full output:/);
-    assert.ok(!fs.existsSync(path.join(dir, 'chisle-spill')), 'replay path wrote spill files');
+    assert.ok(!exists(under(dir, 'chisle-spill')), 'replay path wrote spill files');
   });
 });
 
@@ -355,7 +357,7 @@ test('CHISLE_COMPRESS_SPILL=0 elides without the escape hatch', () => {
       const out = transform(bigOutput(500), FULL, 'Bash');
       assert.ok(out.length < bigOutput(500).length, 'still must compress');
       assert.doesNotMatch(out, /Full output:/);
-      assert.ok(!fs.existsSync(path.join(dir, 'chisle-spill')));
+      assert.ok(!exists(under(dir, 'chisle-spill')));
     } finally { delete process.env.CHISLE_COMPRESS_SPILL; }
   });
 });
@@ -363,7 +365,7 @@ test('CHISLE_COMPRESS_SPILL=0 elides without the escape hatch', () => {
 test('the spill directory stays bounded', () => {
   withSpillDir((dir) => {
     for (let i = 0; i < 55; i++) transform(bigOutput(500, `run${i}`), FULL, 'Bash');
-    const files = fs.readdirSync(path.join(dir, 'chisle-spill'));
+    const files = listDir(under(dir, 'chisle-spill'));
     assert.ok(files.length <= 41, `spill dir grew to ${files.length} files`);
   });
 });
@@ -371,7 +373,7 @@ test('the spill directory stays bounded', () => {
 test('a broken spill target still compresses', () => {
   withSpillDir((dir) => {
     // a file where the directory should be: mkdir fails, elision must not
-    fs.writeFileSync(path.join(dir, 'chisle-spill'), 'not a directory');
+    writeText(under(dir, 'chisle-spill'), 'not a directory');
     const text = bigOutput(500);
     const out = transform(text, FULL, 'Bash');
     assert.ok(out && out.length < text.length, 'a failed spill broke compression');

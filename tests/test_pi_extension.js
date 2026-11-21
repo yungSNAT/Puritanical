@@ -3,15 +3,13 @@
 
 const { test, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+const { makeDir, makeTempDir, remove, under, writeText } = require('./helpers/sandbox');
 const chisleExtension = require('../pi-extension');
 
 // Keep the developer's real chisle config (e.g. sections.code=false) out of these tests.
-const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-pi-config-'));
+const configDir = makeTempDir('chisle-pi-config-');
 process.env.XDG_CONFIG_HOME = configDir;
-process.on('exit', () => fs.rmSync(configDir, { recursive: true, force: true }));
+process.on('exit', () => remove(configDir, { recursive: true, force: true }));
 
 const ENV_KEYS = [
   'CHISLE_COMPRESS', 'CHISLE_COMPRESS_DEDUP', 'CHISLE_COMPRESS_SCRUB',
@@ -201,11 +199,11 @@ test('OMP system prompt segments receive rules as a system prompt instead of a t
 
 for (const sections of [{ code: false }, { prose: false }, { prose: false, code: false }]) {
   test(`OMP rules injected with sections ${JSON.stringify(sections)} are not appended twice`, async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-pi-sections-'));
+    const dir = makeTempDir('chisle-pi-sections-');
     const savedConfigHome = process.env.XDG_CONFIG_HOME;
     try {
-      fs.mkdirSync(path.join(dir, 'chisle'));
-      fs.writeFileSync(path.join(dir, 'chisle', 'config.json'), JSON.stringify({ sections }));
+      makeDir(under(dir, 'chisle'));
+      writeText(under(dir, 'chisle', 'config.json'), JSON.stringify({ sections }));
       process.env.XDG_CONFIG_HOME = dir;
       process.env.CHISLE_DEFAULT_MODE = 'on';
       const h = makeHarness({ omp: true });
@@ -221,7 +219,7 @@ for (const sections of [{ code: false }, { prose: false }, { prose: false, code:
     } finally {
       if (savedConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = savedConfigHome;
-      fs.rmSync(dir, { recursive: true, force: true });
+      remove(dir, { recursive: true, force: true });
     }
   });
 }

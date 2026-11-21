@@ -76,7 +76,6 @@ function installClaude(ctx) {
   else {
     const r = installClaudeHooks(ctx);
     if (r === 'ok') results.installed.push('claude-hooks');
-    else if (r === 'skip') results.skipped.push(['claude-hooks', 'already wired']);
     else results.failed.push(['claude-hooks', r]);
   }
   process.stdout.write('\n');
