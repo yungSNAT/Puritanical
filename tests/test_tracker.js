@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 // Integration tests for chisle-mode-tracker.js — drives it via stdin with a temp
 // CLAUDE_CONFIG_DIR and asserts the resulting flag state.
 // Run: node --test tests/test_tracker.js
@@ -6,19 +7,20 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
 
 const TRACKER = path.join(__dirname, '..', 'hooks', 'chisle-mode-tracker.js');
 const { requestedMode } = require('../hooks/chisle-mode');
+isolateWorkingDirectory();
 
 // Run the tracker with a given prompt against a fresh temp config dir.
 // Returns the flag contents after the run (or null if the flag was removed).
 function runTracker(prompt, { preActive, defaultMode = 'on' } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-'));
-  const flagPath = path.join(dir, '.chisle-active');
-  if (preActive) fs.writeFileSync(flagPath, preActive, { mode: 0o600 });
+  const dir = process.cwd();
+  fs.rmSync('.chisle-active', { force: true });
+  if (preActive) fs.writeFileSync('.chisle-active', preActive, { mode: 0o600 });
 
   try {
     execFileSync(process.execPath, [TRACKER], {
@@ -27,12 +29,9 @@ function runTracker(prompt, { preActive, defaultMode = 'on' } = {}) {
       encoding: 'utf8',
       timeout: 5000,
     });
-  } catch (e) { /* tracker silent-fails; we assert on flag state */ }
+  } catch { /* tracker silent-fails; we assert on flag state */ }
 
-  let flag = null;
-  try { flag = fs.readFileSync(flagPath, 'utf8').trim(); } catch (e) {}
-  fs.rmSync(dir, { recursive: true, force: true });
-  return flag;
+  try { return fs.readFileSync('.chisle-active', 'utf8').trim(); } catch { return null; }
 }
 
 test('shared parser only deactivates when off-verb targets Chisle', () => {
@@ -94,14 +93,15 @@ test('REGRESSION: "chisle please stop the server" stays active', () => {
 // regardless.
 
 function runTrackerOutput(prompt, { preActive = 'on', sectionsValue } = {}) {
-  const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-'));
-  const xdgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-xdg-'));
-  const flagPath = path.join(claudeDir, '.chisle-active');
-  if (preActive) fs.writeFileSync(flagPath, preActive, { mode: 0o600 });
+  const claudeDir = path.resolve('claude');
+  const xdgDir = path.resolve('config');
+  fs.mkdirSync('claude', { recursive: true });
+  fs.rmSync('claude/.chisle-active', { force: true });
+  fs.rmSync('config/chisle/config.json', { force: true });
+  if (preActive) fs.writeFileSync('claude/.chisle-active', preActive, { mode: 0o600 });
   if (sectionsValue !== undefined) {
-    const chisleDir = path.join(xdgDir, 'chisle');
-    fs.mkdirSync(chisleDir, { recursive: true });
-    fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ sections: sectionsValue }));
+    fs.mkdirSync('config/chisle', { recursive: true });
+    fs.writeFileSync('config/chisle/config.json', JSON.stringify({ sections: sectionsValue }));
   }
 
   let stdout = '';
@@ -112,14 +112,9 @@ function runTrackerOutput(prompt, { preActive = 'on', sectionsValue } = {}) {
       encoding: 'utf8',
       timeout: 5000,
     });
-  } catch (e) { /* tracker silent-fails */ }
+  } catch { /* tracker silent-fails */ }
 
-  fs.rmSync(claudeDir, { recursive: true, force: true });
-  fs.rmSync(xdgDir, { recursive: true, force: true });
-
-  let context = null;
-  try { context = JSON.parse(stdout).hookSpecificOutput.additionalContext; } catch (e) {}
-  return context;
+  try { return JSON.parse(stdout).hookSpecificOutput.additionalContext; } catch { return null; }
 }
 
 test('reinforcement: no config → unchanged (byte-identical to prior hardcoded line)', () => {
@@ -165,26 +160,21 @@ test('reinforcement: malformed sections value falls back to enabled, no throw', 
 // ── resume nudge ─────────────────────────────────────────────────────────────
 
 function runWithTranscript(minutesAgo, context) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-'));
-  fs.writeFileSync(path.join(dir, '.chisle-active'), 'on', { mode: 0o600 });
-  const transcript = path.join(dir, 'session.jsonl');
+  const dir = process.cwd();
+  fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
   const entry = {
     type: 'assistant',
     timestamp: new Date(Date.now() - minutesAgo * 60000).toISOString(),
     message: { model: 'claude-opus-5-5', usage: { input_tokens: 5, cache_creation_input_tokens: 1000, cache_read_input_tokens: context - 1005, output_tokens: 50 } },
   };
-  fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
-  try {
-    const out = execFileSync(process.execPath, [TRACKER], {
-      input: JSON.stringify({ prompt: 'next task', transcript_path: transcript }),
-      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on' },
-      encoding: 'utf8',
-      timeout: 5000,
-    });
-    return JSON.parse(out);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  fs.writeFileSync('session.jsonl', JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
+  const out = execFileSync(process.execPath, [TRACKER], {
+    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve('session.jsonl') }),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on' },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  return JSON.parse(out);
 }
 
 test('resume nudge: big context after an expired cache warns the user', () => {

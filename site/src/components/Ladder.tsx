@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import Reveal from "./Reveal";
@@ -71,7 +72,7 @@ const RUNGS = [
   },
 ];
 
-export default function Ladder() {
+export default function Ladder(): React.JSX.Element {
   return (
     <section id="ladder" className="py-28">
       <div className="mx-auto max-w-6xl px-5">

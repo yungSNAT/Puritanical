@@ -1,17 +1,45 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const COPY_NOTICE_MS = 1600;
+
+export function useCopyText(noticeMs = COPY_NOTICE_MS): readonly [boolean, (text: string) => void] {
+  const [copied, setCopied] = useState(false);
+  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const attempt = useRef(0);
+
+  useEffect(() => () => {
+    attempt.current++;
+    clearTimeout(reset.current);
+  }, []);
+
+  function copyText(text: string): void {
+    clearTimeout(reset.current);
+    const request = ++attempt.current;
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        if (request !== attempt.current) return;
+        setCopied(true);
+        reset.current = setTimeout(() => { setCopied(false); }, noticeMs);
+      } catch {
+        if (request === attempt.current) setCopied(false);
+      }
+    })();
+  }
+  return [copied, copyText];
+}
 
 // One-click copy for a shell command. Multi-line commands keep their breaks.
-export default function CopyCmd({ cmd, label }: { cmd: string; label: string }) {
-  const [copied, setCopied] = useState(false);
+export default function CopyCmd({ cmd, label }: Readonly<{ cmd: string; label: string }>): React.JSX.Element {
+  const [copied, copyText] = useCopyText();
+  const copyCommand = (): void => { copyText(cmd); };
   return (
     <button
-      onClick={() => {
-        navigator.clipboard.writeText(cmd);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      }}
+      type="button"
+      onClick={copyCommand}
       className="group flex w-full items-start gap-3 rounded-lg border border-line bg-surface/90 px-4 py-3 text-left font-mono text-sm backdrop-blur transition-colors hover:border-brand-hover"
       aria-label={`Copy ${label} command`}
     >

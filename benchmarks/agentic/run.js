@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, console, process, require -- Node.js runtime */
 // Agentic benchmark: the arms get a real repo and real tools, not a chat prompt.
 //
 // Each fixture is a small repo with a planted trap that only a careful agent
@@ -52,7 +53,7 @@ if (ARMS.includes('ponytail')) {
   const cache = path.join(os.homedir(), '.claude', 'plugins', 'cache', 'ponytail', 'ponytail');
   let src = process.env.PONYTAIL_SKILL;
   if (!src) {
-    try { src = fs.readdirSync(cache).map((v) => path.join(cache, v, 'skills', 'ponytail', 'SKILL.md')).find((f) => fs.existsSync(f)); } catch (_) {}
+    try { src = fs.readdirSync(cache).map((v) => path.join(cache, v, 'skills', 'ponytail', 'SKILL.md')).find((f) => fs.existsSync(f)); } catch {}
   }
   if (!src) { console.error('ponytail SKILL.md not found; set PONYTAIL_SKILL'); process.exit(1); }
   const pt = fs.readFileSync(src, 'utf8').split(/^---\s*$/m).slice(2).join('---').trim();
@@ -76,7 +77,7 @@ const RTK_HOOK_SETTINGS = JSON.stringify({ hooks: { PreToolUse: RTK_HOOK.concat(
   .split('${CLAUDE_PLUGIN_ROOT}').join(ROOT);
 if (ARMS.some((a) => a.startsWith('rtk'))) {
   try { console.log('rtk: ' + execFileSync('rtk', ['--version'], { encoding: 'utf8' }).trim()); }
-  catch (_) { console.error('rtk arms need rtk on PATH'); process.exit(1); }
+  catch { console.error('rtk arms need rtk on PATH'); process.exit(1); }
 }
 
 const only = process.env.FIXTURES ? process.env.FIXTURES.split(',').map((f) => f.trim()) : null;
@@ -92,7 +93,7 @@ const stat = (p) => {
   // Hash the contents: a one-character fix changes no line count, and comparing
   // line counts alone silently reported those runs as "no files touched".
   let src = '';
-  try { src = fs.readFileSync(p, 'utf8'); } catch (_) {}
+  try { src = fs.readFileSync(p, 'utf8'); } catch {}
   return { loc: src.split('\n').filter((l) => l.trim()).length, hash: crypto.createHash('sha1').update(src).digest('hex') };
 };
 const snapshot = (root) => Object.fromEntries(walk(root).map((f) => [f, stat(path.join(root, f))]));
@@ -150,7 +151,7 @@ function runCell(c) {
         const calls = [];
         const prompts = new Map(); // API request id -> its prompt size in tokens
         for (const line of stdout.split('\n')) {
-          let e; try { e = JSON.parse(line); } catch (_) { continue; }
+          let e; try { e = JSON.parse(line); } catch { continue; }
           if (e.type === 'result') d = e;
           const u = e.type === 'assistant' && e.message && e.message.usage;
           if (u) prompts.set(e.message.id, (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0));
@@ -173,7 +174,7 @@ function runCell(c) {
         rec.request_prompts = [...prompts.values()];
         if (hooked) {
           let stats = {};
-          try { stats = JSON.parse(fs.readFileSync(path.join(cfg, '.chisle-compress-stats.json'), 'utf8')); } catch (_) {}
+          try { stats = JSON.parse(fs.readFileSync(path.join(cfg, '.chisle-compress-stats.json'), 'utf8')); } catch {}
           rec.compressed_chars = stats.savedChars || 0;
           rec.compress_events = stats.events || 0;
         }
@@ -210,7 +211,7 @@ function runCell(c) {
         try {
           const pkg = JSON.parse(fs.readFileSync(path.join(repo, 'package.json'), 'utf8'));
           rec.deps_added = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) });
-        } catch (_) { rec.deps_added = []; }
+        } catch { rec.deps_added = []; }
       }
       fs.writeFileSync(outPath(c), JSON.stringify(rec, null, 1));
       fs.rmSync(work, { recursive: true, force: true });

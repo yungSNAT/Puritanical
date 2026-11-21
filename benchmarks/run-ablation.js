@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, console, process, require, setTimeout -- Node.js runtime */
 // Side-by-side ruleset benchmark: any number of named rulesets in ONE run, so an
 // old and a new Chisle (and the rivals) answer the same prompts in the same
 // session of the same model. run-live.sh fixes its arm names; this does not.
@@ -64,7 +65,7 @@ const run = (c) => new Promise((resolve) => {
     (err, stdout) => {
       let result = null; const thinking = [];
       for (const l of String(stdout || '').split('\n')) {
-        let e; try { e = JSON.parse(l); } catch (_) { continue; }
+        let e; try { e = JSON.parse(l); } catch { continue; }
         if (e.type === 'assistant') for (const b of e.message.content || []) if (b.type === 'thinking' && b.thinking) thinking.push(b.thinking);
         if (e.type === 'result') result = e;
       }

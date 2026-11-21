@@ -1,8 +1,9 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useEffect, useState } from "react";
 
-export default function ThemeToggle() {
+export default function ThemeToggle(): React.JSX.Element {
   const [theme, setTheme] = useState<string | null>(null);
 
   useEffect(() => {
@@ -18,9 +19,10 @@ export default function ThemeToggle() {
 
   return (
     <button
+      type="button"
       onClick={flip}
       aria-label="Toggle color theme"
-      className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-dim transition-colors hover:border-brand-hover hover:text-fg"
+      className="flex size-8 items-center justify-center rounded-md border border-line text-dim transition-colors hover:border-brand-hover hover:text-fg"
     >
       {theme === "dark" ? (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>

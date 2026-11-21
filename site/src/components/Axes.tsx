@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useState } from "react";
@@ -47,15 +48,15 @@ const EXTRAS = [
   { icon: "off", name: "Easy off-switch", body: "\"stop chisle\" for the persona, CHISLE_COMPRESS=0 for the hook, npx chisle --uninstall for everything." },
 ];
 
-function Icon({ name }: { name: string }) {
+function Icon({ name }: Readonly<{ name: string }>): React.JSX.Element {
   return (
-    <span className="grid h-10 w-10 place-items-center rounded-lg border border-brand-hover/40 bg-accent-soft text-accent">
+    <span className="grid size-10 place-items-center rounded-lg border border-brand-hover/40 bg-accent-soft text-accent">
       <Glyph name={name} />
     </span>
   );
 }
 
-export default function Axes() {
+export default function Axes(): React.JSX.Element {
   const [open, setOpen] = useState<number | null>(null);
   return (
     <section id="features" className="mx-auto max-w-6xl px-5 py-28">
@@ -79,7 +80,8 @@ export default function Axes() {
               <h3 className="mt-1.5 text-xl font-semibold">{a.name}</h3>
               <p className="mt-3 flex-1 text-sm leading-relaxed text-dim">{a.body}</p>
               <button
-                onClick={() => setOpen(open === i ? null : i)}
+                type="button"
+                onClick={() => { setOpen(open === i ? null : i); }}
                 aria-expanded={open === i}
                 className="mt-5 w-fit text-sm font-medium text-accent hover:underline underline-offset-4"
               >

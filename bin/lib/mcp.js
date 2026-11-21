@@ -1,3 +1,4 @@
+/* global __dirname, module, process, require -- Node.js runtime */
 // chisle — `npx chisle mcp <wrap|unwrap|status>`: route stdio MCP servers
 // through hooks/chisle-mcp-proxy.js so their oversized tool results get the
 // same compression Claude Code and Pi get from PostToolUse.
@@ -19,7 +20,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { getConfigDir } = require('../../hooks/chisle-config');
+const { getConfigDir, readSettingsText } = require('../../hooks/chisle-config');
+const { writeAtomically } = require('./settings');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const PROXY_FILE = 'chisle-mcp-proxy.js';
@@ -85,15 +87,26 @@ function unwrapEntry(entry) {
   if (!entry.args.length) delete entry.args; // wrap added it; most configs omit an empty one
 }
 
+function loadConfigText(file) {
+  try {
+    const raw = readSettingsText(file);
+    return raw === null ? { error: 'not a readable, bounded config file' } : { raw };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { missing: true };
+    return { error: 'could not read config (' + error.code + ')' };
+  }
+}
+
 function readConfig(file) {
-  let raw;
-  try { raw = fs.readFileSync(file, 'utf8'); } catch (e) { return { missing: true }; }
+  const loaded = loadConfigText(file);
+  if (loaded.raw === undefined) return loaded;
+  const { raw } = loaded;
   if (!raw.trim()) return { data: {}, raw };   // an empty file has no servers yet
   try {
-    const data = JSON.parse(raw.replace(/^﻿/, ''));
+    const data = JSON.parse(raw.replace(/^\uFEFF/, ''));
     if (!data || typeof data !== 'object' || Array.isArray(data)) return { error: 'not a JSON object' };
     return { data, raw };
-  } catch (e) { return { error: 'not strict JSON (comments?); edit by hand' }; }
+  } catch { return { error: 'not strict JSON (comments?); edit by hand' }; }
 }
 
 function writeConfig(file, raw, data) {
@@ -102,12 +115,14 @@ function writeConfig(file, raw, data) {
 
 function writeText(file, raw, text) {
   const bak = file + '.chisle-bak';
-  if (!fs.existsSync(bak)) fs.writeFileSync(bak, raw, { mode: 0o600 });
+  try {
+    writeAtomically(bak, raw, { noReplace: true });
+  } catch (error) {
+    if (error.code !== 'EEXIST' || !fs.lstatSync(bak).isFile()) throw error;
+  }
   let mode = 0o600;
-  try { mode = fs.statSync(file).mode & 0o777; } catch (e) {}
-  const tmp = file + '.chisle-tmp-' + process.pid;
-  fs.writeFileSync(tmp, text, { mode });
-  fs.renameSync(tmp, file);
+  try { mode = fs.statSync(file).mode & 0o777; } catch {}
+  writeAtomically(file, text, { mode });
 }
 
 // ── Codex TOML ──────────────────────────────────────────────────────────────
@@ -127,7 +142,7 @@ function tomlValue(text, i) {
     if (j >= text.length) return null;
     const lit = text.slice(i, j + 1);
     i = j + 1;
-    try { return q === "'" ? lit.slice(1, -1) : JSON.parse(lit); } catch (e) { return null; }
+    try { return q === "'" ? lit.slice(1, -1) : JSON.parse(lit); } catch { return null; }
   };
   const skip = () => { while (i < text.length) { if (/\s|,/.test(text[i])) i++; else if (text[i] === '#') while (i < text.length && text[i] !== '\n') i++; else break; } };
   skip();
@@ -146,16 +161,22 @@ function tomlValue(text, i) {
 }
 
 function readToml(file) {
-  let raw;
-  try { raw = fs.readFileSync(file, 'utf8'); } catch (e) { return { missing: true }; }
+  const loaded = loadConfigText(file);
+  if (loaded.raw === undefined) return loaded;
+  const { raw } = loaded;
   const lines = raw.split('\n');
-  const servers = {}, tables = {};
+  const tables = new Map();
   let cur = null;
   for (let n = 0; n < lines.length; n++) {
     const m = TOML_TABLE.exec(lines[n]);
     if (m) {
-      const name = m[1] != null ? JSON.parse('"' + m[1] + '"') : m[2];
-      cur = tables[name] = { header: n, entry: {}, ok: true };
+      let name = m[2];
+      if (m[1] !== undefined) {
+        try { name = JSON.parse('"' + m[1] + '"'); }
+        catch { cur = null; continue; }
+      }
+      cur = { entry: {}, ok: true };
+      tables.set(name, cur);
       continue;
     }
     if (/^\s*\[/.test(lines[n])) { cur = null; continue; }
@@ -170,15 +191,18 @@ function readToml(file) {
     cur[kv[2]] = { start: n, end: last, indent: kv[1] };
     n = last;
   }
-  for (const [name, t] of Object.entries(tables)) if (t.ok) servers[name] = t.entry;
-  return { raw, lines, tables, data: { mcp_servers: servers } };
+  const servers = new Map();
+  for (const [name, table] of tables) {
+    if (table.ok) servers.set(name, table.entry);
+  }
+  return { raw, lines, tables, servers };
 }
 
 function writeToml(file, cfg, names) {
   const lines = cfg.lines.slice();
   const edits = [];
   for (const name of names) {
-    const t = cfg.tables[name], e = cfg.data.mcp_servers[name];
+    const t = cfg.tables.get(name), e = t.entry;
     const indent = t.command ? t.command.indent : '';
     const argsLine = e.args && e.args.length ? [indent + 'args = [' + e.args.map(a => JSON.stringify(a)).join(', ') + ']'] : [];
     edits.push({ start: t.command.start, end: t.command.end, text: [indent + 'command = ' + JSON.stringify(e.command)].concat(t.args ? [] : argsLine) });
@@ -228,32 +252,37 @@ function run(argv, out) {
     found++;
     if (cfg.error) { out('  ' + t.label + ': ' + t.file + ': skipped, ' + cfg.error); continue; }
     const key = t.format === 'toml' ? 'mcp_servers' : t.key || (cfg.data.mcpServers ? 'mcpServers' : 'servers');
-    const servers = cfg.data[key];
-    if (!servers || typeof servers !== 'object') { out('  ' + t.label + ': no ' + key + ' in ' + t.file); continue; }
+    const entries = cfg.servers ?? Object.getOwnPropertyDescriptor(cfg.data, key)?.value;
+    if (!entries || typeof entries !== 'object') { out('  ' + t.label + ': no ' + key + ' in ' + t.file); continue; }
 
-    const names = Object.keys(servers);
-    const wrapped = names.filter(n => isWrapped(servers[n]));
+    const servers = entries instanceof Map ? [...entries] : Object.entries(entries);
+    const stdio = servers.filter(([, entry]) => isStdio(entry));
+    const wrapped = servers.filter(([, entry]) => isWrapped(entry));
     if (o.action === 'status') {
-      out('  ' + t.label + ': ' + wrapped.length + '/' + names.filter(n => isStdio(servers[n])).length +
+      out('  ' + t.label + ': ' + wrapped.length + '/' + stdio.length +
         ' stdio server(s) wrapped  ' + t.file);
       continue;
     }
 
     const todo = o.action === 'wrap'
-      ? names.filter(n => isStdio(servers[n]) && !isWrapped(servers[n]))
+      ? stdio.filter(([, entry]) => !isWrapped(entry))
       : wrapped;
     if (!todo.length) { out('  ' + t.label + ': nothing to ' + o.action + '  ' + t.file); continue; }
-    for (const n of todo) (o.action === 'wrap' ? wrapEntry(servers[n], proxy) : unwrapEntry(servers[n]));
-    if (!o.dryRun) (t.format === 'toml' ? writeToml(t.file, cfg, todo) : writeConfig(t.file, cfg.raw, cfg.data));
+    for (const [, entry] of todo) {
+      if (o.action === 'wrap') wrapEntry(entry, proxy);
+      else unwrapEntry(entry);
+    }
+    const names = todo.map(([name]) => name);
+    if (!o.dryRun) (t.format === 'toml' ? writeToml(t.file, cfg, names) : writeConfig(t.file, cfg.raw, cfg.data));
     changed += todo.length;
-    out('  ' + t.label + ': ' + (o.dryRun ? 'would ' + o.action : o.action + 'ped') + ' ' + todo.join(', ') + '  ' + t.file);
+    out('  ' + t.label + ': ' + (o.dryRun ? 'would ' + o.action : o.action + 'ped') + ' ' + names.join(', ') + '  ' + t.file);
   }
 
   if (!found) out('  no MCP config files found' + (o.only.length ? ' for ' + o.only.join(', ') : ''));
   if (o.action === 'status') {
     const dir = process.env.CHISLE_STATE_DIR || getConfigDir();
     let stats = null;
-    try { stats = JSON.parse(fs.readFileSync(path.join(dir, '.chisle-compress-stats.json'), 'utf8')); } catch (e) {}
+    try { stats = JSON.parse(fs.readFileSync(path.join(dir, '.chisle-compress-stats.json'), 'utf8')); } catch {}
     out('\n  saved so far: ' + (stats && Number.isFinite(stats.savedChars)
       ? stats.savedChars.toLocaleString('en-US') + ' chars over ' + stats.events + ' tool result(s)'
       : 'nothing yet') + '  (' + dir + ')');

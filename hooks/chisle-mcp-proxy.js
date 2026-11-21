@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global module, process, require -- Node.js runtime */
 // chisle — stdio MCP proxy: tool-output compression for any MCP host.
 //
 // Most agents cannot rewrite a tool result from a hook (Windsurf, Cline,
@@ -70,7 +71,7 @@ function compressResult(result, toolName) {
 function rewriteLine(line, pending) {
   if (!pending.size || line.indexOf('"result"') === -1) return line;
   let msg;
-  try { msg = JSON.parse(line); } catch (e) { return line; }
+  try { msg = JSON.parse(line); } catch { return line; }
   const msgs = Array.isArray(msg) ? msg : [msg];
   let saved = 0;
   for (const m of msgs) {
@@ -91,7 +92,7 @@ function rewriteLine(line, pending) {
 function observeRequest(line, pending) {
   if (line.indexOf('tools/call') === -1 && line.indexOf('notifications/cancelled') === -1) return;
   let msg;
-  try { msg = JSON.parse(line); } catch (e) { return; }
+  try { msg = JSON.parse(line); } catch { return; }
   for (const m of Array.isArray(msg) ? msg : [msg]) {
     if (m && m.method === 'tools/call' && m.id != null) {
       pending.set(JSON.stringify(m.id), m.params && typeof m.params.name === 'string' ? m.params.name : '');
@@ -149,7 +150,7 @@ function main(argv) {
     process.exit(127);
   });
   child.stdin.on('error', () => {}); // server gone; exit handler reports it
-  process.stdout.on('error', () => { try { child.kill(); } catch (e) {} process.exit(0); }); // host gone
+  process.stdout.on('error', () => { try { child.kill(); } catch {} process.exit(0); }); // host gone
 
   // Host → server: forward raw, observe tool calls on the side.
   const reqLines = lineSplitter(line => observeRequest(line, pending));
@@ -169,7 +170,7 @@ function main(argv) {
   } else {
     const resLines = lineSplitter((line, eol) => {
       let out = line;
-      try { out = rewriteLine(line, pending); } catch (e) { out = line; }
+      try { out = rewriteLine(line, pending); } catch { out = line; }
       if (!process.stdout.write(out + eol)) {
         child.stdout.pause();
         process.stdout.once('drain', () => child.stdout.resume());
@@ -181,7 +182,7 @@ function main(argv) {
   }
 
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-    process.on(sig, () => { try { child.kill(sig); } catch (e) {} });
+    process.on(sig, () => { try { child.kill(sig); } catch {} });
   }
 
   child.on('close', (code, signal) => {

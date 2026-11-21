@@ -1,3 +1,4 @@
+/* global module -- Node.js runtime */
 'use strict';
 
 // Shared mode-directive parser. Harness adapters decide how to persist mode.

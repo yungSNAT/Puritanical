@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 // Tool-output compressor — GitHub Copilot CLI payload-shape tests.
 // Run: node --test tests/test_compress_copilot.js
 //

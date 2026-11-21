@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 // chisle: cross-platform installer.
 //
 // Detects the AI coding agents on this machine and installs Chisle for each:
@@ -125,10 +126,10 @@ function hasCmd(cmd) {
   try {
     if (IS_WIN) return cp.spawnSync('where', [cmd], { stdio: 'ignore' }).status === 0;
     return cp.spawnSync('sh', ['-c', `command -v '${cmd.replace(/'/g, "")}'`], { stdio: 'ignore' }).status === 0;
-  } catch (_) { return false; }
+  } catch { return false; }
 }
 
-function safeStat(p, method) { try { return fs.statSync(p)[method](); } catch (_) { return false; } }
+function safeStat(p, method) { try { return fs.statSync(p)[method](); } catch { return false; } }
 
 function vscodeExt(needle) {
   const roots = ['.vscode/extensions', '.vscode-server/extensions', '.cursor/extensions', '.windsurf/extensions']
@@ -136,7 +137,7 @@ function vscodeExt(needle) {
   const re = new RegExp(needle.replace(/\./g, '\\.'), 'i');
   for (const r of roots) {
     if (!fs.existsSync(r)) continue;
-    try { if (fs.readdirSync(r).some(e => re.test(e))) return true; } catch (_) {}
+    try { if (fs.readdirSync(r).some(e => re.test(e))) return true; } catch {}
   }
   return false;
 }
@@ -185,7 +186,7 @@ function ranOk(r) {
   return !!r && !r.error && r.status === 0;
 }
 function capture(cmd, args) {
-  try { return spawnX(cmd, args, { encoding: 'utf8' }); } catch (_) { return { status: 1, stdout: '', stderr: '' }; }
+  try { return spawnX(cmd, args, { encoding: 'utf8' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
 }
 
 // ── config dir ──────────────────────────────────────────────────────────────
@@ -249,7 +250,7 @@ function installedFor(id, opts) {
         try {
           const md = path.join(opencodeDir(), 'AGENTS.md');
           if (fs.existsSync(md) && fs.readFileSync(md, 'utf8').includes(FENCE_BEGIN)) return true;
-        } catch (_) {}
+        } catch {}
         return fs.existsSync(path.join(opencodeDir(), 'skills', 'chisle', 'SKILL.md'));
       }
       case 'hermes':
@@ -261,7 +262,7 @@ function installedFor(id, opts) {
         return !!(prov && prov.rule && fs.existsSync(path.join(process.cwd(), prov.rule)));
       }
     }
-  } catch (e) { return false; }
+  } catch { return false; }
 }
 
 // ── Claude Code ─────────────────────────────────────────────────────────────
@@ -340,13 +341,13 @@ function installClaudeHooks(ctx) {
     const s = path.join(hooksSrc, f);
     if (fs.existsSync(s)) fs.copyFileSync(s, path.join(hooksDst, f));
   }
-  try { fs.chmodSync(path.join(hooksDst, 'chisle-statusline.sh'), 0o755); } catch (_) {}
+  try { fs.chmodSync(path.join(hooksDst, 'chisle-statusline.sh'), 0o755); } catch {}
 
   const settings = SETTINGS.readSettings(settingsPath);
   if (settings === null) { warn('  settings.json unparseable; not touching it.'); return 'settings.json unparseable'; }
 
   const bak = settingsPath + '.bak';
-  if (fs.existsSync(settingsPath) && !fs.existsSync(bak)) { try { fs.copyFileSync(settingsPath, bak); } catch (_) {} }
+  if (fs.existsSync(settingsPath) && !fs.existsSync(bak)) { try { fs.copyFileSync(settingsPath, bak); } catch {} }
 
   const node = process.execPath;
   const activate = path.join(hooksDst, 'chisle-activate.js');
@@ -438,9 +439,9 @@ function ownedSkillNames() {
       try {
         return fs.statSync(path.join(srcRoot, n)).isDirectory()
           && fs.existsSync(path.join(srcRoot, n, 'SKILL.md'));
-      } catch (_) { return false; }
+      } catch { return false; }
     });
-  } catch (_) { return []; }
+  } catch { return []; }
 }
 
 // Overwrites stale files, keeps foreign siblings, never touches files
@@ -455,7 +456,7 @@ function copySkills(dstRoot, opts) {
     if (!opts.dryRun) fs.mkdirSync(dst, { recursive: true });
     for (var j = 0; j < files.length; j++) {
       var st = null;
-      try { st = fs.statSync(path.join(src, files[j])); } catch (_) { continue; }
+      try { st = fs.statSync(path.join(src, files[j])); } catch { continue; }
       if (!st.isFile()) continue;
       if (opts.dryRun) { written++; continue; }
       fs.copyFileSync(path.join(src, files[j]), path.join(dst, files[j]));
@@ -487,7 +488,7 @@ function writeFencedRuleset(target, opts, note) {
   var block = FENCE_BEGIN + '\n' + raw.trimEnd() + '\n' + FENCE_END + '\n';
   fs.mkdirSync(path.dirname(target), { recursive: true });
   var existing = '';
-  try { existing = fs.readFileSync(target, 'utf8'); } catch (_) {}
+  try { existing = fs.readFileSync(target, 'utf8'); } catch {}
   if (existing.indexOf(FENCE_BEGIN) !== -1) {
     if (!opts.force) {
       note('  ' + target + ' already contains chisle ruleset (--force to refresh)');
@@ -762,7 +763,7 @@ function uninstall(ctx) {
     for (const f of ['.chisle-active', '.chisle-session-turns', '.chisle-statusline-suffix',
                      '.chisle-compress-stats.json', '.chisle-compress-last.json', '.chisle-update-check.json']) {
       const p = path.join(cfg, f);
-      if (fs.existsSync(p)) { if (!opts.dryRun) { try { fs.unlinkSync(p); } catch (_) {} } note(`  removed ${p}`); touched++; }
+      if (fs.existsSync(p)) { if (!opts.dryRun) { try { fs.unlinkSync(p); } catch {} } note(`  removed ${p}`); touched++; }
     }
   }
 
@@ -917,7 +918,7 @@ function readStats(dir) {
     if (fs.lstatSync(p).isSymbolicLink()) return null;
     const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
     return parsed && Number.isFinite(parsed.savedChars) && Number.isFinite(parsed.events) ? parsed : null;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 function printStats(c, opts) {
@@ -977,7 +978,7 @@ function starPromptState() {
   try {
     const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
     return cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? { file, cfg } : null;
-  } catch (_) { return null; } // unreadable config: never overwrite it
+  } catch { return null; } // unreadable config: never overwrite it
 }
 
 async function askStar({ say, note, opts, c }) {
@@ -1013,7 +1014,7 @@ async function askStar({ say, note, opts, c }) {
     try {
       fs.mkdirSync(path.dirname(st.file), { recursive: true });
       fs.writeFileSync(st.file, JSON.stringify({ ...st.cfg, starPrompt: yes ? 'yes' : 'no' }, null, 2) + '\n');
-    } catch (_) {}
+    } catch {}
   }
   if (!yes) { note("  No problem, we won't ask again."); return; }
   // Star and follow are separate calls with separate outcomes: gh's default

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __filename, Buffer, module, process, require -- Node.js runtime */
 // chisle — run a command and filter its output before Claude Code sees it.
 //
 // Claude Code hands a failed Bash call (exit != 0) to PostToolUseFailure,
@@ -90,7 +91,7 @@ function guardedPrograms(cwd, claudeDir) {
   const out = new Set();
   for (const f of files) {
     let perms;
-    try { perms = JSON.parse(fs.readFileSync(f, 'utf8')).permissions; } catch (_) { continue; }
+    try { perms = JSON.parse(fs.readFileSync(f, 'utf8')).permissions; } catch { continue; }
     for (const rule of [].concat((perms && perms.deny) || [], (perms && perms.ask) || [])) {
       if (typeof rule !== 'string') continue;
       const m = rule.match(/^Bash(?:\((.*)\))?$/);
@@ -127,13 +128,13 @@ function run(argv) {
   // stderr share a destination: keep them in one buffer, in arrival order,
   // so an error line stays where it happened instead of trailing the output.
   let merged = false;
-  try { const a = fs.fstatSync(1), b = fs.fstatSync(2); merged = a.dev === b.dev && a.ino === b.ino; } catch (_) {}
+  try { const a = fs.fstatSync(1), b = fs.fstatSync(2); merged = a.dev === b.dev && a.ino === b.ino; } catch {}
   const out = [];
   const err = merged ? out : [];
   let failed = false;
   child.stdout.on('data', d => out.push(d));
   child.stderr.on('data', d => err.push(d));
-  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { try { child.kill(sig); } catch (_) {} });
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { try { child.kill(sig); } catch {} });
   child.on('error', (e) => {
     failed = true;
     process.stderr.write(`${argv[0]}: ${e.code === 'ENOENT' ? 'command not found' : e.message}\n`);
@@ -155,7 +156,7 @@ function run(argv) {
         return t.endsWith('\n') || !text.endsWith('\n') ? t : t + '\n';
       });
       if (saved > 0) recordSavings(saved, getClaudeDir());
-    } catch (_) { res = raw; } // filtering must never eat output
+    } catch { res = raw; } // filtering must never eat output
     process.stdout.write(res[0]);
     process.stderr.write(res[1]);
     process.exitCode = code != null ? code : 128 + (os.constants.signals[signal] || 0);
@@ -168,7 +169,7 @@ if (require.main === module) {
   else {
     let input = '';
     process.stdin.on('data', c => { input += c; });
-    process.stdin.on('end', () => { try { hook(input); } catch (_) {} });
+    process.stdin.on('end', () => { try { hook(input); } catch {} });
   }
 }
 

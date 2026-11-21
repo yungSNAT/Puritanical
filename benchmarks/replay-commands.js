@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process, require -- Node.js runtime */
 // Command corpus benchmark: what the model reads from common shell commands,
 // with and without RTK and Chisle's compressor. Deterministic, zero LLM calls.
 //
@@ -92,7 +93,7 @@ function rtkRewrite(cmd) {
   try {
     const out = JSON.parse(r.stdout).hookSpecificOutput;
     return (out && out.updatedInput && out.updatedInput.command) || cmd;
-  } catch (_) { return cmd; }
+  } catch { return cmd; }
 }
 
 const PREV = process.env.CHISLE_PREV ? require(path.resolve(process.env.CHISLE_PREV, 'hooks', 'chisle-compress-output')) : null;

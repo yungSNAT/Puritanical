@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process, require -- Node.js runtime */
 // Deterministic replay benchmark for Chisle's tool-output compressor.
 //
 // Usage:
@@ -34,7 +35,7 @@ const byTool = {};
 
 function walk(dir) {
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
   for (const entry of entries) {
     const file = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(file);
@@ -99,7 +100,7 @@ function account(name, text, lastHash, allowDedup, failed, command) {
 
 function scan(file) {
   let lines;
-  try { lines = fs.readFileSync(file, 'utf8').split('\n'); } catch (_) { return; }
+  try { lines = fs.readFileSync(file, 'utf8').split('\n'); } catch { return; }
   if (harness === 'pi') return scanPi(lines);
   scanClaude(lines);
 }
@@ -110,7 +111,7 @@ function scanClaude(lines) {
   const lastHash = {};
   for (const line of lines) {
     if (!line) continue;
-    let entry; try { entry = JSON.parse(line); } catch (_) { continue; }
+    let entry; try { entry = JSON.parse(line); } catch { continue; }
     const message = entry.message;
     if (!message || !message.content) continue;
     if (typeof message.content === 'string') { sessionChars += message.content.length; continue; }
@@ -128,7 +129,7 @@ function scanClaude(lines) {
 function scanPi(lines) {
   for (const line of lines) {
     if (!line) continue;
-    let entry; try { entry = JSON.parse(line); } catch (_) { continue; }
+    let entry; try { entry = JSON.parse(line); } catch { continue; }
     if (entry.type === 'custom_message') {
       sessionChars += contentChars(entry.content);
       continue;

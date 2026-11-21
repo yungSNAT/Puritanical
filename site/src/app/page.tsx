@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 import Nav from "@/components/Nav";
 import Hero from "@/components/Hero";
 import GetStarted from "@/components/GetStarted";
@@ -14,7 +15,7 @@ import Community from "@/components/Community";
 import Faq from "@/components/Faq";
 import Footer from "@/components/Footer";
 
-export default function Page() {
+export default function Page(): React.JSX.Element {
   return (
     <main>
       <Nav />

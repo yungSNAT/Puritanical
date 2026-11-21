@@ -1,3 +1,4 @@
+/* global module, process, require -- Node.js runtime */
 'use strict';
 // `npx chisle tools [trim|restore] [--days N] [--also A,B] [--dry-run] [--config-dir <dir>]`
 //
@@ -38,11 +39,11 @@ const RECORD = '.chisle-trimmed-tools.json';
 function transcripts(dir, since) {
   const out = [];
   const walk = (d) => {
-    let entries; try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; }
+    let entries; try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       const p = path.join(d, e.name);
       if (e.isDirectory()) walk(p);
-      else if (e.name.endsWith('.jsonl')) { try { if (fs.statSync(p).mtimeMs >= since) out.push(p); } catch (_) {} }
+      else if (e.name.endsWith('.jsonl')) { try { if (fs.statSync(p).mtimeMs >= since) out.push(p); } catch {} }
     }
   };
   walk(path.join(dir, 'projects'));
@@ -52,37 +53,42 @@ function transcripts(dir, since) {
 // Largest schema / description seen per tool and skill, calls of each, and the
 // request count, over the window.
 function scan(files) {
-  const size = {}, calls = {}, skillSize = {}, skillCalls = {}, listings = []; let requests = 0;
+  const size = new Map(), calls = new Map();
+  const skillSize = new Map(), skillCalls = new Map(), listings = [];
+  let requests = 0;
   for (const f of files) {
-    let text; try { text = fs.readFileSync(f, 'utf8'); } catch (_) { continue; }
+    let text; try { text = fs.readFileSync(f, 'utf8'); } catch { continue; }
     const seen = new Set();
     for (const line of text.split('\n')) {
       if (line.includes('"prompt_snapshot"')) {
-        let e; try { e = JSON.parse(line); } catch (_) { continue; }
+        let e; try { e = JSON.parse(line); } catch { continue; }
         const tools = e.attachment && Array.isArray(e.attachment.tools) ? e.attachment.tools : [];
-        for (const t of tools) if (t && t.name) size[t.name] = Math.max(size[t.name] || 0, JSON.stringify(t).length);
+        for (const t of tools) {
+          if (!t || typeof t.name !== 'string' || !t.name) continue;
+          size.set(t.name, Math.max(size.get(t.name) ?? 0, JSON.stringify(t).length));
+        }
       } else if (line.includes('"skill_listing"')) {
-        let e; try { e = JSON.parse(line); } catch (_) { continue; }
+        let e; try { e = JSON.parse(line); } catch { continue; }
         const listing = e.attachment && typeof e.attachment.content === 'string' ? e.attachment.content : '';
         const entries = [];
         for (const item of listing.split(/\n(?=- )/)) {
           const k = item.indexOf(': ');           // names may contain ':' (plugin:skill)
           if (!item.startsWith('- ') || k < 0) continue;
           const name = item.slice(2, k);
-          skillSize[name] = Math.max(skillSize[name] || 0, item.length - k - 2);
+          skillSize.set(name, Math.max(skillSize.get(name) ?? 0, item.length - k - 2));
           entries.push([name, item.length - k - 2]);
         }
         if (entries.length) listings.push(entries);
       } else if (line.includes('"tool_use"') || line.includes('"usage"')) {
-        let e; try { e = JSON.parse(line); } catch (_) { continue; }
+        let e; try { e = JSON.parse(line); } catch { continue; }
         const m = e.message;
         if (!m || e.type !== 'assistant') continue;
         if (m.usage && m.id && !seen.has(m.id)) { seen.add(m.id); requests++; }
         for (const b of Array.isArray(m.content) ? m.content : []) {
-          if (b.type !== 'tool_use') continue;
-          calls[b.name] = (calls[b.name] || 0) + 1;
+          if (b?.type !== 'tool_use') continue;
+          if (typeof b.name === 'string') calls.set(b.name, (calls.get(b.name) ?? 0) + 1);
           const s = b.name === 'Skill' && b.input && b.input.skill;
-          if (s) skillCalls[s] = (skillCalls[s] || 0) + 1;
+          if (typeof s === 'string' && s) skillCalls.set(s, (skillCalls.get(s) ?? 0) + 1);
         }
       }
     }
@@ -93,14 +99,14 @@ function scan(files) {
 function plan(claudeDir, days) {
   const files = transcripts(claudeDir, Date.now() - days * 864e5);
   const { size, calls, skillSize, skillCalls, listings, requests } = scan(files);
-  const rows = Object.entries(size)
+  const rows = [...size]
     .filter(([name, chars]) => chars >= MIN_CHARS && !name.startsWith('mcp__'))
-    .map(([name, chars]) => ({ name, chars, tokens: Math.round(chars / CHARS_PER_TOKEN), calls: calls[name] || 0,
-      trim: !CORE.has(name) && !calls[name] }))
+    .map(([name, chars]) => ({ name, chars, tokens: Math.round(chars / CHARS_PER_TOKEN), calls: calls.get(name) ?? 0,
+      trim: !CORE.has(name) && !calls.has(name) }))
     .sort((a, b) => b.chars - a.chars);
-  const skills = Object.entries(skillSize)
+  const skills = [...skillSize]
     .filter(([, chars]) => chars >= MIN_SKILL_CHARS)
-    .map(([name, chars]) => ({ name, chars, tokens: Math.round(chars / 4), calls: skillCalls[name] || 0, trim: !skillCalls[name] }))
+    .map(([name, chars]) => ({ name, chars, tokens: Math.round(chars / 4), calls: skillCalls.get(name) ?? 0, trim: !skillCalls.has(name) }))
     .sort((a, b) => b.chars - a.chars);
   // A session lists only its own project's skills, so the per-request saving
   // is the average over real listings, not the sum of every skill ever seen.
@@ -113,7 +119,7 @@ function readRecord(claudeDir) {
   try {
     const r = JSON.parse(fs.readFileSync(path.join(claudeDir, RECORD), 'utf8'));
     return { added: r.added || [], skills: r.skills || [] };
-  } catch (_) { return { added: [], skills: [] }; }
+  } catch { return { added: [], skills: [] }; }
 }
 
 function load(claudeDir) {
@@ -131,8 +137,10 @@ function restore(claudeDir, { dryRun = false } = {}) {
   const { settingsPath, settings } = load(claudeDir);
   const deny = (settings.permissions && settings.permissions.deny) || [];
   const overrides = settings.skillOverrides || {};
+  const restoredSkills = rec.skills.filter((name) =>
+    Object.getOwnPropertyDescriptor(overrides, name)?.value === 'name-only');
   const removed = rec.added.filter((n) => deny.includes(n))
-    .concat(rec.skills.filter((n) => overrides[n] === 'name-only').map((n) => `skill ${n}`));
+    .concat(restoredSkills.map((name) => `skill ${name}`));
   if (!dryRun) {
     if (settings.permissions) {
       settings.permissions.deny = deny.filter((n) => !rec.added.includes(n));
@@ -140,8 +148,10 @@ function restore(claudeDir, { dryRun = false } = {}) {
       if (!Object.keys(settings.permissions).length) delete settings.permissions;
     }
     if (settings.skillOverrides) {
-      for (const n of rec.skills) if (settings.skillOverrides[n] === 'name-only') delete settings.skillOverrides[n];
-      if (!Object.keys(settings.skillOverrides).length) delete settings.skillOverrides;
+      const restored = new Set(restoredSkills);
+      const preserved = Object.entries(overrides).filter(([name]) => !restored.has(name));
+      if (preserved.length) settings.skillOverrides = Object.fromEntries(preserved);
+      else delete settings.skillOverrides;
     }
     SETTINGS.writeSettings(settingsPath, settings);
     fs.rmSync(path.join(claudeDir, RECORD), { force: true });
@@ -154,20 +164,22 @@ function trim(claudeDir, names, skillNames = [], { dryRun = false } = {}) {
   const deny = (settings.permissions && settings.permissions.deny) || [];
   const overrides = settings.skillOverrides || {};
   const fresh = names.filter((n) => !deny.includes(n));
-  const freshSkills = skillNames.filter((n) => !(n in overrides));   // never override the user's own choice
+  const freshSkills = skillNames.filter((name) => !Object.hasOwn(overrides, name));
   if (!dryRun && (fresh.length || freshSkills.length)) {
     if (fresh.length) {
       settings.permissions = settings.permissions || {};
       settings.permissions.deny = deny.concat(fresh);
     }
     if (freshSkills.length) {
-      settings.skillOverrides = overrides;
-      for (const n of freshSkills) overrides[n] = 'name-only';
+      settings.skillOverrides = Object.fromEntries([
+        ...Object.entries(overrides),
+        ...freshSkills.map((name) => [name, 'name-only']),
+      ]);
     }
     SETTINGS.writeSettings(settingsPath, settings);
     const rec = readRecord(claudeDir);
     const next = { added: [...new Set(rec.added.concat(fresh))], skills: [...new Set(rec.skills.concat(freshSkills))] };
-    fs.writeFileSync(path.join(claudeDir, RECORD), JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
+    SETTINGS.writeSettings(path.join(claudeDir, RECORD), next);
   }
   return { tools: fresh, skills: freshSkills };
 }

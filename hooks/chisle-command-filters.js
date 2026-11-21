@@ -1,3 +1,4 @@
+/* global module, require -- Node.js runtime */
 // chisle — command-aware output filters (RTK-style, but post-hoc).
 //
 // Design credit: RTK (https://github.com/rtk-ai/rtk). The short git status,
@@ -177,8 +178,8 @@ function compactCargo(lines) {
   const out = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (l === 'failures:' && /^    \S+$/.test(lines[i + 1] || '')) {
-      while (/^    \S+$/.test(lines[i + 1] || '')) i++;
+    if (l === 'failures:' && /^ {4}\S+$/.test(lines[i + 1] || '')) {
+      while (/^ {4}\S+$/.test(lines[i + 1] || '')) i++;
       continue;
     }
     out.push(l.replace(/^(test result: \w+\. .*?); finished in (\S+)$/, (_, head, t) =>
@@ -188,9 +189,17 @@ function compactCargo(lines) {
 }
 
 // Long `git status` → the short format (`XY path`), as `git status -sb` prints.
-const STATUS_SECTIONS = { 'Changes to be committed:': 'x', 'Changes not staged for commit:': 'y', 'Unmerged paths:': 'u', 'Untracked files:': '??', 'Ignored files:': '!!' };
-const STATUS_CODES = { modified: 'M', 'new file': 'A', deleted: 'D', renamed: 'R', copied: 'C', typechange: 'T' };
-const UNMERGED_CODES = { 'both modified': 'UU', 'added by us': 'AU', 'added by them': 'UA', 'deleted by us': 'DU', 'deleted by them': 'UD', 'both added': 'AA', 'both deleted': 'DD' };
+const STATUS_SECTIONS = new Map(Object.entries({
+  'Changes to be committed:': 'x', 'Changes not staged for commit:': 'y',
+  'Unmerged paths:': 'u', 'Untracked files:': '??', 'Ignored files:': '!!',
+}));
+const STATUS_CODES = new Map(Object.entries({
+  modified: 'M', 'new file': 'A', deleted: 'D', renamed: 'R', copied: 'C', typechange: 'T',
+}));
+const UNMERGED_CODES = new Map(Object.entries({
+  'both modified': 'UU', 'added by us': 'AU', 'added by them': 'UA', 'deleted by us': 'DU',
+  'deleted by them': 'UD', 'both added': 'AA', 'both deleted': 'DD',
+}));
 
 function shortStatus(lines) {
   const out = [];
@@ -198,13 +207,14 @@ function shortStatus(lines) {
   let sec = null;
   let at = -1;
   for (const l of lines) {
-    if (l in STATUS_SECTIONS) { sec = STATUS_SECTIONS[l]; if (at < 0) at = out.length; continue; }
+    const section = STATUS_SECTIONS.get(l);
+    if (section) { sec = section; if (at < 0) at = out.length; continue; }
     if (!l.trim()) { sec = null; continue; }
     if (sec && l.startsWith('\t')) {
       const e = l.slice(1);
       if (sec === '??' || sec === '!!') { files.set(sec + e, `${sec} ${e}`); continue; }
       const m = e.match(/^([a-z ]+):\s+(.*)$/);
-      const code = m && (sec === 'u' ? UNMERGED_CODES[m[1]] : STATUS_CODES[m[1]]);
+      const code = m && (sec === 'u' ? UNMERGED_CODES : STATUS_CODES).get(m[1]);
       if (code) {
         if (sec === 'u') { files.set(m[2], `${code} ${m[2]}`); continue; }
         const prev = files.get(m[2]);
@@ -331,7 +341,7 @@ function compactBranches(lines, allRemote) {
   const out = [];
   const remotes = new Map();
   for (const l of lines) {
-    const m = allRemote ? l.match(/^  ([^/\s]+)\/(\S+(?: -> \S+)?)$/) : l.match(/^  remotes\/([^/\s]+)\/(\S+(?: -> \S+)?)$/);
+    const m = allRemote ? l.match(/^ {2}([^/\s]+)\/(\S+(?: -> \S+)?)$/) : l.match(/^ {2}remotes\/([^/\s]+)\/(\S+(?: -> \S+)?)$/);
     if (!m) { out.push(l); continue; }
     if (!remotes.has(m[1])) { remotes.set(m[1], []); out.push(m[1]); }
     remotes.get(m[1]).push(m[2].replace(` -> ${m[1]}/`, ' -> '));
@@ -345,7 +355,7 @@ function compactBranches(lines, allRemote) {
 // directory's own mode); ACL/xattr marks (`+`, `@`) kept on the mode.
 const LS_RE = /^([-dlcbps])([rwxsStT-]{9})([.+@]?)\s+\d+\s+(\S+)\s+(\S+)\s+(\d+|\d+,\s*\d+|[\d.]+[KMGTP]?)\s+(\w{3}\s+\d{1,2}\s+(?:\d{1,2}:\d{2}|\d{4})|\d{4}-\d{2}-\d{2}(?: [\d:.]+(?: [+-]\d{4})?)?)\s(.+)$/;
 let me = null;
-try { me = require('os').userInfo().username; } catch (_) {}
+try { me = require('os').userInfo().username; } catch {}
 
 function octal(perm) {
   let special = 0;

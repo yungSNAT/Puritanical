@@ -1,19 +1,29 @@
 #!/usr/bin/env node
+/* global __dirname, Buffer, process, require -- Node.js runtime */
 // OpenCode tool-output compression tests — allowlist, compression decision,
 // and the plugin's tool.execute.after hook mutating output in place.
 // Run: node --test tests/test_opencode.js
 
-const { test } = require('node:test');
+const { beforeEach, test } = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
 const { symlinkSkip } = require('./fixtures/symlinks');
 const { spawn, spawnSync } = require('child_process');
 
-// State (spill/dedup) must not leak into ~/.claude during tests.
-process.env.CHISLE_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-oc-'));
+// Give every test its own state root and let the fixture clean it up.
+isolateWorkingDirectory();
+beforeEach(t => {
+  const previous = process.env.CHISLE_STATE_DIR;
+  process.env.CHISLE_STATE_DIR = process.cwd();
+  t.after(() => {
+    if (previous === undefined) delete process.env.CHISLE_STATE_DIR;
+    else process.env.CHISLE_STATE_DIR = previous;
+  });
+});
 
 const opencodeCore = require('../hooks/chisle-compress-output');
 const {
@@ -345,7 +355,7 @@ test('recordSavings, spill, and dedup accept a symlinked state root', (t) => {
   let linkOk = true;
   try {
     fs.symlinkSync(path.join(probe, 'no-target'), path.join(probe, 'link'), 'dir');
-  } catch (e) { linkOk = false; }
+  } catch { linkOk = false; }
   finally { fs.rmSync(probe, { recursive: true, force: true }); }
   if (!linkOk) { t.skip('host cannot create symlinks'); return; }
 

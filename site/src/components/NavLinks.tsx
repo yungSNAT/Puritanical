@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,7 +15,7 @@ const SECTIONS = [
   { id: "faq", label: "FAQ" },
 ];
 
-export default function NavLinks() {
+export default function NavLinks(): React.JSX.Element {
   const [active, setActive] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
@@ -33,7 +34,8 @@ export default function NavLinks() {
       (entries) => {
         const seen = entries
           .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+          .at(0);
         if (seen) setActive(seen.target.id);
       },
       // Band across the upper-middle of the viewport: a section counts as

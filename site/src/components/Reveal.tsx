@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { motion } from "motion/react";
@@ -6,11 +7,11 @@ export default function Reveal({
   children,
   delay = 0,
   className,
-}: {
+}: Readonly<{
   children: React.ReactNode;
   delay?: number;
   className?: string;
-}) {
+}>): React.JSX.Element {
   return (
     <motion.div
       className={className}

@@ -1,3 +1,4 @@
+/* global module, process, require -- Node.js runtime */
 // chisle — JSONC-tolerant settings.json read/write + defensive hook validation.
 //
 // Claude Code applies strict Zod to settings.json: one malformed hook silently
@@ -20,6 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { readSettingsText } = require('../../hooks/chisle-config');
 
 // ── stripJsonComments ──────────────────────────────────────────────────────
 // State machine tracking string + escape state so a comment-looking sequence
@@ -53,13 +55,20 @@ function stripJsonComments(src) {
 // Strict JSON fast path → JSONC fallback → null (never silently clobber a
 // recoverable file with {}).
 function readSettings(p) {
-  if (!fs.existsSync(p)) return {};
   let raw;
-  try { raw = fs.readFileSync(p, 'utf8'); }
-  catch (e) { process.stderr.write(`chisle: cannot read ${p}: ${e.message}\n`); return null; }
+  try { raw = readSettingsText(p); }
+  catch (error) {
+    if (error.code === 'ENOENT') return {};
+    process.stderr.write(`chisle: cannot read ${p}: ${error.message}\n`);
+    return null;
+  }
+  if (raw === null) {
+    process.stderr.write(`chisle: cannot read ${p}: expected a bounded, regular file\n`);
+    return null;
+  }
   if (!raw.trim()) return {};
-  try { return JSON.parse(raw.replace(/^﻿/, '')); } catch (_) {}
-  try { return JSON.parse(stripJsonComments(raw.replace(/^﻿/, ''))); }
+  try { return JSON.parse(raw.replace(/^\uFEFF/, '')); } catch {}
+  try { return JSON.parse(stripJsonComments(raw.replace(/^\uFEFF/, ''))); }
   catch (e) {
     process.stderr.write(`chisle: warning — ${p} is not valid JSON/JSONC: ${e.message}\n`);
     return null;
@@ -68,12 +77,31 @@ function readSettings(p) {
 
 // ── writeSettings ──────────────────────────────────────────────────────────
 // Atomic: temp + rename. mode 0600 (settings often holds tokens).
-function writeSettings(p, obj) {
+function writeAtomically(p, text, { mode = 0o600, noReplace = false } = {}) {
   const dir = path.dirname(p);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(dir, `.${path.basename(p)}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`);
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', { mode: 0o600 });
-  fs.renameSync(tmp, p);
+  const tmp = path.join(dir, `.${path.basename(p)}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`);
+  const fd = fs.openSync(tmp, 'wx', mode);
+  let renamed = false;
+  try {
+    try {
+      fs.writeFileSync(fd, text);
+    } finally {
+      fs.closeSync(fd);
+    }
+    // Publishing a complete backup with a hard link preserves the first copy.
+    if (noReplace) fs.linkSync(tmp, p);
+    else {
+      fs.renameSync(tmp, p);
+      renamed = true;
+    }
+  } finally {
+    if (!renamed) { try { fs.unlinkSync(tmp); } catch {} }
+  }
+}
+
+function writeSettings(p, obj) {
+  writeAtomically(p, JSON.stringify(obj, null, 2) + '\n');
 }
 
 // ── validateHookFields ─────────────────────────────────────────────────────
@@ -143,6 +171,6 @@ function removeHooks(settings, marker) {
 }
 
 module.exports = {
-  stripJsonComments, readSettings, writeSettings,
+  stripJsonComments, readSettings, writeSettings, writeAtomically,
   validateHookFields, hasHook, addCommandHook, removeHooks,
 };

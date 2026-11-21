@@ -1,10 +1,11 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 import { ImageResponse } from "next/og";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt = "Chisle: cut your agent's token bill on three axes";
 
-export default function OG() {
+export default function OG(): ImageResponse {
   return new ImageResponse(
     (
       <div

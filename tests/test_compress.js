@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process, require -- Node.js runtime */
 // Tool-output compressor tests — correctness guardrails and never-crash.
 // Run: node --test tests/test_compress.js
 
@@ -319,7 +320,7 @@ function withSpillDir(fn) {
 }
 
 test('an elided output spills in full and the marker points at it', () => {
-  withSpillDir((dir) => {
+  withSpillDir(() => {
     const text = bigOutput(500);
     const out = transform(text, FULL, 'Bash');
 

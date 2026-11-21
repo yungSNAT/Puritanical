@@ -1,3 +1,4 @@
+/* global __dirname -- Node.js runtime */
 'use strict';
 
 const path = require('path');
@@ -38,6 +39,6 @@ module.exports = async function setup(ctx) {
           ? content.map((part) => part && part.type === 'text' ? { ...part, text: compress(part.text) } : part)
           : content;
       if (updated !== content) event.result = { ...event.result, content: updated };
-    } catch (_) {}
+    } catch {}
   });
 };

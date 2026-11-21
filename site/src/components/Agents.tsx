@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 import Reveal from "./Reveal";
 
 // Coverage per agent, matching the FAQ and README: "full" runs both axes,
@@ -28,7 +29,7 @@ const LEVEL = {
   "rules+mcp": { label: "ruleset + MCP compression", cls: "bg-raised text-fg" },
 };
 
-export default function Agents() {
+export default function Agents(): React.JSX.Element {
   return (
     <section className="border-y border-line bg-surface py-24">
       <div className="mx-auto max-w-6xl px-5">
@@ -52,10 +53,10 @@ export default function Agents() {
               <div className="lift flex h-full items-center gap-3 rounded-lg border border-line bg-bg p-4">
                 <span
                   aria-hidden
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-raised"
+                  className="grid size-10 shrink-0 place-items-center rounded-md border border-line bg-raised"
                 >
                   <span
-                    className="h-5 w-5 bg-fg"
+                    className="size-5 bg-fg"
                     style={{
                       WebkitMask: `url(/logos/${a.logo}.svg) center / contain no-repeat`,
                       mask: `url(/logos/${a.logo}.svg) center / contain no-repeat`,

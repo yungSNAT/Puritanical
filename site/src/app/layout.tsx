@@ -1,6 +1,7 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 import type { Metadata } from "next";
 import { Mona_Sans, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import "../style.css";
 
 const mona = Mona_Sans({
   subsets: ["latin"],
@@ -74,20 +75,17 @@ const jsonLd = {
   offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>): React.JSX.Element {
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning className={`${mona.variable} ${geistMono.variable}`}>
       <body className="antialiased">
         {/* set theme before paint, so no flash; dark by default, honors a saved choice */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{var t=localStorage.getItem("chisle-theme")||"dark";document.documentElement.dataset.theme=t}catch(e){}`,
-          }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        <script>
+          {`try{var t=localStorage.getItem("chisle-theme")||"dark";document.documentElement.dataset.theme=t}catch{}`}
+        </script>
+        <script type="application/ld+json">
+          {JSON.stringify(jsonLd).replace(/</g, "\\u003c")}
+        </script>
         {children}
       </body>
     </html>

@@ -1,6 +1,7 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
+import { useState, type SyntheticEvent } from "react";
 import Reveal from "./Reveal";
 import SectionHead from "./SectionHead";
 
@@ -35,17 +36,21 @@ const HOOKS = [
 
 type HookId = (typeof HOOKS)[number]["id"];
 
-export default function Pipeline() {
+export default function Pipeline(): React.JSX.Element {
   const [hook, setHook] = useState<HookId | null>(null);
 
   // Hovering lifts the element itself rather than dimming its neighbours:
   // a thicker accent stroke and a soft ring, so attention is added, not removed.
-  const box = (id: HookId) => ({
-    onMouseEnter: () => setHook(id),
-    onMouseLeave: () => setHook(null),
-    style: { cursor: "pointer" as const },
-  });
-  const on = (id: HookId) => hook === id;
+  function showHook(event: SyntheticEvent<SVGGElement | HTMLButtonElement>): void {
+    const id = event.currentTarget.dataset.hook;
+    setHook(HOOKS.find((item) => item.id === id)?.id ?? null);
+  }
+
+  function clearHook(): void {
+    setHook(null);
+  }
+
+  const on = (id: HookId): boolean => hook === id;
 
   return (
     <section className="border-y border-line bg-surface py-28">
@@ -71,13 +76,13 @@ export default function Pipeline() {
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-accent)" />
                 </marker>
                 <style>{`
-                  .hook rect { transition: stroke 0.2s, stroke-width 0.2s; }
+                  svg [data-hook] rect { transition: stroke 0.2s, stroke-width 0.2s; }
                   .ring { transition: opacity 0.25s, transform 0.25s; transform-box: fill-box; transform-origin: center; }
                 `}</style>
               </defs>
 
               {/* SessionStart */}
-              <g className="hook" {...box("session")}>
+              <g className="cursor-pointer" data-hook="session" onMouseEnter={showHook} onMouseLeave={clearHook}>
                 <rect
                   className="ring"
                   x="4" y="30" width="196" height="60" rx="9"
@@ -93,7 +98,7 @@ export default function Pipeline() {
               </g>
 
               {/* UserPromptSubmit */}
-              <g className="hook" {...box("prompt")}>
+              <g className="cursor-pointer" data-hook="prompt" onMouseEnter={showHook} onMouseLeave={clearHook}>
                 <rect
                   className="ring"
                   x="4" y="102" width="196" height="60" rx="9"
@@ -129,7 +134,7 @@ export default function Pipeline() {
               <text x="446" y="163" textAnchor="middle" fontSize="10" fill="var(--color-dim)">calls</text>
 
               {/* PostToolUse */}
-              <g className="hook" {...box("post")}>
+              <g className="cursor-pointer" data-hook="post" onMouseEnter={showHook} onMouseLeave={clearHook}>
                 <rect
                   className="ring"
                   x="504" y="218" width="208" height="66" rx="9"
@@ -170,11 +175,13 @@ export default function Pipeline() {
         <div className="mx-auto mt-6 flex max-w-3xl flex-wrap justify-center gap-2">
           {HOOKS.map((h) => (
             <button
+              type="button"
               key={h.id}
-              onMouseEnter={() => setHook(h.id)}
-              onMouseLeave={() => setHook(null)}
-              onFocus={() => setHook(h.id)}
-              onBlur={() => setHook(null)}
+              data-hook={h.id}
+              onMouseEnter={showHook}
+              onMouseLeave={clearHook}
+              onFocus={showHook}
+              onBlur={clearHook}
               aria-pressed={hook === h.id}
               className={`rounded border px-3 py-1 font-mono text-[11px] transition-all ${
                 hook === h.id
@@ -188,7 +195,7 @@ export default function Pipeline() {
         </div>
 
         <p className="mx-auto mt-3 min-h-[3.5rem] max-w-2xl text-center text-xs leading-relaxed text-dim">
-          {hook ? HOOKS.find((h) => h.id === hook)!.body : "Hover a hook, in the diagram or below it."}
+          {HOOKS.find((h) => h.id === hook)?.body ?? "Hover a hook, in the diagram or below it."}
         </p>
 
         <Reveal delay={0.12}>

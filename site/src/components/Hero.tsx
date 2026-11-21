@@ -1,7 +1,8 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
 import { motion } from "motion/react";
+import { useCopyText } from "./CopyCmd";
 import { Glyph } from "./icons";
 
 const TAGS = [
@@ -18,20 +19,36 @@ const INSTALL = "npx chisle";
 // Tile grid behind the copy: faint lines in three soft patches, plus a few lit
 // cells. Drawn in currentColor so it follows the theme.
 const CELL = 60;
-const LIT: [col: number, row: number, opacity: number][] = [
-  [0, 0, 0.03], [2, 1, 0.045],
-  [13, 0, 0.04], [15, 0, 0.03], [12, 1, 0.045], [14, 1, 0.035],
-  [4, 6, 0.03], [6, 6, 0.05], [3, 8, 0.025], [4, 9, 0.04], [6, 9, 0.05], [5, 10, 0.025],
-  [22, 6, 0.03], [24, 7, 0.05], [23, 8, 0.04], [22, 9, 0.045], [27, 6, 0.025], [28, 7, 0.04],
+const CELL_INSET = 2;
+const TILE_SIZE = CELL - CELL_INSET * 2;
+const LIT = [
+  { column: 0, row: 0, opacity: 0.03 },
+  { column: 2, row: 1, opacity: 0.045 },
+  { column: 13, row: 0, opacity: 0.04 },
+  { column: 15, row: 0, opacity: 0.03 },
+  { column: 12, row: 1, opacity: 0.045 },
+  { column: 14, row: 1, opacity: 0.035 },
+  { column: 4, row: 6, opacity: 0.03 },
+  { column: 6, row: 6, opacity: 0.05 },
+  { column: 3, row: 8, opacity: 0.025 },
+  { column: 4, row: 9, opacity: 0.04 },
+  { column: 6, row: 9, opacity: 0.05 },
+  { column: 5, row: 10, opacity: 0.025 },
+  { column: 22, row: 6, opacity: 0.03 },
+  { column: 24, row: 7, opacity: 0.05 },
+  { column: 23, row: 8, opacity: 0.04 },
+  { column: 22, row: 9, opacity: 0.045 },
+  { column: 27, row: 6, opacity: 0.025 },
+  { column: 28, row: 7, opacity: 0.04 },
 ];
 
-function TileGrid() {
+function TileGrid(): React.JSX.Element {
   return (
     <svg
       aria-hidden
       viewBox="0 0 1720 820"
       preserveAspectRatio="xMidYMin slice"
-      className="pointer-events-none absolute left-1/2 top-0 h-full w-full max-w-[1720px] -translate-x-1/2 text-fg"
+      className="pointer-events-none absolute left-1/2 top-0 size-full max-w-[1720px] -translate-x-1/2 text-fg"
     >
       <defs>
         <pattern id="tg-lines" width={CELL} height={CELL} patternUnits="userSpaceOnUse">
@@ -52,8 +69,15 @@ function TileGrid() {
       </defs>
       <rect width="1720" height="820" fill="url(#tg-lines)" mask="url(#tg-mask)" opacity="0.08" />
       <g fill="currentColor" filter="url(#tg-soft)">
-        {LIT.map(([c, r, o]) => (
-          <rect key={`${c}-${r}`} x={c * CELL + 2} y={r * CELL + 2} width={CELL - 4} height={CELL - 4} opacity={o} />
+        {LIT.map(({ column, row, opacity }) => (
+          <rect
+            key={`${column}-${row}`}
+            x={column * CELL + CELL_INSET}
+            y={row * CELL + CELL_INSET}
+            width={TILE_SIZE}
+            height={TILE_SIZE}
+            opacity={opacity}
+          />
         ))}
       </g>
     </svg>
@@ -62,23 +86,20 @@ function TileGrid() {
 
 // The install card: header row with a hint and copy button, then the command
 // with its two most useful companions as comments. Copy takes the command only.
-function InstallCard() {
-  const [copied, setCopied] = useState(false);
+function InstallCard(): React.JSX.Element {
+  const [copied, copyText] = useCopyText();
+  const copyInstall = (): void => { copyText(INSTALL); };
   return (
     <div className="neon w-full max-w-[640px]">
       <div className="overflow-hidden rounded-[9px] bg-term text-left">
         <div className="flex items-center gap-2.5 border-b border-term-line bg-white/[0.02] px-4 py-3">
-          <span aria-hidden className="grid h-5 w-5 place-items-center rounded bg-gradient-to-br from-brand to-[#ffc56b] font-mono text-[10px] font-bold text-on-brand">
+          <span aria-hidden className="grid size-5 place-items-center rounded bg-gradient-to-br from-brand to-[#ffc56b] font-mono text-[10px] font-bold text-on-brand">
             C
           </span>
           <span className="flex-1 font-mono text-sm font-medium text-term-fg">Run this. Done.</span>
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(INSTALL);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1600);
-            }}
+            onClick={copyInstall}
             aria-label={copied ? "Copied" : `Copy ${INSTALL}`}
             className={`rounded p-1 transition-colors ${copied ? "text-[#86c06c]" : "text-term-dim hover:text-term-fg"}`}
           >
@@ -103,8 +124,28 @@ function InstallCard() {
 }
 
 const ease = [0.16, 1, 0.3, 1] as const;
+const intro = {
+  start: { opacity: 0, x: -24 },
+  end: { opacity: 1, x: 0 },
+  transition: { duration: 0.6, ease },
+};
+const tags = {
+  start: { opacity: 0, x: 24 },
+  end: intro.end,
+  transition: { duration: 0.6, delay: 0.1, ease },
+};
+const install = {
+  start: { opacity: 0, y: 24 },
+  end: { opacity: 1, y: 0 },
+  transition: { duration: 0.6, delay: 0.2, ease },
+};
+const links = {
+  start: { opacity: 0, scale: 0.94 },
+  end: { opacity: 1, scale: 1 },
+  transition: { duration: 0.5, delay: 0.3, ease },
+};
 
-export default function Hero() {
+export default function Hero(): React.JSX.Element {
   return (
     <header id="top" className="hero-wash relative overflow-hidden px-5 pt-40 pb-20 sm:pb-24">
       <TileGrid />
@@ -113,9 +154,9 @@ export default function Hero() {
       <div className="relative mx-auto flex max-w-6xl flex-col items-center gap-10 sm:gap-16">
         <div className="flex flex-col items-center gap-7 sm:gap-10">
           <motion.div
-            initial={{ opacity: 0, x: -24 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, ease }}
+            initial={intro.start}
+            animate={intro.end}
+            transition={intro.transition}
             className="flex flex-col items-center gap-5 text-center"
           >
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl">
@@ -132,9 +173,9 @@ export default function Hero() {
           </motion.div>
 
           <motion.ul
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.1, ease }}
+            initial={tags.start}
+            animate={tags.end}
+            transition={tags.transition}
             className="flex max-w-4xl flex-wrap justify-center gap-2"
           >
             {TAGS.map((t) => (
@@ -152,18 +193,18 @@ export default function Hero() {
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2, ease }}
+          initial={install.start}
+          animate={install.end}
+          transition={install.transition}
           className="flex w-full justify-center"
         >
           <InstallCard />
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, scale: 0.94 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.3, ease }}
+          initial={links.start}
+          animate={links.end}
+          transition={links.transition}
           className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:gap-4"
         >
           <a

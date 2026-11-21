@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 // Each figure carries where it comes from. The point of the site is that the
 // numbers survive being checked, so the source sits right under the number.
 const STATS = [
@@ -7,7 +8,7 @@ const STATS = [
   { v: "156/156", k: "auto-graded maths and coding answers correct; the bare model got 154", src: "52 problems × 3 seeds, hidden tests, no judge model; benchmarks/quality/raw-nov/" },
 ];
 
-export default function Stats() {
+export default function Stats(): React.JSX.Element {
   return (
     <section className="border-y border-line bg-surface">
       <dl className="mx-auto grid max-w-6xl grid-cols-2 lg:grid-cols-4">

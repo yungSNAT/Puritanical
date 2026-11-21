@@ -1,9 +1,10 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 import { getRepoStats } from "@/lib/github";
 import Reveal from "./Reveal";
 import CopyCmd from "./CopyCmd";
 import { GitHubIcon } from "./Nav";
 
-export default async function Community() {
+export default async function Community(): Promise<React.JSX.Element> {
   const stats = await getRepoStats();
 
   return (

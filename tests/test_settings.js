@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global require -- Node.js runtime */
 // Tests for bin/lib/settings.js — the settings.json mutation logic.
 // This touches real user config in production, so the merge/uninstall round
 // trip must be airtight.
@@ -7,12 +8,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
 
 const S = require('../bin/lib/settings.js');
 
-function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-set-')); }
+isolateWorkingDirectory();
 
 // ── stripJsonComments ────────────────────────────────────────────────────────
 
@@ -25,20 +25,14 @@ test('stripJsonComments removes // and /* */ but spares strings', () => {
 });
 
 test('readSettings parses JSONC with trailing commas', () => {
-  const dir = tmp();
-  const p = path.join(dir, 'settings.json');
-  fs.writeFileSync(p, '{ "x": 1, /* c */ "y": 2, }');
-  assert.deepEqual(S.readSettings(p), { x: 1, y: 2 });
-  fs.rmSync(dir, { recursive: true });
+  fs.writeFileSync('settings.json', '{ "x": 1, /* c */ "y": 2, }');
+  assert.deepEqual(S.readSettings('settings.json'), { x: 1, y: 2 });
 });
 
 test('readSettings returns {} for missing, null for garbage', () => {
-  assert.deepEqual(S.readSettings('/tmp/chisle-nope-xyz.json'), {});
-  const dir = tmp();
-  const p = path.join(dir, 's.json');
-  fs.writeFileSync(p, '{ this is not json at all ::: }');
-  assert.equal(S.readSettings(p), null);
-  fs.rmSync(dir, { recursive: true });
+  assert.deepEqual(S.readSettings('missing.json'), {});
+  fs.writeFileSync('s.json', '{ this is not json at all ::: }');
+  assert.equal(S.readSettings('s.json'), null);
 });
 
 // ── addCommandHook idempotency ───────────────────────────────────────────────
@@ -95,11 +89,16 @@ test('validateHookFields drops malformed entries before write', () => {
 // ── atomic write ─────────────────────────────────────────────────────────────
 
 test('writeSettings produces valid JSON with trailing newline', () => {
-  const dir = tmp();
-  const p = path.join(dir, 'settings.json');
-  S.writeSettings(p, { a: 1 });
-  const raw = fs.readFileSync(p, 'utf8');
+  S.writeSettings('croft-manor.json', { a: 1 });
+  const raw = fs.readFileSync('croft-manor.json', 'utf8');
   assert.ok(raw.endsWith('\n'));
   assert.deepEqual(JSON.parse(raw), { a: 1 });
-  fs.rmSync(dir, { recursive: true });
+});
+
+test('writeSettings removes its temporary file when replacement fails', () => {
+  fs.mkdirSync('settings.json');
+  fs.writeFileSync('settings.json/original', 'preserve');
+  assert.throws(() => S.writeSettings('settings.json', { a: 1 }));
+  assert.deepEqual(fs.readdirSync('.'), ['settings.json']);
+  assert.equal(fs.readFileSync('settings.json/original', 'utf8'), 'preserve');
 });

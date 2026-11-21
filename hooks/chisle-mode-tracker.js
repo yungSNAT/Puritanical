@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global Buffer, process, require -- Node.js runtime */
 // chisle — UserPromptSubmit hook
 // Handles /chisle commands, natural language activation/deactivation, and
 // per-turn reinforcement.
@@ -45,7 +46,7 @@ function resumeWarning(transcriptPath, now = Date.now()) {
     fs.closeSync(fd);
     const lines = buf.toString('utf8').split('\n');
     for (let i = lines.length - 1; i >= (len === size ? 0 : 1); i--) { // line 0 of a partial tail is cut
-      let e; try { e = JSON.parse(lines[i]); } catch (_) { continue; }
+      let e; try { e = JSON.parse(lines[i]); } catch { continue; }
       const u = e && e.type === 'assistant' && e.message && e.message.model !== '<synthetic>' && e.message.usage;
       if (!u) continue;
       const context = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
@@ -57,7 +58,7 @@ function resumeWarning(transcriptPath, now = Date.now()) {
         `~${Math.round(context / 1000)}k-token context and every later turn re-reads it. ` +
         'Run /compact to continue from a summary, or /clear if this is a new task.';
     }
-  } catch (e) {}
+  } catch {}
   return null;
 }
 
@@ -68,12 +69,12 @@ let input = '';
 process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   try {
-    const data = JSON.parse(input.replace(/^﻿/, ''));
+    const data = JSON.parse(input.replace(/^\uFEFF/, ''));
     const prompt = (data.prompt || '').trim();
     const request = requestedMode(prompt);
 
     if (request === 'off') {
-      try { fs.unlinkSync(flagPath); } catch (e) {}
+      try { fs.unlinkSync(flagPath); } catch {}
     } else if (request === 'on') {
       safeWriteFlag(flagPath, 'on');
     }
@@ -92,7 +93,7 @@ process.stdin.on('end', () => {
       if (warning) out.systemMessage = warning;
       process.stdout.write(JSON.stringify(out));
     }
-  } catch (e) {
+  } catch {
     // Silent fail
   }
 });

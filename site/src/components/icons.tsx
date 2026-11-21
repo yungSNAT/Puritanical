@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 // Small stroke icons, drawn inline: no icon library. 24×24, stroked with currentColor.
 export const ICONS: Record<string, React.ReactNode> = {
   persona: <path d="M4 6h16M4 12h10M4 18h6" />,
@@ -14,7 +15,7 @@ export const ICONS: Record<string, React.ReactNode> = {
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
 };
 
-export function Glyph({ name, size = 18 }: { name: string; size?: number }) {
+export function Glyph({ name, size = 18 }: Readonly<{ name: string; size?: number }>): React.JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       {ICONS[name]}

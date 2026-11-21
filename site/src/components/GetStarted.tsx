@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useState } from "react";
@@ -34,12 +35,12 @@ const INSTALLS = [
   },
 ];
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Step({ n, title, children }: Readonly<{ n: number; title: string; children: React.ReactNode }>): React.JSX.Element {
   return (
     <li className="relative grid gap-4 pb-12 pl-14 last:pb-0">
       <span
         aria-hidden
-        className="absolute left-0 top-0 grid h-9 w-9 place-items-center rounded-full border border-brand-hover/60 bg-accent-soft font-mono text-sm font-semibold text-accent"
+        className="absolute left-0 top-0 grid size-9 place-items-center rounded-full border border-brand-hover/60 bg-accent-soft font-mono text-sm font-semibold text-accent"
       >
         {n}
       </span>
@@ -49,7 +50,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-export default function GetStarted() {
+export default function GetStarted(): React.JSX.Element {
   const [active, setActive] = useState(INSTALLS[0].id);
   const current = INSTALLS.find((i) => i.id === active)!;
 
@@ -76,15 +77,16 @@ export default function GetStarted() {
         </Reveal>
 
         <Reveal delay={0.08}>
-          <ol className="relative before:absolute before:left-[17px] before:top-10 before:bottom-10 before:w-px before:bg-line">
+          <ol className="relative before:absolute before:inset-y-10 before:left-[17px] before:w-px before:bg-line">
             <Step n={1} title="Install">
               <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface p-1 w-fit" role="tablist" aria-label="Installation method">
                 {INSTALLS.map((i) => (
                   <button
+                    type="button"
                     key={i.id}
                     role="tab"
                     aria-selected={i.id === active}
-                    onClick={() => setActive(i.id)}
+                    onClick={() => { setActive(i.id); }}
                     className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                       i.id === active ? "bg-raised text-fg shadow-sm" : "text-dim hover:text-fg"
                     }`}
@@ -93,7 +95,7 @@ export default function GetStarted() {
                   </button>
                 ))}
               </div>
-              <CopyCmd cmd={current.cmd} label={current.label} />
+              <CopyCmd key={current.id} cmd={current.cmd} label={current.label} />
               <p className="-mt-2 text-xs text-dim">{current.note}</p>
             </Step>
 

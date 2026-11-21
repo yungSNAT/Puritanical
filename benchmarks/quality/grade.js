@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, console, module, process, require -- Node.js runtime */
 // Grades benchmarks/quality/raw/*.json.
 //
 //   math -> the required "ANSWER:" line must match the key exactly, after
@@ -109,7 +110,7 @@ function load() {
     if (!m) continue;
     const [, suite, id, arm, seed] = m;
     let d;
-    try { d = JSON.parse(fs.readFileSync(path.join(RAW, f), 'utf8')); } catch (_) { continue; }
+    try { d = JSON.parse(fs.readFileSync(path.join(RAW, f), 'utf8')); } catch { continue; }
     if (!d || d.is_error) continue;
     const answer = d.result || '';
     const item = suite === 'math' ? mathById[id] : codeById[id];

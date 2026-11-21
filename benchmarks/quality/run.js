@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, console, process, require -- Node.js runtime */
 // Quality benchmark: does the Chisle ruleset change how OFTEN the model is RIGHT?
 //
 // Two arms, identical prompt, identical model. vanilla appends nothing; chisle
@@ -69,7 +70,7 @@ function runCell(c) {
       // A usage-limit refusal is not a measurement -- it grades as a wrong
       // answer and silently poisons every later cell. Drop it and stop.
       let parsed = {};
-      try { parsed = JSON.parse(stdout); } catch (_) {}
+      try { parsed = JSON.parse(stdout); } catch {}
       const text = String(parsed.result || '');
       // Only a short, error-shaped result is a limit hit: matching "rate limit"
       // anywhere also dropped valid answers that merely mention rate limiting.

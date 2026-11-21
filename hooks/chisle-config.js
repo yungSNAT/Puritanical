@@ -375,7 +375,7 @@ function readFlag(flagPath) {
 
 module.exports = {
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
-  VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText,
+  VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readRegularFile, readSettingsText,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,
   getActiveOutputStyle, explicitSections, resolveSections,
 };

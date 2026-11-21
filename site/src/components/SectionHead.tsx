@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 import Reveal from "./Reveal";
 
 // Shared section header: eyebrow, heading, lede.
@@ -6,12 +7,12 @@ export default function SectionHead({
   title,
   children,
   center = false,
-}: {
+}: Readonly<{
   eyebrow: string;
   title: React.ReactNode;
   children?: React.ReactNode;
   center?: boolean;
-}) {
+}>): React.JSX.Element {
   return (
     <Reveal>
       <div className={center ? "mx-auto max-w-2xl text-center" : "max-w-2xl"}>

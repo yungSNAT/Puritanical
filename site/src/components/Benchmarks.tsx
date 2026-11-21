@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useRef } from "react";
@@ -35,7 +36,7 @@ const CORRECT = [
   { label: "real repos, hidden tests, 7 fixtures × 5 seeds", bare: "31 / 35", chisle: "31 / 35" },
 ];
 
-export default function Benchmarks() {
+export default function Benchmarks(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-100px" });
 

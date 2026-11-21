@@ -93,7 +93,7 @@ export default async () => {
             recordSavings(original.length - updated.length, getOpencodeStateDir());
           }
         }
-      } catch (e) { /* keep the original output */ }
+      } catch { /* keep the original output */ }
     },
 
     // Request-time safety net over completed tool parts. Runs after MCP
@@ -122,7 +122,7 @@ export default async () => {
             }
           }
         }
-      } catch (e) { /* leave messages untouched */ }
+      } catch { /* leave messages untouched */ }
     },
   };
 };
