@@ -85,14 +85,15 @@ impl Ctx {
     }
 }
 
-/// Writes `text` to `path`, creating its directory.
+/// Writes `text` to `path`, creating its directory. A lone surrogate becomes
+/// U+FFFD, as `fs.writeFileSync` writes it.
 ///
 /// # Errors
 /// The directory or file cannot be written.
 pub fn write(path: &Path, text: &str) -> Result<(), String> {
     let fail = |e: std::io::Error| format!("{}: {e}", path.display());
     std::fs::create_dir_all(path.parent().unwrap_or(Path::new("."))).map_err(fail)?;
-    std::fs::write(path, text).map_err(fail)
+    std::fs::write(path, js::lossy(text)).map_err(fail)
 }
 
 /// Compares or writes one generated file. `stale` is the `--check` failure line.

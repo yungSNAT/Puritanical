@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use puritanical_tools::{Ctx, run};
+use puritanical_tools::{Ctx, js, run};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -37,9 +37,13 @@ fn main() -> ExitCode {
     ExitCode::from(code)
 }
 
-/// Writes `text`. A closed pipe (`| head`) is not an error; any other failure is.
+/// Writes `text` as Node does, a lone surrogate as U+FFFD. A closed pipe
+/// (`| head`) is not an error; any other failure is.
 fn emit(w: &mut impl Write, text: &str) -> std::io::Result<()> {
-    match w.write_all(text.as_bytes()).and_then(|()| w.flush()) {
+    match w
+        .write_all(js::lossy(text).as_bytes())
+        .and_then(|()| w.flush())
+    {
         Err(e) if e.kind() != ErrorKind::BrokenPipe => Err(e),
         _ => Ok(()),
     }

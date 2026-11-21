@@ -84,7 +84,22 @@ pub fn round(x: f64) -> f64 {
 /// `s.length`: UTF-16 code units.
 #[must_use]
 pub fn len(s: &str) -> usize {
-    s.encode_utf16().count()
+    units(s).count()
+}
+
+/// The UTF-16 code units JavaScript holds for `s`: a stand-in is its one lone surrogate.
+fn units(s: &str) -> impl Iterator<Item = u16> + '_ {
+    s.chars().flat_map(|c| {
+        let mut buf = [0; 2];
+        let n = match lone(c) {
+            Some(u) => {
+                buf[0] = u as u16;
+                1
+            }
+            None => c.encode_utf16(&mut buf).len(),
+        };
+        buf.into_iter().take(n)
+    })
 }
 
 /// The stand-in for lone surrogate `0xD800 + k` is U+10F800 + k: the last
@@ -105,7 +120,7 @@ fn lone(c: char) -> Option<u32> {
 /// Never: every surrogate's stand-in is a valid code point.
 #[must_use]
 pub fn slice(s: &str, n: usize) -> String {
-    char::decode_utf16(s.encode_utf16().take(n))
+    char::decode_utf16(units(s).take(n))
         .map(|r| {
             r.unwrap_or_else(|e| {
                 char::from_u32(LONE + u32::from(e.unpaired_surrogate()) - 0xD800).expect("plane 16")
@@ -220,6 +235,39 @@ pub fn number(v: Option<&Value>) -> f64 {
     match v {
         Some(Value::Number(n)) => as_f64(n),
         _ => f64::NAN,
+    }
+}
+
+/// `${v}` in a template literal: a missing field prints `undefined`.
+#[must_use]
+pub fn template(v: Option<&Value>) -> String {
+    match v {
+        None => "undefined".into(),
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|i| {
+                if i.is_null() {
+                    String::new()
+                } else {
+                    template(Some(i))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(","),
+        Some(Value::Object(_)) => "[object Object]".into(),
+        Some(v) => scalar(v),
+    }
+}
+
+/// `v` as an operand of `-`: `null` is 0, `true` is 1. Strings are not
+/// parsed (NaN); token counts are numbers.
+#[must_use]
+pub fn operand(v: Option<&Value>) -> f64 {
+    match v {
+        Some(Value::Null | Value::Bool(false)) => 0.0,
+        Some(Value::Bool(true)) => 1.0,
+        v => number(v),
     }
 }
 
@@ -339,9 +387,63 @@ pub fn read(p: &Path) -> std::io::Result<String> {
 }
 
 /// `JSON.parse(fs.readFileSync(p, 'utf8'))`, or `None` where either throws.
+///
+/// # Panics
+/// The file holds a code point from U+10F800..U+10FFFF, which the port
+/// reserves for lone surrogates; refusing it beats corrupting it.
 #[must_use]
 pub fn read_json(p: &Path) -> Option<Value> {
-    serde_json::from_str(&read(p).ok()?).ok()
+    let text = keep_lone(&read(p).ok()?).unwrap_or_else(|| {
+        panic!(
+            "{}: holds a code point from U+10F800..U+10FFFF, which puritanical-tools reserves for lone surrogates",
+            p.display()
+        )
+    });
+    serde_json::from_str(&text).ok()
+}
+
+/// JSON text with each escaped lone surrogate (`"\ud800"`, which `JSON.parse`
+/// accepts and `serde_json` refuses) replaced by its [`slice`] stand-in, so
+/// the record parses and prints back as it was. `None` when the text already
+/// holds a stand-in code point, raw or escaped.
+pub(crate) fn keep_lone(text: &str) -> Option<String> {
+    if text.chars().any(|c| lone(c).is_some()) {
+        return None;
+    }
+    let hex = |i: usize| {
+        text.get(i..i + 6)
+            .and_then(|e| e.strip_prefix("\\u"))
+            .filter(|h| h.bytes().all(|b| b.is_ascii_hexdigit()))
+            .and_then(|h| u32::from_str_radix(h, 16).ok())
+    };
+    let b = text.as_bytes();
+    let (mut out, mut from, mut i) = (String::with_capacity(text.len()), 0, 0);
+    while i < b.len() {
+        if b[i] != b'\\' {
+            i += 1;
+            continue;
+        }
+        let Some(u) = hex(i) else {
+            i += 2;
+            continue;
+        };
+        let low = hex(i + 6).filter(|l| (0xDC00..0xE000).contains(l));
+        if (0xD800..0xDC00).contains(&u) && low.is_some() {
+            if u >= 0xDBFE {
+                return None;
+            }
+            i += 12;
+            continue;
+        }
+        if (0xD800..0xE000).contains(&u) {
+            out.push_str(&text[from..i]);
+            out.push(char::from_u32(LONE + u - 0xD800)?);
+            from = i + 6;
+        }
+        i += 6;
+    }
+    out.push_str(&text[from..]);
+    Some(out)
 }
 
 /// `fs.readdirSync(p)`: names in byte order, as libuv sorts them.

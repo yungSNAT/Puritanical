@@ -57,6 +57,52 @@ fn round_takes_halves_up() {
 }
 
 #[test]
+fn escaped_lone_surrogates_parse_and_print_back() {
+    let parse =
+        |t: &str| serde_json::from_str::<Value>(&keep_lone(t).expect("no stand-in")).unwrap();
+    let v = parse(r#"{"t":"a\ud800b\uDC01","p":"\ud83d\ude00","e":"\\ud800"}"#);
+    assert_eq!(
+        stringify(&v, 0),
+        r#"{"t":"a\ud800b\udc01","p":"😀","e":"\\ud800"}"#
+    );
+    assert_eq!(
+        len(v["t"].as_str().unwrap()),
+        4,
+        "each lone surrogate is one unit"
+    );
+    assert_eq!(lossy(v["t"].as_str().unwrap()), "a\u{fffd}b\u{fffd}");
+    assert_eq!(
+        keep_lone("\"\u{10f800}\""),
+        None,
+        "a raw stand-in code point is refused"
+    );
+    assert_eq!(keep_lone(r#""\udbfe\udc00""#), None, "an escaped one too");
+    assert_eq!(
+        keep_lone(r#""\udbfe""#).map(|t| len(&t)),
+        Some(3),
+        "a lone high one is kept"
+    );
+}
+
+#[test]
+fn fields_print_and_subtract_as_template_literals_do() {
+    let u = json!({"n": null, "x": 42, "s": "7", "a": [1, null, 2]});
+    let cases = [
+        ("n", "null", 0.0),
+        ("x", "42", 42.0),
+        ("missing", "undefined", f64::NAN),
+    ];
+    for (k, shown, operand_value) in cases {
+        assert_eq!(template(u.get(k)), shown);
+        assert_eq!(num(operand(u.get(k))), num(operand_value), "{k}");
+    }
+    assert_eq!(template(u.get("s")), "7");
+    assert_eq!(template(u.get("a")), "1,,2");
+    assert_eq!(template(Some(&u)), "[object Object]");
+    assert_eq!(operand(Some(&json!(true))), 1.0);
+}
+
+#[test]
 fn strings_measure_in_utf16_units() {
     assert_eq!(len("a😀"), 3);
     assert_eq!(lossy(&slice("a😀b", 2)), "a\u{fffd}", "console.log");

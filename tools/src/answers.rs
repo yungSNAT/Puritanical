@@ -177,13 +177,13 @@ fn answer(path: &Path, arm: &str) -> Vec<String> {
         .and_then(|m| m.values().next());
     let think = js::number_or_zero(first.and_then(|m| m.get("thinkingTokens")));
     let text = js::trim(j.get("result").and_then(Value::as_str).unwrap_or_default()).to_string();
-    let billed = js::number(j["usage"].get("output_tokens"));
+    let billed = j["usage"].get("output_tokens");
     let f = fence(&text);
     vec![
         format!(
             "### {arm}: {} answer tokens, {} billed, {} lines",
-            num(billed - think),
-            num(billed),
+            num(js::operand(billed) - think),
+            js::template(billed),
             text.split('\n').count()
         ),
         String::new(),
