@@ -38,7 +38,7 @@ function loadRules() {
     // the same `sections` config (prose/code rule suppression) the same way.
     return 'CHISLE ACTIVE\n\n' +
       filterSections(skill.replace(/^---[\s\S]*?---\s*/, ''), getSections());
-  } catch (_) {
+  } catch {
     return 'CHISLE ACTIVE\n\n' +
       filterSections(FALLBACK_BODY, getSections(), ['Prose'], ['Code']);
   }
@@ -55,9 +55,10 @@ function loadRules() {
 function sessionEntries(ctx, method) {
   try {
     const sm = ctx && ctx.sessionManager;
-    if (!sm || typeof sm[method] !== 'function') return [];
-    return sm[method]() || [];
-  } catch (_) {
+    if (method === 'getBranch') return sm?.getBranch?.() || [];
+    if (method === 'buildContextEntries') return sm?.buildContextEntries?.() || [];
+    return [];
+  } catch {
     return [];
   }
 }
@@ -223,10 +224,10 @@ function chisleExtension(pi) {
         let updated = null;
 
         if (process.env.CHISLE_COMPRESS_DEDUP !== '0' && text.length >= DEDUP_MIN) {
-          const hash = crypto.createHash('sha256').update(text).digest('hex');
+          const hash = crypto.createHash('sha256').update(text).digest();
           const previous = dedupBaseline.get(key);
           lastByToolBlock.set(key, hash);
-          if (previous === hash) updated = duplicateMarker(event.toolName, text, 'earlier');
+          if (previous && crypto.timingSafeEqual(previous, hash)) updated = duplicateMarker(event.toolName, text, 'earlier');
         }
         if (updated == null) updated = transform(text, limitsFor(), event.toolName, undefined, commandOf(event.input));
         if (updated == null || updated.length >= text.length) return block;
@@ -238,7 +239,7 @@ function chisleExtension(pi) {
       if (!changed) return;
       updateStatus(ctx);
       return { content };
-    } catch (_) {
+    } catch {
       return;
     }
   });

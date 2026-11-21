@@ -7,7 +7,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
+const useTemporaryWorkingDirectory = require('./fixtures/working-directory');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { readSettings } = require('../bin/lib/settings');
@@ -15,6 +15,8 @@ const { readFlag } = require('../hooks/chisle-config');
 const { recordSavings } = require('../hooks/chisle-compress-output');
 
 const CLI = path.join(__dirname, '..', 'bin', 'install.js');
+
+useTemporaryWorkingDirectory();
 
 function runCLI(args, { cwd, env } = {}) {
   try {
@@ -31,7 +33,7 @@ function runCLI(args, { cwd, env } = {}) {
 test('--help lists all agents', () => {
   const { out } = runCLI(['--help']);
   for (const id of ['claude', 'pi', 'gemini', 'codex', 'cursor', 'windsurf', 'cline', 'kiro', 'copilot', 'antigravity']) {
-    assert.match(out, new RegExp(id));
+    assert.ok(out.includes(id), id);
   }
 });
 
@@ -53,7 +55,8 @@ test('--only with bad agent exits 2', () => {
 });
 
 test('project rule install writes into CWD, is idempotent, --force overwrites', () => {
-  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-proj-'));
+  const proj = path.resolve('project');
+  fs.mkdirSync(proj);
 
   // First install
   let r = runCLI(['--only', 'cursor'], { cwd: proj });
@@ -69,18 +72,16 @@ test('project rule install writes into CWD, is idempotent, --force overwrites', 
   fs.writeFileSync(ruleFile, 'TAMPERED');
   r = runCLI(['--only', 'cursor', '--force'], { cwd: proj });
   assert.notEqual(fs.readFileSync(ruleFile, 'utf8'), 'TAMPERED');
-
-  fs.rmSync(proj, { recursive: true, force: true });
 });
 
 test('Antigravity rule lands in .agents/rules as an always-on workspace rule', () => {
-  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-proj-'));
+  const proj = path.resolve('project');
+  fs.mkdirSync(proj);
   const r = runCLI(['--only', 'antigravity'], { cwd: proj });
   const ruleFile = path.join(proj, '.agents', 'rules', 'chisle.md');
   assert.match(r.out, /installed:/);
   // Antigravity ignores a workspace rule without a `trigger` in its frontmatter.
   assert.match(fs.readFileSync(ruleFile, 'utf8'), /^---\ntrigger: always_on\n/);
-  fs.rmSync(proj, { recursive: true, force: true });
 });
 
 test('Pi package manifest ships extension and skill', () => {
@@ -106,15 +107,17 @@ test('OMP manifest points at a .cjs entry resolving to the same factory', () => 
 });
 
 test('dry-run changes nothing on disk', () => {
-  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-dry-'));
+  const proj = path.resolve('project');
+  fs.mkdirSync(proj);
   runCLI(['--only', 'cline', '--dry-run'], { cwd: proj });
   assert.ok(!fs.existsSync(path.join(proj, '.clinerules')), 'dry-run wrote nothing');
-  fs.rmSync(proj, { recursive: true, force: true });
 });
 
 test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { skip: process.platform === 'win32' }, () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-pi-home-'));
-  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-pi-bin-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const binDir = path.resolve('bin');
+  fs.mkdirSync(binDir);
   const log = path.join(home, 'pi.log');
   const list = path.join(home, 'pi-list.txt');
   const settings = path.join(home, '.pi', 'agent', 'settings.json');
@@ -154,9 +157,6 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
   assert.match(fs.readFileSync(log, 'utf8'), /^list\nremove npm:chisle\n$/);
   assert.deepEqual(JSON.parse(fs.readFileSync(settings, 'utf8')), { theme: 'dark', packages: ['npm:foreign'] },
     'uninstaller edited unrelated Pi settings');
-
-  fs.rmSync(home, { recursive: true, force: true });
-  fs.rmSync(binDir, { recursive: true, force: true });
 });
 
 test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
@@ -164,9 +164,12 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   // --only claude. Uninstall must stay scoped (#39): without --only it removes
   // every host's integration, and with a real `claude` on PATH it would run
   // `claude plugin uninstall` against the live install. So: empty PATH, temp HOME.
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle config '));
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-home-'));
-  const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-nopath-'));
+  const cfg = path.resolve('Claude config');
+  fs.mkdirSync(cfg);
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const emptyBin = path.resolve('empty-bin');
+  fs.mkdirSync(emptyBin);
   const env = { HOME: home, USERPROFILE: home, PATH: emptyBin };
   // Pre-seed a user settings.json with foreign content to protect.
   fs.writeFileSync(path.join(cfg, 'settings.json'), JSON.stringify({ model: 'opus' }, null, 2));
@@ -210,14 +213,15 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   assert.equal(after.statusLine, undefined);
   assert.equal(after.hooks, undefined);
   assert.equal(fs.existsSync(hookPath), false);
-
-  for (const d of [cfg, home, emptyBin]) fs.rmSync(d, { recursive: true, force: true });
 });
 
 test('star prompt: never asked, never written, never calls gh without a terminal', { skip: process.platform === 'win32' }, () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-cfg-'));
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-home-'));
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-gh-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const bin = path.resolve('bin');
+  fs.mkdirSync(bin);
   const log = path.join(bin, 'gh.log');
   fs.writeFileSync(path.join(bin, 'gh'), `#!/bin/sh\necho "$*" >> "${log}"\n`, { mode: 0o755 });
   const env = { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: path.join(home, 'xdg'), PATH: bin, CI: '' };
@@ -227,15 +231,16 @@ test('star prompt: never asked, never written, never calls gh without a terminal
   assert.match(out, /a star helps others find it: https:\/\/github\.com\/JayPokale\/Chisle/);
   assert.equal(fs.existsSync(log), false, 'gh never called');
   assert.equal(fs.existsSync(path.join(home, 'xdg', 'chisle', 'config.json')), false, 'nothing saved');
-  for (const d of [cfg, home, bin]) fs.rmSync(d, { recursive: true, force: true });
 });
 
 // Regression for #4: the plugin path and the standalone path both registering
 // the hooks made two copies run per tool call, and the shared dedup state file
 // then reported first-seen output as a duplicate of itself.
 test('REGRESSION: plugin path removes leftover standalone hook entries', { skip: process.platform === 'win32' }, () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-conv-'));
-  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-fakebin-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
+  const binDir = path.resolve('bin');
+  fs.mkdirSync(binDir);
   // A `claude` that reports the plugin as installed, so installClaude() takes
   // the plugin branch without shelling out to a real marketplace.
   const fake = path.join(binDir, 'claude');
@@ -262,9 +267,6 @@ test('REGRESSION: plugin path removes leftover standalone hook entries', { skip:
   assert.ok(!cmds.some(c => c.includes('chisle-')), 'standalone chisle hook still registered');
   assert.ok(cmds.some(c => c.includes('keep-me.js')), 'foreign hook removed');
   assert.equal(after.model, 'opus');
-
-  fs.rmSync(cfg, { recursive: true, force: true });
-  fs.rmSync(binDir, { recursive: true, force: true });
 });
 
 // ── --stats ─────────────────────────────────────────────────────────────────
@@ -272,7 +274,8 @@ test('REGRESSION: plugin path removes leftover standalone hook entries', { skip:
 // and assert the CLI reports what is actually there, never an estimate.
 
 test('--stats reports the ledger and changes nothing', () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-stats-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
   const ledger = path.join(cfg, '.chisle-compress-stats.json');
   fs.writeFileSync(ledger, JSON.stringify({ savedChars: 88967, events: 18 }));
   const before = fs.readFileSync(ledger, 'utf8');
@@ -284,32 +287,31 @@ test('--stats reports the ledger and changes nothing', () => {
   assert.match(r.out, /18 compressed/);
   assert.equal(fs.readFileSync(ledger, 'utf8'), before, '--stats must be read-only');
   assert.equal(fs.readdirSync(cfg).length, 1, '--stats must not create files');
-
-  fs.rmSync(cfg, { recursive: true, force: true });
 });
 
 test('--stats says so plainly when nothing has been recorded', () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-stats-empty-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
   const r = runCLI(['--stats', '--config-dir', cfg]);
   assert.equal(r.status, 0);
   assert.match(r.out, /no compression recorded yet/);
   assert.doesNotMatch(r.out, /NaN|undefined/);
-  fs.rmSync(cfg, { recursive: true, force: true });
 });
 
 test('--stats survives a corrupt or hostile ledger', () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-stats-bad-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
   for (const junk of ['{', 'null', '{"savedChars":"lots","events":3}', '[]']) {
     fs.writeFileSync(path.join(cfg, '.chisle-compress-stats.json'), junk);
     const r = runCLI(['--stats', '--config-dir', cfg]);
     assert.equal(r.status, 0, `crashed on ${junk}`);
     assert.match(r.out, /no compression recorded yet/, `trusted ${junk}`);
   }
-  fs.rmSync(cfg, { recursive: true, force: true });
 });
 
 test('--stats refuses to follow a symlinked ledger', { skip: process.platform === 'win32' }, () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-stats-link-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
   const real = path.join(cfg, 'elsewhere.json');
   fs.writeFileSync(real, JSON.stringify({ savedChars: 99999, events: 7 }));
   fs.symlinkSync(real, path.join(cfg, '.chisle-compress-stats.json'));
@@ -317,7 +319,6 @@ test('--stats refuses to follow a symlinked ledger', { skip: process.platform ==
   const r = runCLI(['--stats', '--config-dir', cfg]);
   assert.equal(r.status, 0);
   assert.doesNotMatch(r.out, /99,999/, 'followed a symlink');
-  fs.rmSync(cfg, { recursive: true, force: true });
 });
 
 test('--help and --list advertise --stats', () => {
@@ -329,8 +330,10 @@ test('--help and --list advertise --stats', () => {
 // so the documented upgrade command reported success and changed nothing.
 
 test('--update refreshes an installed Pi package instead of skipping it', { skip: process.platform === 'win32' }, () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-home-'));
-  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-bin-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const binDir = path.resolve('bin');
+  fs.mkdirSync(binDir);
   const log = path.join(home, 'pi.log');
   const list = path.join(home, 'pi-list.txt');
   fs.writeFileSync(list, 'User packages:\n  npm:chisle@3.0.0\n');
@@ -348,14 +351,13 @@ test('--update refreshes an installed Pi package instead of skipping it', { skip
   assert.match(upd.out, /Chisle updater/);
   assert.doesNotMatch(upd.out, /already installed/);
   assert.match(fs.readFileSync(log, 'utf8'), /install npm:chisle/, '--update did not reinstall');
-
-  fs.rmSync(home, { recursive: true, force: true });
-  fs.rmSync(binDir, { recursive: true, force: true });
 });
 
 test('--update installs nothing new and says why', { skip: process.platform === 'win32' }, () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-none-'));
-  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-none-bin-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const binDir = path.resolve('bin');
+  fs.mkdirSync(binDir);
   const log = path.join(home, 'pi.log');
   const list = path.join(home, 'pi-list.txt');
   fs.writeFileSync(list, 'User packages:\n  npm:something-else@1.0.0\n');
@@ -366,13 +368,11 @@ test('--update installs nothing new and says why', { skip: process.platform === 
   const r = runCLI(['--only', 'pi', '--update'], { env });
   assert.match(r.out, /Nothing to update/);
   assert.doesNotMatch(fs.readFileSync(log, 'utf8'), /install/, '--update installed an absent agent');
-
-  fs.rmSync(home, { recursive: true, force: true });
-  fs.rmSync(binDir, { recursive: true, force: true });
 });
 
 test('--update refreshes a project rule file in place', () => {
-  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-proj-'));
+  const proj = path.resolve('project');
+  fs.mkdirSync(proj);
   const rule = path.join(proj, '.clinerules', 'chisle.md');
 
   runCLI(['--only', 'cline'], { cwd: proj });
@@ -382,13 +382,13 @@ test('--update refreshes a project rule file in place', () => {
   const r = runCLI(['--only', 'cline', '--update'], { cwd: proj });
   assert.match(r.out, /Chisle updater/);
   assert.doesNotMatch(fs.readFileSync(rule, 'utf8'), /stale copy/, '--update left a stale rule file');
-
-  fs.rmSync(proj, { recursive: true, force: true });
 });
 
 test('--update is read-only under --dry-run', { skip: process.platform === 'win32' }, () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-dry-'));
-  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-dry-bin-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const binDir = path.resolve('bin');
+  fs.mkdirSync(binDir);
   const log = path.join(home, 'pi.log');
   const list = path.join(home, 'pi-list.txt');
   fs.writeFileSync(list, 'User packages:\n  npm:chisle@3.0.0\n');
@@ -399,9 +399,6 @@ test('--update is read-only under --dry-run', { skip: process.platform === 'win3
   const r = runCLI(['--only', 'pi', '--update', '--dry-run'], { env });
   assert.match(r.out, /would run: pi install npm:chisle/);
   assert.doesNotMatch(fs.readFileSync(log, 'utf8'), /install/, 'dry-run mutated');
-
-  fs.rmSync(home, { recursive: true, force: true });
-  fs.rmSync(binDir, { recursive: true, force: true });
 });
 
 test('--help advertises --update', () => {
@@ -411,16 +408,27 @@ test('--help advertises --update', () => {
 // Global agents. CHISLE_HOME redirects the home dir so tests never touch
 // the real ~/.config/opencode or ~/.hermes. Runs on win32 too (no shell).
 
-function mkHome() { return fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-home-')); }
-
 function isolatedOpencodeEnv(home, extra) {
   return { CHISLE_HOME: home, XDG_CONFIG_HOME: '', OPENCODE_CONFIG_DIR: '', ...extra };
 }
 
-function repoSkill(rel) { return fs.readFileSync(path.join(__dirname, '..', 'skills', rel), 'utf8'); }
+function readShippedSkills(directory) {
+  const previous = process.cwd();
+  process.chdir(directory);
+  try {
+    return {
+      chisle: fs.readFileSync('chisle/SKILL.md', 'utf8'),
+      audit: fs.readFileSync('chisle-audit/SKILL.md', 'utf8'),
+      help: fs.readFileSync('chisle-help/SKILL.md', 'utf8'),
+      review: fs.readFileSync('chisle-review/SKILL.md', 'utf8'),
+    };
+  } finally {
+    process.chdir(previous);
+  }
+}
 
-function fakeOpencode(home, version) {
-  const bin = path.join(home, 'bin');
+function fakeOpencode(version) {
+  const bin = path.resolve('home', 'bin');
   fs.mkdirSync(bin, { recursive: true });
   // Windows only finds a bare `opencode` through PATHEXT, so the stub is a .cmd there.
   if (process.platform === 'win32') {
@@ -439,69 +447,64 @@ test('--help and --list advertise opencode + hermes', () => {
 });
 
 test('opencode v1 installation layout remains unchanged', () => {
-  const home = mkHome();
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const root = path.join(home, '.config', 'opencode');
-  const env = isolatedOpencodeEnv(home, { PATH: fakeOpencode(home, '1.19.5') });
-  try {
-    const staleV2 = path.join(root, 'plugins', 'chisle');
-    fs.mkdirSync(staleV2, { recursive: true });
-    fs.writeFileSync(path.join(staleV2, 'index.js'), 'stale v2');
-    let result = runCLI(['--only', 'opencode'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
-    assert.equal(fs.existsSync(staleV2), false);
-    assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle-hooks', 'chisle-compress-output.js')));
-    assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle')), false);
+  const env = isolatedOpencodeEnv(home, { PATH: fakeOpencode('1.19.5') });
+  const staleV2 = path.join(root, 'plugins', 'chisle');
+  fs.mkdirSync(staleV2, { recursive: true });
+  fs.writeFileSync(path.join(staleV2, 'index.js'), 'stale v2');
+  let result = runCLI(['--only', 'opencode'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
+  assert.equal(fs.existsSync(staleV2), false);
+  assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle-hooks', 'chisle-compress-output.js')));
+  assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle')), false);
 
-    result = runCLI(['--only', 'opencode', '--update'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
+  result = runCLI(['--only', 'opencode', '--update'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
 
-    result = runCLI(['--uninstall', '--only', 'opencode'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
-  } finally {
-    fs.rmSync(home, { recursive: true, force: true });
-  }
+  result = runCLI(['--uninstall', '--only', 'opencode'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
 });
 
 test('opencode v2 install, update, dry-run, and uninstall use the v2 plugin directory', () => {
-  const home = mkHome();
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const root = path.join(home, '.config', 'opencode');
-  const env = isolatedOpencodeEnv(home, { PATH: fakeOpencode(home, '2.2.2') });
+  const env = isolatedOpencodeEnv(home, { PATH: fakeOpencode('2.2.2') });
   const plugin = path.join(root, 'plugins', 'chisle');
-  try {
-    let result = runCLI(['--only', 'opencode', '--dry-run'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.match(result.out, /plugins.*chisle/);
-    assert.deepEqual(fs.readdirSync(home), ['bin']);
+  let result = runCLI(['--only', 'opencode', '--dry-run'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.match(result.out, /plugins.*chisle/);
+  assert.deepEqual(fs.readdirSync(home), ['bin']);
 
-    const legacy = path.join(root, 'plugins');
-    fs.mkdirSync(path.join(legacy, 'chisle-hooks'), { recursive: true });
-    fs.writeFileSync(path.join(legacy, 'chisle.js'), 'legacy');
-    result = runCLI(['--only', 'opencode'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.ok(fs.existsSync(path.join(plugin, 'index.js')));
-    assert.equal(fs.existsSync(path.join(legacy, 'chisle.js')), false);
-    assert.equal(fs.existsSync(path.join(legacy, 'chisle-hooks')), false);
-    assert.ok(fs.existsSync(path.join(plugin, 'chisle-hooks', 'chisle-compress-output.js')));
-    assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
+  const legacy = path.join(root, 'plugins');
+  fs.mkdirSync(path.join(legacy, 'chisle-hooks'), { recursive: true });
+  fs.writeFileSync(path.join(legacy, 'chisle.js'), 'legacy');
+  result = runCLI(['--only', 'opencode'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.ok(fs.existsSync(path.join(plugin, 'index.js')));
+  assert.equal(fs.existsSync(path.join(legacy, 'chisle.js')), false);
+  assert.equal(fs.existsSync(path.join(legacy, 'chisle-hooks')), false);
+  assert.ok(fs.existsSync(path.join(plugin, 'chisle-hooks', 'chisle-compress-output.js')));
+  assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
 
-    fs.writeFileSync(path.join(plugin, 'index.js'), 'STALE');
-    result = runCLI(['--only', 'opencode', '--update'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.notEqual(fs.readFileSync(path.join(plugin, 'index.js'), 'utf8'), 'STALE');
+  fs.writeFileSync(path.join(plugin, 'index.js'), 'STALE');
+  result = runCLI(['--only', 'opencode', '--update'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.notEqual(fs.readFileSync(path.join(plugin, 'index.js'), 'utf8'), 'STALE');
 
-    result = runCLI(['--uninstall', '--only', 'opencode'], { env });
-    assert.equal(result.status, 0, result.out);
-    assert.equal(fs.existsSync(plugin), false);
-  } finally {
-    fs.rmSync(home, { recursive: true, force: true });
-  }
+  result = runCLI(['--uninstall', '--only', 'opencode'], { env });
+  assert.equal(result.status, 0, result.out);
+  assert.equal(fs.existsSync(plugin), false);
 });
 
 test('opencode install appends fenced ruleset, preserves user content, copies skills', () => {
-  const home = mkHome();
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const env = isolatedOpencodeEnv(home);
   const agents = path.join(home, '.config', 'opencode', 'AGENTS.md');
   const skills = path.join(home, '.config', 'opencode', 'skills');
@@ -514,9 +517,7 @@ test('opencode install appends fenced ruleset, preserves user content, copies sk
   assert.ok(txt.startsWith('# my setup\n\nmy instructions.\n'), 'user instructions moved or clobbered');
   assert.ok(txt.includes('<!-- chisle-begin -->') && txt.includes('<!-- chisle-end -->'));
   assert.equal(txt.indexOf('<!-- chisle-begin -->'), txt.lastIndexOf('<!-- chisle-begin -->'), 'fence duplicated');
-  for (const s of ['chisle', 'chisle-audit', 'chisle-help', 'chisle-review']) {
-    assert.equal(fs.readFileSync(path.join(skills, s, 'SKILL.md'), 'utf8'), repoSkill(s + '/SKILL.md'), s + ' not verbatim');
-  }
+  assert.deepEqual(readShippedSkills(skills), readShippedSkills(path.join(__dirname, '..', 'skills')));
 
   // Compression plugin + its zero-dep core land in plugins/.
   const plugins = path.join(home, '.config', 'opencode', 'plugins');
@@ -555,75 +556,66 @@ test('opencode install appends fenced ruleset, preserves user content, copies sk
   assert.equal(fs.readFileSync(path.join(skills, 'foreign', 'SKILL.md'), 'utf8'), 'not ours', 'foreign skill touched');
   assert.ok(!fs.existsSync(path.join(plugins, 'chisle.js')), 'plugin left behind');
   assert.ok(!fs.existsSync(path.join(plugins, 'chisle-hooks')), 'plugin core left behind');
-
-  fs.rmSync(home, { recursive: true, force: true });
 });
 
-for (const [name, extra, expected] of [
-  ['XDG_CONFIG_HOME', home => ({ XDG_CONFIG_HOME: path.join(home, 'xdg') }), home => path.join(home, 'xdg', 'opencode')],
-  ['OPENCODE_CONFIG_DIR', home => ({ XDG_CONFIG_HOME: path.join(home, 'ignored'), OPENCODE_CONFIG_DIR: path.join(home, 'custom') }), home => path.join(home, 'custom')],
+for (const [name, extra] of [
+  ['XDG_CONFIG_HOME', home => ({ XDG_CONFIG_HOME: path.join(home, 'xdg') })],
+  ['OPENCODE_CONFIG_DIR', home => ({ XDG_CONFIG_HOME: path.join(home, 'ignored'), OPENCODE_CONFIG_DIR: path.join(home, 'xdg', 'opencode') })],
 ]) {
   test(`OpenCode install, update, stats, and uninstall share ${name}`, () => {
-    const home = mkHome();
-    const root = expected(home);
+    const home = path.resolve('home');
+    fs.mkdirSync(home);
+    const root = path.join(home, 'xdg', 'opencode');
     const env = isolatedOpencodeEnv(home, extra(home));
-    try {
-      let r = runCLI(['--only', 'opencode'], { env });
-      assert.equal(r.status, 0, r.out);
-      const agents = path.join(root, 'AGENTS.md');
-      assert.match(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
-      assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
+    let r = runCLI(['--only', 'opencode'], { env });
+    assert.equal(r.status, 0, r.out);
+    const agents = path.join(root, 'AGENTS.md');
+    assert.match(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
+    assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
 
-      fs.writeFileSync(agents, fs.readFileSync(agents, 'utf8').replace(/# Chisle[\s\S]*<!-- chisle-end -->/, 'STALE\n<!-- chisle-end -->'));
-      r = runCLI(['--only', 'opencode', '--update'], { env });
-      assert.equal(r.status, 0, r.out);
-      assert.doesNotMatch(fs.readFileSync(agents, 'utf8'), /STALE/);
+    fs.writeFileSync(agents, fs.readFileSync(agents, 'utf8').replace(/# Chisle[\s\S]*<!-- chisle-end -->/, 'STALE\n<!-- chisle-end -->'));
+    r = runCLI(['--only', 'opencode', '--update'], { env });
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(fs.readFileSync(agents, 'utf8'), /STALE/);
 
-      fs.writeFileSync(path.join(root, '.chisle-compress-stats.json'), JSON.stringify({ savedChars: 1234, events: 2 }));
-      r = runCLI(['--stats', '--only', 'opencode'], { env });
-      assert.match(r.out, /1,234 chars/);
-      fs.mkdirSync(path.join(root, 'chisle-spill'));
-      fs.mkdirSync(path.join(root, 'chisle-dedup'));
+    fs.writeFileSync(path.join(root, '.chisle-compress-stats.json'), JSON.stringify({ savedChars: 1234, events: 2 }));
+    r = runCLI(['--stats', '--only', 'opencode'], { env });
+    assert.match(r.out, /1,234 chars/);
+    fs.mkdirSync(path.join(root, 'chisle-spill'));
+    fs.mkdirSync(path.join(root, 'chisle-dedup'));
 
-      r = runCLI(['--uninstall', '--only', 'opencode'], { env });
-      assert.equal(r.status, 0, r.out);
-      assert.doesNotMatch(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
-      assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
-      assert.equal(fs.existsSync(path.join(root, 'chisle-spill')), false);
-      assert.equal(fs.existsSync(path.join(root, 'chisle-dedup')), false);
-      assert.equal(fs.existsSync(path.join(root, '.chisle-compress-stats.json')), false);
-    } finally {
-      fs.rmSync(home, { recursive: true, force: true });
-    }
+    r = runCLI(['--uninstall', '--only', 'opencode'], { env });
+    assert.equal(r.status, 0, r.out);
+    assert.doesNotMatch(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
+    assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
+    assert.equal(fs.existsSync(path.join(root, 'chisle-spill')), false);
+    assert.equal(fs.existsSync(path.join(root, 'chisle-dedup')), false);
+    assert.equal(fs.existsSync(path.join(root, '.chisle-compress-stats.json')), false);
   });
 }
 
 test('OpenCode directory detection uses the configured root', { skip: process.platform === 'win32' }, () => {
-  const home = mkHome();
-  const emptyPath = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-empty-path-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const emptyPath = path.resolve('empty-path');
+  fs.mkdirSync(emptyPath);
   const root = path.join(home, 'custom');
   fs.mkdirSync(root);
-  try {
-    const r = runCLI(['--list'], {
-      env: isolatedOpencodeEnv(home, { OPENCODE_CONFIG_DIR: root, PATH: emptyPath }),
-    });
-    assert.match(r.out, /✓ OpenCode/);
-  } finally {
-    fs.rmSync(home, { recursive: true, force: true });
-    fs.rmSync(emptyPath, { recursive: true, force: true });
-  }
+  const r = runCLI(['--list'], {
+    env: isolatedOpencodeEnv(home, { OPENCODE_CONFIG_DIR: root, PATH: emptyPath }),
+  });
+  assert.match(r.out, /✓ OpenCode/);
 });
 
 test('hermes install copies skills verbatim, uninstall prunes only owned', () => {
-  const home = mkHome();
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const env = { CHISLE_HOME: home };
   const skills = path.join(home, '.hermes', 'skills');
 
   const r = runCLI(['--only', 'hermes'], { env });
   assert.match(r.out, /Hermes Agent detected/);
-  for (const s of ['chisle', 'chisle-audit', 'chisle-help', 'chisle-review']) {
-    assert.equal(fs.readFileSync(path.join(skills, s, 'SKILL.md'), 'utf8'), repoSkill(s + '/SKILL.md'), s + ' not verbatim');
-  }
+  assert.deepEqual(readShippedSkills(skills), readShippedSkills(path.join(__dirname, '..', 'skills')));
 
   fs.mkdirSync(path.join(skills, 'mine'), { recursive: true });
   fs.writeFileSync(path.join(skills, 'mine', 'SKILL.md'), 'mine');
@@ -631,16 +623,14 @@ test('hermes install copies skills verbatim, uninstall prunes only owned', () =>
   assert.match(u.out, /Uninstalled/);
   assert.ok(!fs.existsSync(path.join(skills, 'chisle')));
   assert.equal(fs.readFileSync(path.join(skills, 'mine', 'SKILL.md'), 'utf8'), 'mine');
-
-  fs.rmSync(home, { recursive: true, force: true });
 });
 
 test('opencode+hermes dry-run changes nothing on disk', () => {
-  const home = mkHome();
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const env = isolatedOpencodeEnv(home);
   runCLI(['--only', 'opencode', '--only', 'hermes', '--dry-run'], { env });
   assert.deepEqual(fs.readdirSync(home), [], 'dry-run wrote into CHISLE_HOME');
-  fs.rmSync(home, { recursive: true, force: true });
 });
 
 test('a fence missing its end marker is left alone, not truncated', () => {
@@ -648,28 +638,29 @@ test('a fence missing its end marker is left alone, not truncated', () => {
   // Everything after it is user content of unknown extent, so both refresh and
   // uninstall must refuse. Slicing to the end marker unconditionally would eat
   // the rest of the user's global instructions.
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-fence-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const env = isolatedOpencodeEnv(home);
   const body = 'my rules\n\n<!-- chisle-begin -->\nstale\n\nKEEP THIS\n';
 
-  for (const [id, rel] of [['codex', ['.codex', 'AGENTS.md']], ['opencode', ['.config', 'opencode', 'AGENTS.md']]]) {
-    const md = path.join(home, ...rel);
-    fs.mkdirSync(path.dirname(md), { recursive: true });
+  const codex = path.join(home, '.codex');
+  const opencode = path.join(home, '.config', 'opencode');
+  fs.mkdirSync(codex);
+  fs.mkdirSync(opencode, { recursive: true });
+  for (const [id, directory] of [['codex', codex], ['opencode', opencode]]) {
+    process.chdir(directory);
+    fs.writeFileSync('AGENTS.md', body);
+    const install = runCLI(['--only', id, '--force'], { env, cwd: home });
+    assert.match(install.out, /no chisle-end/, id + ': no warning');
+    assert.equal(fs.readFileSync('AGENTS.md', 'utf8'), body, id + ': --force rewrote a malformed fence');
 
-    fs.writeFileSync(md, body);
-    let r = runCLI(['--only', id, '--force'], { env });
-    assert.match(r.out, /no chisle-end/, id + ': no warning');
-    assert.equal(fs.readFileSync(md, 'utf8'), body, id + ': --force rewrote a malformed fence');
-
-    fs.writeFileSync(md, body);
-    r = runCLI(['--uninstall', '--only', id], { env });
-    assert.equal(fs.readFileSync(md, 'utf8'), body, id + ': uninstall ate user content');
+    runCLI(['--uninstall', '--only', id], { env, cwd: home });
+    assert.equal(fs.readFileSync('AGENTS.md', 'utf8'), body, id + ': uninstall ate user content');
   }
-
-  fs.rmSync(home, { recursive: true, force: true });
 });
 test('codex fenced install still works via shared helper (refactor guard)', () => {
-  const home = mkHome();
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   const env = { CHISLE_HOME: home };
   const agents = path.join(home, '.codex', 'AGENTS.md');
 
@@ -679,8 +670,6 @@ test('codex fenced install still works via shared helper (refactor guard)', () =
   assert.match(r.out, /already contains chisle ruleset/);
   runCLI(['--uninstall', '--only', 'codex'], { env });
   assert.doesNotMatch(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
-
-  fs.rmSync(home, { recursive: true, force: true });
 });
 
 // A shell-out install whose CLI is missing must be reported as a failure, not a
@@ -689,50 +678,45 @@ test('codex fenced install still works via shared helper (refactor guard)', () =
 // machine without `gemini`/`pi` was told the install had succeeded, and the
 // process still exited 0. Guard both the message and the exit code.
 test('shell-out install with the CLI absent reports failure, not success', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-absent-'));
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
   // A PATH with nothing on it: every `gemini`/`pi` lookup resolves to ENOENT.
-  const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-nopath-'));
-  try {
-    for (const agent of ['gemini', 'pi']) {
-      const r = runCLI(['--only', agent, '--force'], {
-        env: { HOME: home, USERPROFILE: home, PATH: emptyBin },
-      });
-      assert.match(r.out, new RegExp('failed:\\s+' + agent),
-        `${agent}: expected a failure line, got:\n${r.out}`);
-      assert.doesNotMatch(r.out, new RegExp('installed:\\s+' + agent),
-        `${agent}: reported success despite a missing CLI`);
-      assert.equal(r.status, 1, `${agent}: expected exit 1 on failure`);
-    }
-  } finally {
-    fs.rmSync(home, { recursive: true, force: true });
-    fs.rmSync(emptyBin, { recursive: true, force: true });
+  const emptyBin = path.resolve('empty-bin');
+  fs.mkdirSync(emptyBin);
+  for (const agent of ['gemini', 'pi']) {
+    const r = runCLI(['--only', agent, '--force'], {
+      env: { HOME: home, USERPROFILE: home, PATH: emptyBin },
+    });
+    const lines = r.out.split(/\r?\n/).map(line => line.trim().replace(/\s+/g, ' '));
+    assert.ok(lines.some(line => line.includes('failed: ' + agent)),
+      `${agent}: expected a failure line, got:\n${r.out}`);
+    assert.ok(!lines.some(line => line.includes('installed: ' + agent)),
+      `${agent}: reported success despite a missing CLI`);
+    assert.equal(r.status, 1, `${agent}: expected exit 1 on failure`);
   }
 });
 
 // --dry-run must keep reporting success: nothing is executed, so there is no
 // exit status to judge, and run() short-circuits to { status: 0 }.
 test('--dry-run still reports success for shell-out agents', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-dry-'));
-  try {
-    const r = runCLI(['--only', 'gemini', '--dry-run'], { env: { HOME: home, USERPROFILE: home } });
-    assert.match(r.out, /installed:\s+gemini/);
-    assert.equal(r.status, 0);
-  } finally {
-    fs.rmSync(home, { recursive: true, force: true });
-  }
+  const home = path.resolve('home');
+  fs.mkdirSync(home);
+  const r = runCLI(['--only', 'gemini', '--dry-run'], { env: { HOME: home, USERPROFILE: home } });
+  assert.match(r.out, /installed:\s+gemini/);
+  assert.equal(r.status, 0);
 });
 
 // `claude plugin install` skips an installed plugin, so --update must use
 // `claude plugin update`, or users stay on the old version.
 test('REGRESSION: --update upgrades an installed Claude plugin via plugin update', { skip: process.platform === 'win32' }, () => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-upd-'));
-  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-fakebin-'));
+  const cfg = path.resolve('config');
+  fs.mkdirSync(cfg);
+  const binDir = path.resolve('bin');
+  fs.mkdirSync(binDir);
   const log = path.join(binDir, 'calls.log');
   fs.writeFileSync(path.join(binDir, 'claude'), `#!/bin/sh\necho "$@" >> ${JSON.stringify(log)}\necho chisle\nexit 0\n`, { mode: 0o755 });
   runCLI(['--update', '--only', 'claude', '--config-dir', cfg], { env: { PATH: binDir + path.delimiter + process.env.PATH } });
   const calls = fs.readFileSync(log, 'utf8');
   assert.match(calls, /^plugin update chisle@chisle$/m);
   assert.doesNotMatch(calls, /^plugin install /m);
-  fs.rmSync(cfg, { recursive: true, force: true });
-  fs.rmSync(binDir, { recursive: true, force: true });
 });
