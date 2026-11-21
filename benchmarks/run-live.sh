@@ -134,7 +134,7 @@ run_cell() {
     [ "$arm" != "vanilla" ] && args+=(--append-system-prompt "$ISO/${arm}.txt")
     args+=(-- "$prompt")
     if ( cd /tmp && run_timed env HOME=/tmp PI_CODING_AGENT_DIR="$ISO" PI_OFFLINE=1 pi "${args[@]}" </dev/null ) > "$events" 2>/dev/null &&
-       cargo run --quiet --locked --manifest-path "$HERE/../tools/Cargo.toml" -- normalize-pi "$events" > "$tmp" && mv -f "$tmp" "$out"; then
+       "$TOOLS" normalize-pi "$events" > "$tmp" && mv -f "$tmp" "$out"; then
       return 0
     fi
   else
@@ -152,6 +152,13 @@ run_cell() {
   rm -f "$tmp"
   echo "    (call failed for $task_id/$arm)"
 }
+
+# Pi's event stream goes through the tools crate: build it once here, not
+# once per cell.
+if [ "$HARNESS" = pi ]; then
+  cargo build --quiet --locked --manifest-path "$HERE/../tools/Cargo.toml" || exit 1
+  TOOLS="${CARGO_TARGET_DIR:-$HERE/../tools/target}/debug/puritanical-tools"
+fi
 
 echo "harness: $HARNESS"
 echo "model:   $MODEL"
