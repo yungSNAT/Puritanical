@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global Buffer, module, process, require -- Node.js runtime */
 // chisle — shared configuration resolver
 //
 // Resolution order for default mode:
@@ -27,10 +28,10 @@ function legacySetting() {
   }
   try {
     const p = path.join(getConfigDir(), 'config.json');
-    const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+    const c = readUserConfig();
     const v = c && c.defaultMode ? String(c.defaultMode).toLowerCase() : null;
     if (v && LEGACY_MODES.includes(v)) return { value: v, source: p };
-  } catch (e) {}
+  } catch {}
   return null;
 }
 
@@ -77,15 +78,28 @@ function getConfigDir() {
   return path.join(os.homedir(), '.config', 'chisle');
 }
 
-function readModeFromConfigFile(configPath) {
+// Larger settings are treated as unreadable, just like invalid JSON.
+const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
+
+function readSettingsText(filename) {
+  // User configuration supports symlinks into a dotfiles checkout.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolve the configured settings file; the reader verifies its type, identity and size.
+  const target = fs.realpathSync(filename); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  return readRegularFile(target, MAX_CONFIG_BYTES);
+}
+
+function readUserConfig() {
+  return JSON.parse(readSettingsText(path.join(getConfigDir(), 'config.json')));
+}
+
+function readModeFromConfigFile() {
   try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const config = JSON.parse(raw);
+    const config = readUserConfig();
     if (config && config.defaultMode &&
         VALID_MODES.includes(String(config.defaultMode).toLowerCase())) {
       return String(config.defaultMode).toLowerCase();
     }
-  } catch (e) {}
+  } catch {}
   return null;
 }
 
@@ -94,7 +108,7 @@ function getDefaultMode() {
   if (envMode && VALID_MODES.includes(envMode.toLowerCase())) {
     return envMode.toLowerCase();
   }
-  const userMode = readModeFromConfigFile(path.join(getConfigDir(), 'config.json'));
+  const userMode = readModeFromConfigFile();
   if (userMode) return userMode;
   return 'on';
 }
@@ -117,22 +131,21 @@ const CODE_HEADINGS = [
   'Context Diet: Read Less Into the Window',
 ];
 
-function readSectionsFromConfigFile(configPath) {
+function readSectionsFromConfigFile() {
   try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const config = JSON.parse(raw);
+    const config = readUserConfig();
     const s = config && typeof config === 'object' ? config.sections : null;
     return {
       prose: !!(s && typeof s === 'object' && typeof s.prose === 'boolean' ? s.prose : true),
       code: !!(s && typeof s === 'object' && typeof s.code === 'boolean' ? s.code : true),
     };
-  } catch (e) {
+  } catch {
     return { prose: true, code: true };
   }
 }
 
 function getSections() {
-  return readSectionsFromConfigFile(path.join(getConfigDir(), 'config.json'));
+  return readSectionsFromConfigFile();
 }
 
 // Drops whole `## Heading` sections (heading line through the line before the
@@ -160,7 +173,7 @@ function filterSections(content, sections, proseHeadings, codeHeadings) {
       return true;
     });
     return kept.join('');
-  } catch (e) {
+  } catch {
     return content;
   }
 }
@@ -180,22 +193,51 @@ function filterSections(content, sections, proseHeadings, codeHeadings) {
 // Claude Code parses settings.json with strict JSON, but users do leave
 // comments in it. Tolerate that rather than silently reading no style.
 function parseJsonLoose(raw) {
-  try { return JSON.parse(raw.replace(/^\uFEFF/, '')); } catch (e) {}
+  try { return JSON.parse(raw.replace(/^\uFEFF/, '')); } catch {}
   try {
     const stripped = raw
       .replace(/^\uFEFF/, '')
       .replace(/"(?:[^"\\]|\\.)*"|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
         (m) => (m[0] === '"' ? m : ' '));
     return JSON.parse(stripped);
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
-function readJsonFile(p) {
+// Read the same regular file we inspected. The descriptor check also covers
+// platforms without O_NOFOLLOW. O_NONBLOCK avoids waiting on a FIFO.
+function readRegularFile(filename, maxBytes) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Inspect the entry without following it before opening a regular file.
+  const before = fs.lstatSync(filename); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (!before.isFile() || before.size > maxBytes) return null;
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Use no-follow where supported and verify the opened descriptor against the inspected file.
+  const fd = fs.openSync(filename, flags); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   try {
-    const st = fs.lstatSync(p);
-    if (st.isSymbolicLink() || !st.isFile()) return null;
-    return parseJsonLoose(fs.readFileSync(p, 'utf8'));
-  } catch (e) { return null; }
+    const after = fs.fstatSync(fd);
+    if (!after.isFile() || after.dev !== before.dev || after.ino !== before.ino || after.size > maxBytes) return null;
+    return readLimitedText(fd, after.size);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function readLimitedText(fd, maxBytes) {
+  // Detect concurrent growth without reading beyond the limit plus one byte.
+  const buffer = Buffer.alloc(maxBytes + 1);
+  let offset = 0;
+  while (offset < buffer.length) {
+    const count = fs.readSync(fd, buffer, offset, buffer.length - offset, null);
+    if (!count) break;
+    offset += count;
+  }
+  return offset <= maxBytes ? buffer.toString('utf8', 0, offset) : null;
+}
+
+function readJsonFile(filename, maxBytes = MAX_CONFIG_BYTES) {
+  try {
+    const raw = readRegularFile(filename, maxBytes);
+    return raw === null ? null : parseJsonLoose(raw);
+  } catch { return null; }
 }
 
 // Claude Code's own precedence, most specific first. A style set for this
@@ -225,7 +267,7 @@ function getActiveOutputStyle(opts) {
       return trimmed.toLowerCase() === 'default' ? null : trimmed;
     }
     return null;
-  } catch (e) { return null; }
+  } catch { return null; }
 }
 
 // What the user wrote, distinguishing "absent" from "explicitly true". Only an
@@ -239,7 +281,7 @@ function explicitSections() {
     if (typeof s.prose === 'boolean') out.prose = s.prose;
     if (typeof s.code === 'boolean') out.code = s.code;
     return out;
-  } catch (e) { return {}; }
+  } catch { return {}; }
 }
 
 // Final prose/code decision for the Claude Code hooks. Explicit config always
@@ -260,46 +302,42 @@ function resolveSections(opts) {
 
 // Symlink-safe, atomic flag write with 0600 perms.
 // Defends against local attacker replacing predictable path with symlink to clobber other files.
-function safeWriteFlag(flagPath, content) {
-  const debug = process.env.CHISLE_DEBUG === '1';
-  try {
-    const flagDir = path.dirname(flagPath);
-    fs.mkdirSync(flagDir, { recursive: true });
+function flagWriteDirectory(flagPath) {
+  const directory = path.dirname(flagPath);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Hook callers supply the configured state directory and a fixed state filename.
+  fs.mkdirSync(directory, { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Inspect the configured directory entry itself before accepting a symlink.
+  if (!fs.lstatSync(directory).isSymbolicLink()) return directory; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
-    let realFlagDir;
-    try {
-      const lstat = fs.lstatSync(flagDir);
-      if (lstat.isSymbolicLink()) {
-        realFlagDir = fs.realpathSync(flagDir);
-        const realStat = fs.statSync(realFlagDir);
-        if (!realStat.isDirectory()) {
-          if (debug) process.stderr.write(`[chisle] safeWriteFlag: symlink target not a directory\n`);
-          return;
-        }
-        if (typeof process.getuid === 'function') {
-          if (realStat.uid !== process.getuid()) {
-            if (debug) process.stderr.write(`[chisle] safeWriteFlag: symlink target owned by different uid\n`);
-            return;
-          }
-        } else {
-          const home = os.homedir();
-          const normalizedReal = path.resolve(realFlagDir).toLowerCase();
-          const normalizedHome = path.resolve(home).toLowerCase();
-          if (!normalizedReal.startsWith(normalizedHome + path.sep) &&
-              normalizedReal !== normalizedHome) {
-            if (debug) process.stderr.write(`[chisle] safeWriteFlag: symlink target outside home dir\n`);
-            return;
-          }
-        }
-      } else {
-        realFlagDir = flagDir;
-      }
-    } catch (e) {
-      return;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolve the configured link to check its destination before writing.
+  const resolved = fs.realpathSync(directory); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The resolved target must pass the directory and ownership or home checks below.
+  const stat = fs.statSync(resolved); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (!stat.isDirectory()) return rejectFlagDirectory('symlink target not a directory');
+  if (typeof process.getuid === 'function') {
+    if (stat.uid !== process.getuid()) return rejectFlagDirectory('symlink target owned by different uid');
+  } else {
+    const relative = path.relative(os.homedir(), resolved);
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+      return rejectFlagDirectory('symlink target outside home dir');
     }
+  }
+  return resolved;
+}
+
+function rejectFlagDirectory(reason) {
+  if (process.env.CHISLE_DEBUG === '1') process.stderr.write('[chisle] safeWriteFlag: ' + reason + '\n');
+  return null;
+}
+
+function safeWriteFlag(flagPath, content) {
+  try {
+    const realFlagDir = flagWriteDirectory(flagPath);
+    if (!realFlagDir) return;
 
     const realFlagPath = path.join(realFlagDir, path.basename(flagPath));
     try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Check the destination entry itself and refuse a final symlink.
       if (fs.lstatSync(realFlagPath).isSymbolicLink()) return;
     } catch (e) {
       if (e.code !== 'ENOENT') return;
@@ -310,14 +348,16 @@ function safeWriteFlag(flagPath, content) {
     const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW;
     let fd;
     try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Create a new private file exclusively in the configured directory used for state.
       fd = fs.openSync(tempPath, flags, 0o600);
       fs.writeSync(fd, String(content));
-      try { fs.fchmodSync(fd, 0o600); } catch (e) {}
+      try { fs.fchmodSync(fd, 0o600); } catch {}
     } finally {
       if (fd !== undefined) fs.closeSync(fd);
     }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Atomically replace the destination entry in the same directory as the private file.
     fs.renameSync(tempPath, realFlagPath);
-  } catch (e) {}
+  } catch {}
 }
 
 // Symlink-safe, size-capped, whitelist-validated flag read.
@@ -326,39 +366,16 @@ const MAX_FLAG_BYTES = 64;
 
 function readFlag(flagPath) {
   try {
-    let st;
-    try {
-      st = fs.lstatSync(flagPath);
-    } catch (e) {
-      return null;
-    }
-    if (st.isSymbolicLink() || !st.isFile()) return null;
-    if (st.size > MAX_FLAG_BYTES) return null;
-
-    const O_NOFOLLOW = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-    const flags = fs.constants.O_RDONLY | O_NOFOLLOW;
-    let fd;
-    let out;
-    try {
-      fd = fs.openSync(flagPath, flags);
-      const buf = Buffer.alloc(MAX_FLAG_BYTES);
-      const n = fs.readSync(fd, buf, 0, MAX_FLAG_BYTES, 0);
-      out = buf.slice(0, n).toString('utf8');
-    } finally {
-      if (fd !== undefined) fs.closeSync(fd);
-    }
-
-    const raw = out.trim().toLowerCase();
-    if (!VALID_MODES.includes(raw)) return null;
-    return raw;
-  } catch (e) {
-    return null;
-  }
+    const text = readRegularFile(flagPath, MAX_FLAG_BYTES);
+    if (text === null) return null;
+    const mode = text.trim().toLowerCase();
+    return VALID_MODES.includes(mode) ? mode : null;
+  } catch { return null; }
 }
 
 module.exports = {
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
-  VALID_MODES, safeWriteFlag, readFlag,
+  VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,
   getActiveOutputStyle, explicitSections, resolveSections,
 };

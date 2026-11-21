@@ -1,3 +1,4 @@
+/* global __dirname, module, process, require -- Node.js runtime */
 'use strict';
 
 const crypto = require('node:crypto');
@@ -37,10 +38,14 @@ function loadRules() {
     // the same `sections` config (prose/code rule suppression) the same way.
     return 'CHISLE ACTIVE\n\n' +
       filterSections(skill.replace(/^---[\s\S]*?---\s*/, ''), getSections());
-  } catch (_) {
+  } catch {
     return 'CHISLE ACTIVE\n\n' +
       filterSections(FALLBACK_BODY, getSections(), ['Prose'], ['Code']);
   }
+}
+
+function sameDigest(previous, current) {
+  return previous !== undefined && crypto.timingSafeEqual(previous, current);
 }
 
 // OMP (oh-my-pi) ships a subset of Pi's sessionManager: buildContextEntries and
@@ -54,9 +59,10 @@ function loadRules() {
 function sessionEntries(ctx, method) {
   try {
     const sm = ctx && ctx.sessionManager;
-    if (!sm || typeof sm[method] !== 'function') return [];
-    return sm[method]() || [];
-  } catch (_) {
+    if (method === 'getBranch') return sm?.getBranch?.() || [];
+    if (method === 'buildContextEntries') return sm?.buildContextEntries?.() || [];
+    return [];
+  } catch {
     return [];
   }
 }
@@ -113,7 +119,10 @@ function chisleExtension(pi) {
 
   function updateStatus(ctx) {
     if (!ctx.hasUI) return;
-    if (!active) return ctx.ui.setStatus('chisle', undefined);
+    if (!active) {
+      ctx.ui.setStatus('chisle', undefined);
+      return;
+    }
     const tokens = Math.floor(savedChars / 4);
     const saved = tokens >= 1000 ? ` ⇣${Math.floor(tokens / 1000)}k tok` : tokens ? ` ⇣${tokens} tok` : '';
     ctx.ui.setStatus('chisle', ctx.ui.theme.fg('accent', `[CHISLE]${saved}`));
@@ -219,10 +228,10 @@ function chisleExtension(pi) {
         let updated = null;
 
         if (process.env.CHISLE_COMPRESS_DEDUP !== '0' && text.length >= DEDUP_MIN) {
-          const hash = crypto.createHash('sha256').update(text).digest('hex');
+          const hash = crypto.createHash('sha256').update(text).digest();
           const previous = dedupBaseline.get(key);
           lastByToolBlock.set(key, hash);
-          if (previous === hash) updated = duplicateMarker(event.toolName, text, 'earlier');
+          if (sameDigest(previous, hash)) updated = duplicateMarker(event.toolName, text, 'earlier');
         }
         if (updated == null) updated = transform(text, limitsFor(), event.toolName, undefined, commandOf(event.input));
         if (updated == null || updated.length >= text.length) return block;
@@ -234,7 +243,7 @@ function chisleExtension(pi) {
       if (!changed) return;
       updateStatus(ctx);
       return { content };
-    } catch (_) {
+    } catch {
       return;
     }
   });
