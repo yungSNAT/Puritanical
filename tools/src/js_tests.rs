@@ -93,12 +93,12 @@ fn fields_print_and_subtract_as_template_literals_do() {
         ("missing", "undefined", f64::NAN),
     ];
     for (k, shown, operand_value) in cases {
-        assert_eq!(template(u.get(k)), shown);
+        assert_eq!(string(u.get(k)), shown);
         assert_eq!(num(operand(u.get(k))), num(operand_value), "{k}");
     }
-    assert_eq!(template(u.get("s")), "7");
-    assert_eq!(template(u.get("a")), "1,,2");
-    assert_eq!(template(Some(&u)), "[object Object]");
+    assert_eq!(string(u.get("s")), "7");
+    assert_eq!(string(u.get("a")), "1,,2");
+    assert_eq!(string(Some(&u)), "[object Object]");
     assert_eq!(operand(Some(&json!(true))), 1.0);
 }
 

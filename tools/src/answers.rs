@@ -183,7 +183,7 @@ fn answer(path: &Path, arm: &str) -> Vec<String> {
         format!(
             "### {arm}: {} answer tokens, {} billed, {} lines",
             num(js::operand(billed) - think),
-            js::template(billed),
+            js::string(billed),
             text.split('\n').count()
         ),
         String::new(),

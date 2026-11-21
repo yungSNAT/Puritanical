@@ -238,28 +238,6 @@ pub fn number(v: Option<&Value>) -> f64 {
     }
 }
 
-/// `${v}` in a template literal: a missing field prints `undefined`.
-#[must_use]
-pub fn template(v: Option<&Value>) -> String {
-    match v {
-        None => "undefined".into(),
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(items)) => items
-            .iter()
-            .map(|i| {
-                if i.is_null() {
-                    String::new()
-                } else {
-                    template(Some(i))
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(","),
-        Some(Value::Object(_)) => "[object Object]".into(),
-        Some(v) => scalar(v),
-    }
-}
-
 /// `v` as an operand of `-`: `null` is 0, `true` is 1. Strings are not
 /// parsed (NaN); token counts are numbers.
 #[must_use]
@@ -381,10 +359,20 @@ pub fn locale_compare(a: &str, b: &str) -> Ordering {
 /// `fs.readFileSync(p, 'utf8')`: invalid UTF-8 becomes U+FFFD.
 ///
 /// # Errors
-/// The file cannot be read.
+/// The file cannot be read, or holds a code point [`RESERVED`] for stand-ins.
 pub fn read(p: &Path) -> std::io::Result<String> {
-    Ok(String::from_utf8_lossy(&std::fs::read(p)?).into_owned())
+    let text = String::from_utf8_lossy(&std::fs::read(p)?).into_owned();
+    if text.chars().any(|c| lone(c).is_some()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            RESERVED,
+        ));
+    }
+    Ok(text)
 }
+
+/// Why input holding a [`slice`] stand-in code point is refused.
+pub const RESERVED: &str = "holds a code point from U+10F800..U+10FFFF, which puritanical-tools reserves for lone surrogates";
 
 /// `JSON.parse(fs.readFileSync(p, 'utf8'))`, or `None` where either throws.
 ///
@@ -393,12 +381,11 @@ pub fn read(p: &Path) -> std::io::Result<String> {
 /// reserves for lone surrogates; refusing it beats corrupting it.
 #[must_use]
 pub fn read_json(p: &Path) -> Option<Value> {
-    let text = keep_lone(&read(p).ok()?).unwrap_or_else(|| {
-        panic!(
-            "{}: holds a code point from U+10F800..U+10FFFF, which puritanical-tools reserves for lone surrogates",
-            p.display()
-        )
-    });
+    let text = match read(p) {
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => panic!("{}: {e}", p.display()),
+        r => r.ok()?,
+    };
+    let text = keep_lone(&text).unwrap_or_else(|| panic!("{}: {RESERVED}", p.display()));
     serde_json::from_str(&text).ok()
 }
 

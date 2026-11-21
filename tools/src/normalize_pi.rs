@@ -22,6 +22,9 @@ pub fn run(args: &[String]) -> Out {
         Ok(text) => text,
         Err(e) => return Out::fail(format!("{file}: {e}")),
     };
+    let Some(text) = js::keep_lone(&text) else {
+        return Out::fail(format!("{file}: {}", js::RESERVED));
+    };
     let (mut output_tokens, mut result, mut is_error) = (0.0, String::new(), false);
     for message in text.split('\n').filter_map(assistant_end) {
         let output = message

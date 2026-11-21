@@ -402,6 +402,31 @@ fn normalize_pi_marks_errors_and_usage() {
         "an empty answer is an error"
     );
 
+    let bs = char::from(0x5C_u8);
+    let event = |content: &str| {
+        format!(
+            r#"{{"type":"message_end","message":{{"role":"assistant","content":"{content}","usage":{{"output":3}}}}}}"#
+        )
+    };
+    write(&events, &event(&format!("a{bs}ud800")));
+    let lone = ok(&cmd(tmp.path(), &[], &["normalize-pi", path])).to_owned();
+    assert!(
+        lone.contains(&format!(r#""result": "a{bs}ud800""#))
+            && lone.contains(r#""output_tokens": 3"#),
+        "an escaped lone surrogate is kept, as JSON.parse keeps it: {lone}"
+    );
+    for reserved in [
+        char::from_u32(0x10_F800).expect("plane 16").to_string(),
+        format!("{bs}udbfe{bs}udc00"),
+    ] {
+        write(&events, &event(&reserved));
+        assert_eq!(
+            cmd(tmp.path(), &[], &["normalize-pi", path]).code,
+            1,
+            "a stand-in code point is refused, raw or escaped"
+        );
+    }
+
     let usage = cmd(tmp.path(), &[], &["normalize-pi"]);
     assert_eq!(
         (usage.code, usage.stderr.as_str()),
