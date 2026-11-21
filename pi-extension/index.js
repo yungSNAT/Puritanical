@@ -1,3 +1,4 @@
+/* global __dirname, module, process, require -- Node.js runtime */
 'use strict';
 
 const crypto = require('node:crypto');

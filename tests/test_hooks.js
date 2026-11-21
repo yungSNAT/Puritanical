@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, clearTimeout, process, require, setTimeout -- Node.js runtime */
 // Basic hook tests — validates config logic and flag safety
 // Run: node --test tests/test_hooks.js
 

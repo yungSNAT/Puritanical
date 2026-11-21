@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, AbortSignal, fetch, module, process, require -- Node.js runtime */
 // chisle — SessionStart hook
 //
 // 1. Writes flag at $CLAUDE_CONFIG_DIR/.chisle-active
@@ -24,7 +25,7 @@ function majorOf(v) {
 function majorUpdateNotice(installed, latest) {
   const i = majorOf(installed), l = majorOf(latest);
   if (i == null || l == null || l <= i) return null;
-  if (typeof latest !== 'string' || latest.length > 128 || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(latest)) return null;
+  if (typeof latest !== 'string' || latest.length > 128 || /[^0-9A-Za-z.+-]/.test(latest)) return null;
   return '\n\nCHISLE UPDATE AVAILABLE: v' + latest + ' (major; you run v' + installed + '). ' +
     'Mention this to the user once: update with `claude plugin update chisle@chisle` or `npx chisle`.';
 }

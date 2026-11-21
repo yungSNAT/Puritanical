@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 // Integration tests for bin/install.js — runs the real CLI against temp dirs.
 // Covers the no-shell-out paths: project rule install, dry-run, list, idempotency.
 // Run: node --test tests/test_installer.js

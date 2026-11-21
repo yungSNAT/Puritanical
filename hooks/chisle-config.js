@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global Buffer, module, process, require -- Node.js runtime */
 // chisle — shared configuration resolver
 //
 // Resolution order for default mode:
