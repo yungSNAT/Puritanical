@@ -21,9 +21,12 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: node --test tests/*.js
-      - run: node scripts/build-rules.js --check
-      - run: node scripts/build-chart.js --check
-      - run: node scripts/build-samples.js --check
+      # rustup installs the toolchain pinned in tools/rust-toolchain.toml.
+      - name: Check the generated files
+        working-directory: tools
+        run: |
+          rustup toolchain install
+          for c in rules chart samples readme-art; do cargo run --quiet --locked -- "$c" --check; done
 
   release:
     needs: test
