@@ -35,4 +35,14 @@ jobs:
       - name: Publish the verified source tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+        run: |
+          tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq '.sha')
+          if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+            echo "::error::The tag has moved since its tests ran."
+            exit 1
+          fi
+          if [[ "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" == false ]]; then
+            echo "The verified tag already has a published release."
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          fi
