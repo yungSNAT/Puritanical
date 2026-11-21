@@ -14,7 +14,10 @@ fn root() -> PathBuf {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<String> = std::env::args_os()
+        .skip(1)
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
     let ctx = Ctx {
         root: root(),
         env: std::env::vars_os()
