@@ -86,7 +86,7 @@ EOF
 # SUITE=sonnet: the 2026-06-29 Sonnet cross-check (results/raw-sonnet/). Its
 # prompts were never committed; these are RECONSTRUCTED from the recorded
 # answers (#28). Only `caching` is verbatim from the writeup. New cells are
-# comparable to each other, not to raw-sonnet/. Kinds match aggregate.js.
+# comparable to each other, not to raw-sonnet/. Kinds match tools/src/aggregate.rs.
 TASKS_SONNET=$(cat <<'EOF'
 palindrome	coding	Reverse a string in Python. One-liner.
 deadlock	noncoding	What is a deadlock, and how do you prevent one?
@@ -134,7 +134,7 @@ run_cell() {
     [ "$arm" != "vanilla" ] && args+=(--append-system-prompt "$ISO/${arm}.txt")
     args+=(-- "$prompt")
     ( cd /tmp && run_timed env HOME=/tmp PI_CODING_AGENT_DIR="$ISO" PI_OFFLINE=1 pi "${args[@]}" </dev/null ) > "$events" 2>/dev/null \
-      && node "$HERE/normalize-pi.js" "$events" > "$tmp" \
+      && cargo run --quiet --locked --manifest-path "$HERE/../tools/Cargo.toml" -- normalize-pi "$events" > "$tmp" \
       && mv -f "$tmp" "$out" \
       || { rm -f "$tmp"; echo "    (call failed for $task_id/$arm)"; }
   else

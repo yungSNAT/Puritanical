@@ -7,7 +7,7 @@
 ## Checklist
 
 - [ ] `skills/chisle/SKILL.md` is the source of truth, with no rule logic duplicated into hooks
-- [ ] Regenerated rule copies + chart if behavior changed (`npm run build:rules && npm run build:chart`)
+- [ ] Regenerated rule copies + chart if behavior changed (`npm run build:rules && npm run build:chart`; `build:readme-art` for README art)
 - [ ] Hook changes preserve the flag-file security model (`O_NOFOLLOW`, `0600`)
 - [ ] `npm test` passes
 - [ ] Added/updated a test for any hook logic change

@@ -5,6 +5,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- The generators and benchmark analysis are a Rust crate, `tools/` (`puritanical-tools`): rule copies, charts, site samples and README art, each with `--check`, plus `aggregate`, `pooled`, `answers`, `normalize-pi` and `agentic-score`. Their output matches the JavaScript they replace byte for byte; the npm scripts keep their names, and `check:readme-art` is new. CI checks the crate on Linux and Windows and adds its line coverage to Codecov. `pooled` seeds its bootstrap, so a rerun prints the same interval. `benchmarks/quality/grade.js` stays in JavaScript because it runs the models' code.
+
 ## [3.14.2] - 2026-11-19
 
 Patch: the star prompt reports star and follow separately, and the site shows each agent's logo.

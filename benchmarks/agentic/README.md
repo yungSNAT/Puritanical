@@ -11,8 +11,8 @@ the run finishes and decides pass/fail.
 
 ```bash
 node benchmarks/agentic/run.js [model] [seeds] [parallel]   # default: haiku, 3 seeds, 5-way
-node benchmarks/agentic/score.js                            # tables to stdout
-node benchmarks/agentic/score.js --json                     # per-cell rows
+cargo run --quiet --locked --manifest-path tools/Cargo.toml -- agentic-score          # tables to stdout
+cargo run --quiet --locked --manifest-path tools/Cargo.toml -- agentic-score --json   # per-cell rows
 ```
 
 Both take `ARMS` (default `vanilla,chisle`) and `RAW_DIR` (default `./raw`).
@@ -25,7 +25,7 @@ has a result, so old cells would otherwise be scored as new.
 
 ```bash
 ARMS=vanilla,chisle,chisle-hook RAW_DIR=benchmarks/agentic/raw-2 node benchmarks/agentic/run.js claude-haiku-4-5-20251001 12
-ARMS=vanilla,chisle,chisle-hook RAW_DIR=benchmarks/agentic/raw-2 node benchmarks/agentic/score.js
+ARMS=vanilla,chisle,chisle-hook RAW_DIR=benchmarks/agentic/raw-2 cargo run --quiet --locked --manifest-path tools/Cargo.toml -- agentic-score
 ```
 
 ## The fixtures
@@ -60,7 +60,7 @@ log itself? The results below predate it and cover five fixtures.
 
 ## Results (Chisle 3.9, 2026-11-07)
 
-`ARMS=vanilla,chisle,chisle-trim RAW_DIR=benchmarks/agentic/raw-nov node benchmarks/agentic/score.js`, 7 fixtures × 6 seeds, Haiku 4.5, Claude Code 2.1.285.
+`ARMS=vanilla,chisle,chisle-trim RAW_DIR=benchmarks/agentic/raw-nov cargo run --quiet --locked --manifest-path tools/Cargo.toml -- agentic-score`, 7 fixtures × 6 seeds, Haiku 4.5, Claude Code 2.1.285.
 
 | arm | n | passed | net LOC | out tokens | context tokens | turns | $ / run | $ / request |
 |-----|--:|-------:|--------:|-----------:|---------------:|------:|--------:|------------:|
@@ -80,7 +80,7 @@ Pass rates tie (chisle vs vanilla p = 0.738, chisle-trim vs vanilla p = 1.000). 
 
 ## Honesty rules
 
-`score.js` prints every failing cell with its first failing assertion, for both
+`agentic-score` prints every failing cell with its first failing assertion, for both
 arms. A fixture where the arms tie is reported as a tie. Adding a fixture after
 seeing the results, or dropping one that went the wrong way, would invalidate
 the whole thing — the suite is fixed before the run, and losses ship.

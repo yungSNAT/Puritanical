@@ -34,17 +34,17 @@ model smarter.
 `run-ablation.js` runs any number of named rulesets in one session, so old and
 new Chisle answer the same prompts beside caveman and ponytail; `run-live.sh`
 is the four-arm runner the prompts come from. Tools are off (`--tools ""`), so
-each cell is one answer. Score with `pooled.js` (pooled ratio of sums vs bare,
+each cell is one answer. Score with `puritanical-tools pooled` (pooled ratio of sums vs bare,
 95% bootstrap).
 
 ```bash
 node benchmarks/run-ablation.js <dir> 2 4 vanilla caveman=<SKILL.md> ponytail=<SKILL.md> chisle=skills/chisle/SKILL.md
 MODEL=claude-sonnet-5-5 node benchmarks/run-ablation.js <dir> 2 4 vanilla chisle=skills/chisle/SKILL.md
 bash benchmarks/run-live.sh claude-haiku-4-5-20251001 benchmarks/results/<dir>/default-s1
-ARMS=vanilla,caveman,ponytail,chisle node benchmarks/pooled.js benchmarks/results/raw-nov/*/
+ARMS=vanilla,caveman,ponytail,chisle cargo run --quiet --locked --manifest-path tools/Cargo.toml -- pooled benchmarks/results/raw-nov/*/
 ```
 
-`node benchmarks/answers.js <run-dir>` writes `<run-dir>/ANSWERS.md`: every prompt with each arm's
+`cargo run --quiet --locked --manifest-path tools/Cargo.toml -- answers <run-dir>` writes `<run-dir>/ANSWERS.md`: every prompt with each arm's
 verbatim answer and token counts.
 
 Cells: [`results/raw-314-sidebyside/`](results/raw-314-sidebyside/),
@@ -72,7 +72,7 @@ tools; the test arrives only after the run. Arms: `vanilla`, `chisle`,
 
 ```bash
 ARMS=vanilla,chisle,chisle-trim RAW_DIR=benchmarks/agentic/raw-nov node benchmarks/agentic/run.js claude-haiku-4-5-20251001 6 3
-ARMS=vanilla,chisle,chisle-trim RAW_DIR=benchmarks/agentic/raw-nov node benchmarks/agentic/score.js
+ARMS=vanilla,chisle,chisle-trim RAW_DIR=benchmarks/agentic/raw-nov cargo run --quiet --locked --manifest-path tools/Cargo.toml -- agentic-score
 ```
 
 ## 4. Input-axis replay (deterministic, free)

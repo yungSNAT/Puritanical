@@ -6,7 +6,7 @@ import SectionHead from "./SectionHead";
 import Markdown from "./Markdown";
 import samples from "@/data/samples.json";
 
-// Live before/after built from benchmarks/results/raw-nov/default-s1/ via scripts/build-samples.js.
+// Live before/after built from benchmarks/results/raw-nov/default-s1/ via tools/src/samples.rs (npm run build:samples).
 // Every word and number below is the committed transcript. No mock-ups, no
 // hand-written "illustrative" rewrites. That is the whole differentiator, so the
 // basis label stays visible at all times.
