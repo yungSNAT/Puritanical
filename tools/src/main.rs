@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: MIT
+
+use puritanical_tools::{Ctx, run};
+use std::io::Write as _;
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+/// The repository root: the parent of this crate, or `PURITANICAL_ROOT`.
+fn root() -> PathBuf {
+    std::env::var_os("PURITANICAL_ROOT").map_or_else(
+        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."),
+        PathBuf::from,
+    )
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let ctx = Ctx {
+        root: root(),
+        env: std::env::vars_os()
+            .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
+            .collect(),
+    };
+    let out = run(&ctx, &args);
+    // A closed pipe (`| head`) is not an error worth a panic.
+    let _ = std::io::stdout().write_all(out.stdout.as_bytes());
+    let _ = std::io::stderr().write_all(out.stderr.as_bytes());
+    ExitCode::from(out.code)
+}
