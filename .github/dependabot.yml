@@ -8,6 +8,10 @@ updates:
       actions:
         patterns: ["*"]
   - package-ecosystem: npm
+    directory: /.github/tools/codacy
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
     directory: /site
     schedule:
       interval: weekly

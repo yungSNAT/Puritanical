@@ -1,0 +1,6 @@
+---
+engines:
+  lizard:
+    # npm generates these files. OSV and Trivy scan their dependencies.
+    exclude_paths:
+      - "**/package-lock.json"

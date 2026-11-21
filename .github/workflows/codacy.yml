@@ -24,7 +24,9 @@ jobs:
           package-manager-cache: false
       - name: Install the Codacy Analysis CLI
         run: |
-          npm install --prefix "$RUNNER_TEMP/codacy" --no-audit --no-fund @codacy/analysis-cli@0.32.0
+          mkdir -p "$RUNNER_TEMP/codacy"
+          cp .github/tools/codacy/package*.json "$RUNNER_TEMP/codacy/"
+          npm ci --prefix "$RUNNER_TEMP/codacy" --ignore-scripts --no-audit --no-fund
           echo "$RUNNER_TEMP/codacy/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Analyse the repository
         env:
