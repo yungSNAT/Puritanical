@@ -108,11 +108,61 @@ impl Row {
 /// Aggregates over the current re-run (default and large suites, two seeds),
 /// so the site's split table describes the product as it ships. Billed tokens
 /// is the bill; answer lines is what the reader wades through.
-#[expect(
-    clippy::too_many_lines,
-    reason = "the aggregate groups share one row set"
-)]
 fn aggregates(root: &Path) -> Result<Value, String> {
+    let mut rows: Vec<Row> = summaries(root)
+        .into_iter()
+        .filter(|(_, c)| ARMS.iter().all(|a| c.contains_key(*a)))
+        .map(|(k, c)| Row {
+            kind: kind(k.split('|').nth(1).unwrap_or_default()).unwrap_or("other"),
+            cells: c,
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        a.metric("vanilla", "tokens")
+            .total_cmp(&b.metric("vanilla", "tokens"))
+    });
+    let median = rows
+        .get(rows.len() / 2)
+        .ok_or("no complete rows in the samples run")?
+        .metric("vanilla", "tokens");
+    let group = |label, pick: &dyn Fn(&Row) -> bool| group(&rows, label, pick);
+    Ok(json!({
+        "median": json_num(median),
+        "groups": [
+            group("all tasks", &|_| true),
+            group("coding", &|r| r.kind == "coding"),
+            group("explanation", &|r| r.kind == "noncoding"),
+            group("short answers", &|r| r.metric("vanilla", "tokens") < median),
+            group("long answers", &|r| r.metric("vanilla", "tokens") >= median),
+        ],
+    }))
+}
+
+/// One group's billed tokens and lines per arm, as % of vanilla.
+fn group(rows: &[Row], label: &str, pick: &dyn Fn(&Row) -> bool) -> Value {
+    let g: Vec<&Row> = rows.iter().filter(|r| pick(r)).collect();
+    let mut out = json!({"label": label, "n": g.len()});
+    for metric in ["tokens", "lines"] {
+        let base = g.iter().fold(0.0, |s, r| s + r.metric("vanilla", metric));
+        let mut m = Map::new();
+        for a in &ARMS[1..] {
+            let v = g.iter().fold(0.0, |s, r| s + r.metric(a, metric));
+            m.insert(
+                (*a).into(),
+                json_num(if base == 0.0 {
+                    0.0
+                } else {
+                    js::round((v / base) * 100.0)
+                }),
+            );
+        }
+        out[metric] = Value::Object(m);
+    }
+    out
+}
+
+/// Every answered cell's tokens and lines, keyed `<run>|<task>`, in first-seen order.
+fn summaries(root: &Path) -> Vec<(String, Map<String, Value>)> {
     let mut cells: Vec<(String, Map<String, Value>)> = Vec::new();
     for d in ["default-s1", "default-s2", "large-s1", "large-s2"] {
         let dir = root.join("benchmarks/results").join(RUN).join(d);
@@ -138,53 +188,7 @@ fn aggregates(root: &Path) -> Result<Value, String> {
             cells[i].1.insert(arm.into(), summary);
         }
     }
-    let mut rows: Vec<Row> = cells
-        .into_iter()
-        .filter(|(_, c)| ARMS.iter().all(|a| c.contains_key(*a)))
-        .map(|(k, c)| Row {
-            kind: kind(k.split('|').nth(1).unwrap_or_default()).unwrap_or("other"),
-            cells: c,
-        })
-        .collect();
-    rows.sort_by(|a, b| {
-        a.metric("vanilla", "tokens")
-            .total_cmp(&b.metric("vanilla", "tokens"))
-    });
-    let median = rows
-        .get(rows.len() / 2)
-        .ok_or("no complete rows in the samples run")?
-        .metric("vanilla", "tokens");
-    let group = |label: &str, pick: &dyn Fn(&Row) -> bool| {
-        let g: Vec<&Row> = rows.iter().filter(|r| pick(r)).collect();
-        let mut out = json!({"label": label, "n": g.len()});
-        for metric in ["tokens", "lines"] {
-            let base = g.iter().fold(0.0, |s, r| s + r.metric("vanilla", metric));
-            let mut m = Map::new();
-            for a in &ARMS[1..] {
-                let v = g.iter().fold(0.0, |s, r| s + r.metric(a, metric));
-                m.insert(
-                    (*a).into(),
-                    json_num(if base == 0.0 {
-                        0.0
-                    } else {
-                        js::round((v / base) * 100.0)
-                    }),
-                );
-            }
-            out[metric] = Value::Object(m);
-        }
-        out
-    };
-    Ok(json!({
-        "median": json_num(median),
-        "groups": [
-            group("all tasks", &|_| true),
-            group("coding", &|r| r.kind == "coding"),
-            group("explanation", &|r| r.kind == "noncoding"),
-            group("short answers", &|r| r.metric("vanilla", "tokens") < median),
-            group("long answers", &|r| r.metric("vanilla", "tokens") >= median),
-        ],
-    }))
+    cells
 }
 
 fn build(root: &Path) -> Result<(String, usize), String> {

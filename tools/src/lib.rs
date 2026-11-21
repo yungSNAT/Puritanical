@@ -108,22 +108,50 @@ pub fn sync_file(path: &Path, want: &str, check: bool, stale: &str) -> Option<Ou
 /// Runs one command line (without the program name).
 #[must_use]
 pub fn run(ctx: &Ctx, args: &[String]) -> Out {
-    let flag = |f: &str| args.iter().skip(1).any(|a| a == f);
-    match args.first().map(String::as_str) {
-        Some("rules") => rules::run(&ctx.root, flag("--check")),
-        Some("chart") => chart::run(&ctx.root, flag("--check"), flag("--json")),
-        Some("samples") => samples::run(&ctx.root, flag("--check")),
-        Some("readme-art") => readme_art::run(&ctx.root, flag("--check")),
-        Some("aggregate") => aggregate::run(ctx, flag("--json")),
-        Some("pooled") => pooled::run(ctx, &args[1..]),
-        Some("answers") => answers::run(&ctx.root, &args[1..]),
-        Some("normalize-pi") => normalize_pi::run(&args[1..]),
-        Some("agentic-score") => score::run(ctx, flag("--json")),
-        Some("--version" | "-V") => Out {
+    let (cmd, rest) = args
+        .split_first()
+        .map_or(("", &[][..]), |(c, rest)| (c.as_str(), rest));
+    generate(&ctx.root, cmd, rest)
+        .or_else(|| analyse(ctx, cmd, rest))
+        .unwrap_or_else(|| about(cmd))
+}
+
+fn has(rest: &[String], flag: &str) -> bool {
+    rest.iter().any(|a| a == flag)
+}
+
+/// The generated-file commands.
+fn generate(root: &Path, cmd: &str, rest: &[String]) -> Option<Out> {
+    let check = has(rest, "--check");
+    Some(match cmd {
+        "rules" => rules::run(root, check),
+        "chart" => chart::run(root, check, has(rest, "--json")),
+        "samples" => samples::run(root, check),
+        "readme-art" => readme_art::run(root, check),
+        _ => return None,
+    })
+}
+
+/// The benchmark analysis commands.
+fn analyse(ctx: &Ctx, cmd: &str, rest: &[String]) -> Option<Out> {
+    Some(match cmd {
+        "aggregate" => aggregate::run(ctx, has(rest, "--json")),
+        "pooled" => pooled::run(ctx, rest),
+        "answers" => answers::run(&ctx.root, rest),
+        "normalize-pi" => normalize_pi::run(rest),
+        "agentic-score" => score::run(ctx, has(rest, "--json")),
+        _ => return None,
+    })
+}
+
+/// Version, help, or usage for anything else.
+fn about(cmd: &str) -> Out {
+    match cmd {
+        "--version" | "-V" => Out {
             stdout: format!("puritanical-tools {}\n", env!("CARGO_PKG_VERSION")),
             ..Out::default()
         },
-        Some("help" | "--help" | "-h") => Out {
+        "help" | "--help" | "-h" => Out {
             stdout: format!("{USAGE}\n"),
             ..Out::default()
         },

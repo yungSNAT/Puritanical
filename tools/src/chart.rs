@@ -20,7 +20,6 @@ use crate::js::{self, num};
 use crate::{Out, sync_file};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
-use std::fmt::Write as _;
 use std::path::Path;
 
 const SANS: &str =
@@ -113,33 +112,35 @@ fn arm_char(c: char) -> bool {
     js::is_word(c) || c == '.' || c == '-'
 }
 
+/// One run directory's output tokens, by task, then by arm.
+fn run_cells(dir: &Path) -> Map<String, Value> {
+    let mut cells: Map<String, Value> = Map::new();
+    for f in &js::read_dir(dir).unwrap_or_default() {
+        let Some((task, arm)) = js::split_cell(f, arm_char) else {
+            continue;
+        };
+        let Some(j) = js::read_json(&dir.join(f)) else {
+            continue;
+        };
+        if js::truthy(Some(&j)) && js::truthy(j.get("usage")) {
+            let tokens = j["usage"]
+                .get("output_tokens")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let cell = cells
+                .entry(task)
+                .or_insert_with(|| Value::Object(Map::new()));
+            cell[arm] = tokens;
+        }
+    }
+    cells
+}
+
 fn collect(root: &Path) -> Stat {
     let raw = root.join("benchmarks/results/raw-314-sidebyside");
     let mut rows: Vec<BTreeMap<String, f64>> = Vec::new();
     for d in js::read_dir(&raw).unwrap_or_default() {
-        let Ok(files) = js::read_dir(&raw.join(&d)) else {
-            continue;
-        };
-        let mut cells: Map<String, Value> = Map::new();
-        for f in &files {
-            let Some((task, arm)) = js::split_cell(f, arm_char) else {
-                continue;
-            };
-            let Some(j) = js::read_json(&raw.join(&d).join(f)) else {
-                continue;
-            };
-            if js::truthy(Some(&j)) && js::truthy(j.get("usage")) {
-                let tokens = j["usage"]
-                    .get("output_tokens")
-                    .cloned()
-                    .unwrap_or(Value::Null);
-                let cell = cells
-                    .entry(task)
-                    .or_insert_with(|| Value::Object(Map::new()));
-                cell[arm] = tokens;
-            }
-        }
-        for c in cells.values() {
+        for c in run_cells(&raw.join(&d)).values() {
             let keys = std::iter::once("vanilla").chain(ARMS.iter().map(|a| a.0));
             let present = keys.clone().all(|k| c.get(k).is_some_and(|v| !v.is_null()));
             if present {
@@ -215,12 +216,15 @@ const CHARTS: [Spec; 2] = [
     },
 ];
 
-#[expect(clippy::too_many_lines, reason = "one SVG, drawn in order")]
+const LEFT: f64 = 170.0;
+const TOP: f64 = 92.0;
+const ROW_H: f64 = 50.0;
+/// Pixels per percentage point: the plot is 600 wide and runs to 110%.
+const PX: f64 = 600.0 / 110.0;
+
 fn build_svg(stat: &Stat, th: &Theme, spec: &Spec) -> String {
-    let (w, h) = (860.0, 300.0);
-    let (left, top, row_h, plot_w) = (170.0, 92.0, 50.0, 600.0);
-    let px = plot_w / 110.0;
-    let line100 = left + 100.0 * px;
+    let (left, top, row_h) = (LEFT, TOP, ROW_H);
+    let line100 = left + 100.0 * PX;
     let arms = spec.arms;
     // RTK is a rival, not an older Chisle.
     let bars = if spec.terminal {
@@ -238,31 +242,41 @@ fn build_svg(stat: &Stat, th: &Theme, spec: &Spec) -> String {
         l = num(line100),
         m = th.muted,
     );
-    for (i, (key, label)) in arms.iter().enumerate() {
-        let v = get(stat, key);
-        let y = top + i as f64 * row_h;
-        let mine = *key == SELF;
-        let bold = if mine { " font-weight=\"700\"" } else { "" };
-        let fill = if mine { th.accent } else { th.text };
-        let bar = num(f64::max(2.0, v * px));
-        let delay = js::to_fixed(0.12 * i as f64, 2);
-        let _ = write!(
-            body,
-            "<text x=\"{}\" y=\"{}\" font-size=\"14\" fill=\"{fill}\" text-anchor=\"end\"{bold}>{label}</text>\
-             <rect x=\"{}\" y=\"{}\" width=\"{bar}\" height=\"28\" rx=\"5\" fill=\"{}\">\
-             <animate attributeName=\"width\" values=\"0;{bar}\" dur=\"0.9s\" begin=\"{delay}s\" fill=\"freeze\" calcMode=\"spline\" keySplines=\"0.2 0.7 0.2 1\"/></rect>\
-             <text x=\"{}\" y=\"{}\" font-size=\"13\" fill=\"{fill}\"{bold}>{}%</text>",
-            num(left - 12.0),
-            num(y + 21.0),
-            num(left),
-            num(y + 2.0),
-            bars[i],
-            num(left + f64::max(2.0, v * px) + 9.0),
-            num(y + 21.0),
-            num(v),
-        );
+    for (i, &(key, label)) in arms.iter().enumerate() {
+        body.push_str(&bar_row(th, i, (key, label), get(stat, key), bars[i]));
     }
-    let summary: Vec<String> = arms
+    frame(th, spec, stat, &body)
+}
+
+/// Arm `i`'s label, its bar growing in and its percentage.
+fn bar_row(th: &Theme, i: usize, arm: (&str, &str), v: f64, tone: &str) -> String {
+    let (key, label) = arm;
+    let y = TOP + i as f64 * ROW_H;
+    let mine = key == SELF;
+    let bold = if mine { " font-weight=\"700\"" } else { "" };
+    let fill = if mine { th.accent } else { th.text };
+    let bar = num(f64::max(2.0, v * PX));
+    let delay = js::to_fixed(0.12 * i as f64, 2);
+    format!(
+        "<text x=\"{}\" y=\"{}\" font-size=\"14\" fill=\"{fill}\" text-anchor=\"end\"{bold}>{label}</text>\
+         <rect x=\"{}\" y=\"{}\" width=\"{bar}\" height=\"28\" rx=\"5\" fill=\"{tone}\">\
+         <animate attributeName=\"width\" values=\"0;{bar}\" dur=\"0.9s\" begin=\"{delay}s\" fill=\"freeze\" calcMode=\"spline\" keySplines=\"0.2 0.7 0.2 1\"/></rect>\
+         <text x=\"{}\" y=\"{}\" font-size=\"13\" fill=\"{fill}\"{bold}>{}%</text>",
+        num(LEFT - 12.0),
+        num(y + 21.0),
+        num(LEFT),
+        num(y + 2.0),
+        num(LEFT + f64::max(2.0, v * PX) + 9.0),
+        num(y + 21.0),
+        num(v),
+    )
+}
+
+/// The card, title and subtitle around the plot `body`.
+fn frame(th: &Theme, spec: &Spec, stat: &Stat, body: &str) -> String {
+    let (w, h) = (860.0, 300.0);
+    let summary: Vec<String> = spec
+        .arms
         .iter()
         .map(|(k, l)| format!("{l} {}%", num(get(stat, k))))
         .collect();

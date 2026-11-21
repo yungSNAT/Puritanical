@@ -16,15 +16,18 @@ fn row_y(r: usize) -> f64 {
     L_Y0 - 24.0 + r as f64 * L_RH
 }
 
-#[expect(clippy::too_many_lines, reason = "one SVG panel, drawn in order")]
+/// The three requests: what was asked, the rung it stops at, the answer.
+type Scen = [(&'static str, usize, &'static str); 3];
+/// One pass over the three requests.
+const L_D: f64 = L_SL * 3.0;
+const L_W: f64 = 880.0;
+
 pub(super) fn ladder(t: &Theme, l: &Lang) -> String {
-    let scen = [
+    let scen: Scen = [
         (l.reqs[0], 2, l.answers[0]),
         (l.reqs[1], 3, l.answers[1]),
         (l.reqs[2], 1, l.answers[2]),
     ];
-    let (w, h) = (880.0, 396.0);
-    let d = L_SL * scen.len() as f64;
     let mut o = vec![
         format!(
             "<text x=\"28\" y=\"40\" font-size=\"{}\" font-weight=\"700\" fill=\"{}\">{}</text>",
@@ -39,6 +42,23 @@ pub(super) fn ladder(t: &Theme, l: &Lang) -> String {
             t.border
         ),
     ];
+    o.extend(ladder_marker(t, &scen));
+    for (r, rung) in l.rungs.iter().enumerate() {
+        o.extend(ladder_rung(t, r, rung));
+    }
+    o.extend(ladder_requests(t, l, &scen));
+    svg(
+        t,
+        L_W,
+        396.0,
+        "The Chisle efficiency ladder. Before writing code, stop at the first rung that holds: 1 does this need to exist at all, 2 already in this codebase, 3 does the stdlib do it, 4 a native platform feature, 5 an already-installed dependency, 6 can it be one line, 7 only then the minimum code that works. Animated examples: deep-copying a config object stops at the stdlib with structuredClone; a date picker stops at the platform with input type date; formatting a date stops at reuse.",
+        &o,
+        "",
+    )
+}
+
+/// The highlight and ring that climb to each request's rung.
+fn ladder_marker(t: &Theme, scen: &Scen) -> [String; 2] {
     let mut hl = Vec::new();
     for (i, &(_, tgt, _)) in scen.iter().enumerate() {
         let s = i as f64 * L_SL;
@@ -51,23 +71,29 @@ pub(super) fn ladder(t: &Theme, l: &Lang) -> String {
     }
     let rest = row_y(scen[scen.len() - 1].1); // static frame: the last request's rung
     let circle: Vec<(f64, f64)> = hl.iter().map(|&(s, y)| (s, y + 16.0)).collect();
-    o.push(format!(
-        "<rect x=\"20\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"8\" fill=\"{f}\" fill-opacity=\"0.13\" stroke=\"{f}\" stroke-opacity=\"0.55\">{}</rect>",
-        n(rest),
-        n(w - 40.0),
-        n(L_RH - 4.0),
-        anim_n("y", &hl, d, EASE),
-        f = t.fill
-    ));
-    o.push(format!(
-        "<circle cx=\"46\" cy=\"{}\" r=\"15\" fill=\"none\" stroke=\"{}\" stroke-width=\"2\">{}</circle>",
-        n(rest + 16.0),
-        t.fill,
-        anim_n("cy", &circle, d, EASE)
-    ));
-    for (r, [q, a]) in l.rungs.iter().enumerate() {
-        let y = L_Y0 + r as f64 * L_RH;
-        o.push(format!(
+    [
+        format!(
+            "<rect x=\"20\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"8\" fill=\"{f}\" fill-opacity=\"0.13\" stroke=\"{f}\" stroke-opacity=\"0.55\">{}</rect>",
+            n(rest),
+            n(L_W - 40.0),
+            n(L_RH - 4.0),
+            anim_n("y", &hl, L_D, EASE),
+            f = t.fill
+        ),
+        format!(
+            "<circle cx=\"46\" cy=\"{}\" r=\"15\" fill=\"none\" stroke=\"{}\" stroke-width=\"2\">{}</circle>",
+            n(rest + 16.0),
+            t.fill,
+            anim_n("cy", &circle, L_D, EASE)
+        ),
+    ]
+}
+
+/// Rung `r`: its number, the question and the answer that stops there.
+fn ladder_rung(t: &Theme, r: usize, [q, a]: &[&str; 2]) -> [String; 3] {
+    let y = L_Y0 + r as f64 * L_RH;
+    [
+        format!(
             "<circle cx=\"46\" cy=\"{}\" r=\"12\" fill=\"{}\" stroke=\"{}\"/><text x=\"46\" y=\"{}\" font-size=\"12.5\" font-weight=\"700\" fill=\"{}\" text-anchor=\"middle\">{}</text>",
             n(y - 6.0),
             t.card,
@@ -75,29 +101,33 @@ pub(super) fn ladder(t: &Theme, l: &Lang) -> String {
             n(y - 1.5),
             t.accent,
             r + 1
-        ));
-        o.push(format!(
+        ),
+        format!(
             "<text x=\"72\" y=\"{}\" font-size=\"{}\" font-weight=\"600\" fill=\"{}\">{}</text>",
             n(y),
             fit(q, 14.5, 340.0),
             t.text,
             esc(q)
-        ));
-        o.push(format!(
+        ),
+        format!(
             "<text x=\"420\" y=\"{}\" font-size=\"{}\" fill=\"{}\">→ {}</text>",
             n(y),
             fit(&format!("→ {a}"), 13.5, 432.0),
             t.muted,
             esc(a)
-        ));
-    }
+        ),
+    ]
+}
+
+/// The footer: each request and the rung that answered it, in turn.
+fn ladder_requests(t: &Theme, l: &Lang, scen: &Scen) -> Vec<String> {
     let yb = L_Y0 + 7.0 * L_RH + 8.0;
-    o.push(format!(
+    let mut o = vec![format!(
         "<path d=\"M20 {}H{}\" stroke=\"{}\"/>",
         n(yb - 18.0),
-        n(w - 20.0),
+        n(L_W - 20.0),
         t.border
-    ));
+    )];
     for (i, &(req, tgt, ans)) in scen.iter().enumerate() {
         let s = i as f64 * L_SL;
         let hit = s + 0.45 + tgt as f64 * 0.45 + 0.25;
@@ -111,26 +141,19 @@ pub(super) fn ladder(t: &Theme, l: &Lang) -> String {
             esc(l.request),
             t.text,
             esc(req),
-            shown(s + 0.01, s + L_SL, d, 0.2)
+            shown(s + 0.01, s + L_SL, L_D, 0.2)
         ));
         o.push(format!(
             "<text x=\"{}\" y=\"{}\"{} text-anchor=\"end\" fill=\"{}\" opacity=\"{opacity}\">{}{}</text>",
-            n(w - 28.0),
+            n(L_W - 28.0),
             n(yb + 12.0),
             mono(fit_as(&said, 14.0, 360.0, true)),
             t.green,
             esc(&said),
-            shown(hit, s + L_SL, d, 0.2)
+            shown(hit, s + L_SL, L_D, 0.2)
         ));
     }
-    svg(
-        t,
-        w,
-        h,
-        "The Chisle efficiency ladder. Before writing code, stop at the first rung that holds: 1 does this need to exist at all, 2 already in this codebase, 3 does the stdlib do it, 4 a native platform feature, 5 an already-installed dependency, 6 can it be one line, 7 only then the minimum code that works. Animated examples: deep-copying a config object stops at the stdlib with structuredClone; a date picker stops at the platform with input type date; formatting a date stops at reuse.",
-        &o,
-        "",
-    )
+    o
 }
 
 /// Where and when a typed command appears.
@@ -203,29 +226,60 @@ fn printed(x: f64, y: f64, segs: &[(&str, &str)], fs: f64, at: f64, d: f64) -> S
 }
 
 // ── Install: what `npx chisle` prints (format copied from bin/install.js) ────
-#[expect(clippy::too_many_lines, reason = "one SVG panel, drawn in order")]
+const AGENTS: [&str; 6] = [
+    "Claude Code",
+    "Gemini CLI",
+    "Codex",
+    "OpenCode",
+    "Copilot CLI",
+    "Cursor",
+];
+const AGENT_IDS: [&str; 6] = [
+    "claude",
+    "gemini",
+    "codex",
+    "opencode",
+    "copilot-cli",
+    "cursor",
+];
+const I_FS: f64 = 13.5;
+const I_X: f64 = 40.0;
+const I_Y0: f64 = 82.0;
+const I_D: f64 = 10.0;
+
 pub(super) fn install(t: &Theme, _: &Lang) -> String {
-    let (w, h, d, fs, x, y0, lh) = (880.0, 420.0, 10.0, 13.5, 40.0, 82.0, 21.5);
-    let out = d - 0.6;
-    let agents = [
-        "Claude Code",
-        "Gemini CLI",
-        "Codex",
-        "OpenCode",
-        "Copilot CLI",
-        "Cursor",
+    let out = I_D - 0.6;
+    let cmd = Typing {
+        id: "cmd",
+        x: I_X,
+        y: I_Y0,
+        fs: I_FS,
+        t0: 0.5,
+        t1: 1.2,
+        d: I_D,
+    };
+    let o = [
+        win(t, 16.0, 16.0, 848.0, 388.0, "~/app — npx chisle"),
+        format!(
+            "<g>{}{}{}</g>",
+            anim_n("opacity", &[(out, 1.0), (out + 0.3, 0.0)], I_D, PLAIN),
+            typed(t, &cmd, &[("$ ", t.faint), ("npx chisle", t.text)]),
+            install_output(t)
+        ),
     ];
-    let ids = [
-        "claude",
-        "gemini",
-        "codex",
-        "opencode",
-        "copilot-cli",
-        "cursor",
-    ];
-    let detected: Vec<String> = agents.iter().map(|a| format!("{a} detected")).collect();
-    let count = format!("  detected:  {}", agents.len());
-    let installed = format!("  installed: {}", ids.join(", "));
+    let label = format!(
+        "Animated terminal: npx chisle detects {}, installs into each, and prints \"Done. Restart your agent.\"",
+        AGENTS.join(", ")
+    );
+    svg(t, 880.0, 420.0, &label, &o, "")
+}
+
+/// The installer's report, a line at a time.
+fn install_output(t: &Theme) -> String {
+    let lh = 21.5;
+    let detected: Vec<String> = AGENTS.iter().map(|a| format!("{a} detected")).collect();
+    let count = format!("  detected:  {}", AGENTS.len());
+    let installed = format!("  installed: {}", AGENT_IDS.join(", "));
     let mut lines: Vec<(f64, Vec<(&str, &str)>)> =
         vec![(1.7, vec![("╭─ Chisle installer ─╮", t.accent)])];
     for (i, a) in detected.iter().enumerate() {
@@ -247,78 +301,77 @@ pub(super) fn install(t: &Theme, _: &Lang) -> String {
     ]);
     // Blank rows between blocks, as the installer prints them.
     let rows = [1.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 11.0, 12.0, 14.0];
-    let cmd = Typing {
-        id: "cmd",
-        x,
-        y: y0,
-        fs,
-        t0: 0.5,
-        t1: 1.2,
-        d,
-    };
-    let printed_lines: String = lines
+    lines
         .iter()
         .zip(rows)
-        .map(|((at, segs), row)| printed(x, r1(y0 + row * lh), segs, fs, *at, d))
-        .collect();
-    let o = [
-        win(t, 16.0, 16.0, 848.0, 388.0, "~/app — npx chisle"),
-        format!(
-            "<g>{}{}{printed_lines}</g>",
-            anim_n("opacity", &[(out, 1.0), (out + 0.3, 0.0)], d, PLAIN),
-            typed(t, &cmd, &[("$ ", t.faint), ("npx chisle", t.text)])
-        ),
-    ];
-    let label = format!(
-        "Animated terminal: npx chisle detects {}, installs into each, and prints \"Done. Restart your agent.\"",
-        agents.join(", ")
-    );
-    svg(t, w, h, &label, &o, "")
+        .map(|((at, segs), row)| printed(I_X, r1(I_Y0 + row * lh), segs, I_FS, *at, I_D))
+        .collect()
 }
 
 // ── Commands: a typed cheat sheet ─────────────────────────────────────────────
-#[expect(clippy::too_many_lines, reason = "one SVG panel, drawn in order")]
+const COMMANDS: [(&str, &str, &str); 8] = [
+    ("$", "npx chisle", "wire every agent on this machine"),
+    ("$", "npx chisle --dry-run", "preview first"),
+    ("$", "npx chisle --uninstall", "put everything back"),
+    (">", "/chisle off", "pause it"),
+    (
+        ">",
+        "/chisle-review",
+        "over-engineering, one finding per line",
+    ),
+    (
+        ">",
+        "/chisle-audit",
+        "bloated code and prose, biggest cut first",
+    ),
+    (
+        "$",
+        "npx chisle tools",
+        "tool schemas you pay for but never use",
+    ),
+    ("$", "npx chisle mcp wrap", "trim MCP output in any agent"),
+];
+const C_D: f64 = 11.0;
+
 pub(super) fn commands(t: &Theme, l: &Lang) -> String {
-    let (w, h, d, fs, x, y0, lh, pad) = (880.0, 312.0, 11.0, 14.0, 40.0, 84.0, 27.0, 26.0);
-    let cmds = [
-        ("$", "npx chisle", "wire every agent on this machine"),
-        ("$", "npx chisle --dry-run", "preview first"),
-        ("$", "npx chisle --uninstall", "put everything back"),
-        (">", "/chisle off", "pause it"),
-        (
-            ">",
-            "/chisle-review",
-            "over-engineering, one finding per line",
-        ),
-        (
-            ">",
-            "/chisle-audit",
-            "bloated code and prose, biggest cut first",
-        ),
-        (
-            "$",
-            "npx chisle tools",
-            "tool schemas you pay for but never use",
-        ),
-        ("$", "npx chisle mcp wrap", "trim MCP output in any agent"),
-    ];
-    let out = d - 0.6;
+    let out = C_D - 0.6;
     let mut o = vec![
         win(t, 16.0, 16.0, 848.0, 280.0, l.sheet),
         format!(
             "<g>{}",
-            anim_n("opacity", &[(out, 1.0), (out + 0.3, 0.0)], d, PLAIN)
+            anim_n("opacity", &[(out, 1.0), (out + 0.3, 0.0)], C_D, PLAIN)
         ),
     ];
-    for (i, (p, c, _)) in cmds.iter().enumerate() {
-        let y = y0 + i as f64 * lh;
-        let t0 = 0.5 + i as f64 * 0.85;
-        let t1 = t0 + 0.45;
-        let id = format!("c{i}");
-        let prompt = format!("{p} ");
-        let colour = if *p == "$" { t.faint } else { t.accent };
-        let note = format!("# {}", l.notes[i]);
-        o.push(typed(
+    for (i, &(p, c, _)) in COMMANDS.iter().enumerate() {
+        o.extend(command_row(t, i, (p, c), l.notes[i]));
+    }
+    o.push("</g>".into());
+    let sheet: Vec<String> = COMMANDS
+        .iter()
+        .map(|(_, c, note)| format!("{c}: {note}"))
+        .collect();
+    svg(
+        t,
+        880.0,
+        312.0,
+        &format!("Animated cheat sheet: {}.", sheet.join("; ")),
+        &o,
+        "",
+    )
+}
+
+/// Row `i`: the prompt and command typed out, then its note.
+fn command_row(t: &Theme, i: usize, (p, c): (&str, &str), note: &str) -> [String; 2] {
+    let (fs, x, y0, lh, pad) = (14.0, 40.0, 84.0, 27.0, 26.0);
+    let y = y0 + i as f64 * lh;
+    let t0 = 0.5 + i as f64 * 0.85;
+    let t1 = t0 + 0.45;
+    let id = format!("c{i}");
+    let prompt = format!("{p} ");
+    let colour = if p == "$" { t.faint } else { t.accent };
+    let note = format!("# {note}");
+    [
+        typed(
             t,
             &Typing {
                 id: &id,
@@ -327,30 +380,17 @@ pub(super) fn commands(t: &Theme, l: &Lang) -> String {
                 fs,
                 t0,
                 t1,
-                d,
+                d: C_D,
             },
             &[(&prompt, colour), (c, t.text)],
-        ));
-        o.push(printed(
+        ),
+        printed(
             r1(x + pad * fs * ADV),
             y,
             &[(&note, t.muted)],
             fs,
             t1 + 0.15,
-            d,
-        ));
-    }
-    o.push("</g>".into());
-    let sheet: Vec<String> = cmds
-        .iter()
-        .map(|(_, c, note)| format!("{c}: {note}"))
-        .collect();
-    svg(
-        t,
-        w,
-        h,
-        &format!("Animated cheat sheet: {}.", sheet.join("; ")),
-        &o,
-        "",
-    )
+            C_D,
+        ),
+    ]
 }

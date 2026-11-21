@@ -84,11 +84,22 @@ pub fn lines(text: &str) -> f64 {
     }
 }
 
+impl Cell {
+    /// The tokens as `+=` adds them: missing is NaN, null is 0.
+    fn out_num(&self) -> f64 {
+        match &self.out {
+            Some(Value::Null) => 0.0,
+            v => js::number(v.as_ref()),
+        }
+    }
+}
+
 struct Cell {
     task: String,
     arm: String,
     kind: &'static str,
-    out: f64,
+    /// `usage.output_tokens` as read: `None` where the field is missing.
+    out: Option<Value>,
     ans: f64,
     lines: f64,
 }
@@ -111,9 +122,9 @@ fn load(ctx: &Ctx) -> Vec<Cell> {
             _ => "",
         };
         let out = if js::truthy(d.get("usage")) {
-            js::number(d["usage"].get("output_tokens"))
+            d["usage"].get("output_tokens").cloned()
         } else {
-            0.0
+            Some(0.into())
         };
         cells.push(Cell {
             task: task.into(),
@@ -128,7 +139,8 @@ fn load(ctx: &Ctx) -> Vec<Cell> {
 }
 
 fn pct(base: f64, v: f64) -> String {
-    num(if base == 0.0 {
+    // `base ? … : 0`: NaN is falsy too.
+    num(if base == 0.0 || base.is_nan() {
         0.0
     } else {
         js::round((v / base) * 100.0)
@@ -172,7 +184,7 @@ pub fn run(ctx: &Ctx, json: bool) -> Out {
             // An "other" task counts towards "all" only; the JavaScript
             // version threw a TypeError on it instead.
             if let Some(s) = arm.get_mut(seg) {
-                s.out += c.out;
+                s.out += c.out_num();
                 s.ans += c.ans;
                 s.lines += c.lines;
                 s.n += 1.0;
@@ -207,8 +219,17 @@ fn to_json(cells: &[Cell], sum: &HashMap<&str, HashMap<&str, Sum>>) -> Value {
     let cells: Vec<Value> = cells
         .iter()
         .map(|c| {
-            json!({"task": c.task, "arm": c.arm, "kind": c.kind,
-                "out": js::json_num(c.out), "ans": js::json_num(c.ans), "lines": js::json_num(c.lines)})
+            let mut v = Map::new();
+            v.insert("task".into(), json!(c.task));
+            v.insert("arm".into(), json!(c.arm));
+            v.insert("kind".into(), json!(c.kind));
+            // `JSON.stringify` leaves out an undefined field.
+            if let Some(out) = &c.out {
+                v.insert("out".into(), out.clone());
+            }
+            v.insert("ans".into(), js::json_num(c.ans));
+            v.insert("lines".into(), js::json_num(c.lines));
+            Value::Object(v)
         })
         .collect();
     let mut sums = Map::new();
@@ -230,19 +251,18 @@ fn to_json(cells: &[Cell], sum: &HashMap<&str, HashMap<&str, Sum>>) -> Value {
 const HEAD: &str = "| task | kind | vanilla | caveman | ponytail | chisle |\n|------|------|--------:|--------:|---------:|---------:|";
 const SEG_HEAD: &str = "| segment | vanilla | caveman | ponytail | chisle |\n|---------|--------:|--------:|---------:|---------:|";
 
-#[expect(clippy::too_many_lines, reason = "the four tables print in order")]
 fn tables(
     out: &mut Out,
     by_task: &[(&str, HashMap<&str, &Cell>)],
     sum: &HashMap<&str, HashMap<&str, Sum>>,
 ) {
-    let per_task = |out: &mut Out, title: &str, pick: fn(&Cell) -> f64| {
+    let per_task = |out: &mut Out, title: &str, pick: fn(&Cell) -> String| {
         out.say(title);
         out.say(HEAD);
         for (t, arms) in by_task {
             let row: Vec<String> = ARMS
                 .iter()
-                .map(|a| arms.get(a).map_or("—".into(), |c| num(pick(c))))
+                .map(|a| arms.get(a).map_or("—".into(), |c| pick(c)))
                 .collect();
             out.say(format!(
                 "| {t} | {} | {} |",
@@ -254,13 +274,18 @@ fn tables(
     per_task(
         out,
         "## Per-task billed output tokens (usage.output_tokens — includes model reasoning)\n",
-        |c| c.out,
+        |c| js::string(c.out.as_ref()),
     );
     per_task(
         out,
         "\n## Per-task visible answer size (lines of the delivered answer)\n",
-        |c| c.lines,
+        |c| num(c.lines),
     );
+    segment_tables(out, sum);
+}
+
+/// Each metric as % of vanilla by segment, then the raw totals.
+fn segment_tables(out: &mut Out, sum: &HashMap<&str, HashMap<&str, Sum>>) {
     for (metric, label) in [
         ("out", "billed output tokens"),
         ("ans", "visible answer tokens"),

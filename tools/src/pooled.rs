@@ -164,10 +164,6 @@ fn pct(x: f64) -> String {
 
 /// Prints the pooled tables for the seed directories in `dirs`.
 #[must_use]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one table per row set, printed in order"
-)]
 pub fn run(ctx: &Ctx, dirs: &[String]) -> Out {
     let arms: Vec<&str> = ctx
         .var("ARMS")
@@ -187,33 +183,10 @@ pub fn run(ctx: &Ctx, dirs: &[String]) -> Out {
         .collect();
     for (label, set) in [("all cells", &all), ("every arm delivered", &answered)] {
         out.say(format!("\n{label} (n={})", set.len()));
-        let head = [
-            ("answer len", 11),
-            ("CI", 9),
-            ("lines", 6),
-            ("billed", 7),
-            ("CI", 9),
-            ("think", 6),
-            ("backfires", 10),
-        ];
-        let head: Vec<String> = head.iter().map(|(h, w)| js::pad(h, *w, true)).collect();
+        let head: Vec<String> = HEAD.iter().map(|(h, w)| js::pad(h, *w, true)).collect();
         out.say(format!("{} {}", js::pad("arm", 9, false), head.join(" ")));
         for a in &arms[1..] {
-            let backfires = set
-                .iter()
-                .filter(|r| r[*a].billed > r["vanilla"].billed)
-                .count();
-            let cols = [
-                (pct(ratio(set, a, Metric::Vis)), 11),
-                (ci(&mut rng, set, a, Metric::Vis), 9),
-                (pct(ratio(set, a, Metric::Lines)), 6),
-                (pct(ratio(set, a, Metric::Billed)), 7),
-                (ci(&mut rng, set, a, Metric::Billed), 9),
-                (pct(ratio(set, a, Metric::Think)), 6),
-                (format!("{backfires}/{}", set.len()), 10),
-            ];
-            let cols: Vec<String> = cols.iter().map(|(c, w)| js::pad(c, *w, true)).collect();
-            out.say(format!("{} {}", js::pad(a, 9, false), cols.join(" ")));
+            out.say(arm_line(&mut rng, set, a));
         }
     }
     let misses: Vec<String> = arms
@@ -222,4 +195,38 @@ pub fn run(ctx: &Ctx, dirs: &[String]) -> Out {
         .collect();
     out.say(format!("\nnon-answers: {}", misses.join(", ")));
     out
+}
+
+/// The table's columns and their widths.
+const HEAD: [(&str, usize); 7] = [
+    ("answer len", 11),
+    ("CI", 9),
+    ("lines", 6),
+    ("billed", 7),
+    ("CI", 9),
+    ("think", 6),
+    ("backfires", 10),
+];
+
+/// One arm's row: its ratios to vanilla, two bootstrap intervals and its backfires.
+fn arm_line(rng: &mut Rng, set: &[&Row], a: &str) -> String {
+    let backfires = set
+        .iter()
+        .filter(|r| r[a].billed > r["vanilla"].billed)
+        .count();
+    let cols = [
+        pct(ratio(set, a, Metric::Vis)),
+        ci(rng, set, a, Metric::Vis),
+        pct(ratio(set, a, Metric::Lines)),
+        pct(ratio(set, a, Metric::Billed)),
+        ci(rng, set, a, Metric::Billed),
+        pct(ratio(set, a, Metric::Think)),
+        format!("{backfires}/{}", set.len()),
+    ];
+    let cols: Vec<String> = cols
+        .iter()
+        .zip(HEAD)
+        .map(|(c, (_, w))| js::pad(c, w, true))
+        .collect();
+    format!("{} {}", js::pad(a, 9, false), cols.join(" "))
 }

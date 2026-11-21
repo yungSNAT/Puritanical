@@ -59,8 +59,14 @@ fn round_takes_halves_up() {
 #[test]
 fn strings_measure_in_utf16_units() {
     assert_eq!(len("a😀"), 3);
-    assert_eq!(slice("a😀b", 2), "a\u{fffd}");
+    assert_eq!(lossy(&slice("a😀b", 2)), "a\u{fffd}", "console.log");
+    assert_eq!(
+        stringify(&json!({"t": slice("a😀b", 2)}), 0),
+        r#"{"t":"a\ud83d"}"#,
+        "JSON.stringify keeps the lone surrogate"
+    );
     assert_eq!(slice("abc", 10), "abc");
+    assert_eq!(lossy("a😀"), "a😀");
     assert_eq!(trim("\u{feff}\u{a0} x \n"), "x");
     assert_eq!(
         trim("\u{85}x"),
@@ -143,6 +149,11 @@ fn locale_compare_follows_the_root_collation() {
         "outside ASCII: code point order"
     );
     assert_eq!(locale_compare("x", "x"), Ordering::Equal);
+    assert_eq!(
+        locale_compare("a b", "a_b"),
+        Ordering::Less,
+        "space sorts first"
+    );
 }
 
 #[test]

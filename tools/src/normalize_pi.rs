@@ -10,7 +10,6 @@ use std::path::Path;
 
 /// Prints the cell for one `events.jsonl`.
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "one pass over the event stream")]
 pub fn run(args: &[String]) -> Out {
     let Some(file) = args.first() else {
         return Out {
@@ -24,40 +23,13 @@ pub fn run(args: &[String]) -> Out {
         Err(e) => return Out::fail(format!("{file}: {e}")),
     };
     let (mut output_tokens, mut result, mut is_error) = (0.0, String::new(), false);
-    for line in text.split('\n').filter(|l| !l.is_empty()) {
-        let Ok(event) = serde_json::from_str::<Value>(line) else {
-            continue;
-        };
-        let Some(message) = event.get("message").filter(|m| js::truthy(Some(m))) else {
-            continue;
-        };
-        if event.get("type").and_then(Value::as_str) != Some("message_end")
-            || message.get("role").and_then(Value::as_str) != Some("assistant")
-        {
-            continue;
-        }
+    for message in text.split('\n').filter_map(assistant_end) {
         let output = message
             .get("usage")
             .and_then(|u| u.get("output"))
             .and_then(Value::as_f64);
         output_tokens += output.filter(|x| x.is_finite()).unwrap_or(0.0);
-        let content = message.get("content");
-        result = match content {
-            Some(Value::Array(blocks)) => blocks
-                .iter()
-                .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
-                .map(|b| {
-                    if js::truthy(b.get("text")) {
-                        js::string(b.get("text"))
-                    } else {
-                        String::new()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
-            c if js::truthy(c) => js::string(c),
-            _ => String::new(),
-        };
+        result = text_of(message.get("content"));
         is_error |= message.get("stopReason").and_then(Value::as_str) == Some("error");
     }
     let cell = json!({
@@ -69,5 +41,34 @@ pub fn run(args: &[String]) -> Out {
     Out {
         stdout: js::stringify(&cell, 2) + "\n",
         ..Out::default()
+    }
+}
+
+/// The message of an assistant `message_end` event; any other line is skipped.
+fn assistant_end(line: &str) -> Option<Value> {
+    let mut event = serde_json::from_str::<Value>(line).ok()?;
+    let ended = event.get("type").and_then(Value::as_str) == Some("message_end");
+    let message = event.get_mut("message").filter(|m| js::truthy(Some(m)))?;
+    (ended && message.get("role").and_then(Value::as_str) == Some("assistant"))
+        .then(|| message.take())
+}
+
+/// A message's text: its text blocks joined, or the content itself.
+fn text_of(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::Array(blocks)) => blocks
+            .iter()
+            .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+            .map(|b| {
+                if js::truthy(b.get("text")) {
+                    js::string(b.get("text"))
+                } else {
+                    String::new()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        c if js::truthy(c) => js::string(c),
+        _ => String::new(),
     }
 }

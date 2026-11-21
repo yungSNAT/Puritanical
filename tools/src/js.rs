@@ -87,11 +87,39 @@ pub fn len(s: &str) -> usize {
     s.encode_utf16().count()
 }
 
-/// `s.slice(0, n)` by UTF-16 code units; a split surrogate pair prints as U+FFFD, as Node writes it.
+/// The stand-in for lone surrogate `0xD800 + k` is U+10F800 + k: the last
+/// 2,048 code points of plane 16, which are private use.
+const LONE: u32 = 0x10_F800;
+
+/// The lone surrogate a stand-in holds.
+fn lone(c: char) -> Option<u32> {
+    u32::from(c).checked_sub(LONE).map(|k| 0xD800 + k)
+}
+
+/// `s.slice(0, n)` by UTF-16 code units. A cut through a surrogate pair
+/// leaves a lone surrogate, which a Rust string cannot hold, so a stand-in
+/// keeps it: `stringify` writes it as `\udXXX`, as `JSON.stringify` does,
+/// and [`lossy`] prints it as U+FFFD, as Node's console does.
+///
+/// # Panics
+/// Never: every surrogate's stand-in is a valid code point.
 #[must_use]
 pub fn slice(s: &str, n: usize) -> String {
-    let units: Vec<u16> = s.encode_utf16().take(n).collect();
-    String::from_utf16_lossy(&units)
+    char::decode_utf16(s.encode_utf16().take(n))
+        .map(|r| {
+            r.unwrap_or_else(|e| {
+                char::from_u32(LONE + u32::from(e.unpaired_surrogate()) - 0xD800).expect("plane 16")
+            })
+        })
+        .collect()
+}
+
+/// A [`slice`] as Node prints it: a lone surrogate becomes U+FFFD.
+#[must_use]
+pub fn lossy(s: &str) -> String {
+    s.chars()
+        .map(|c| if lone(c).is_some() { '\u{fffd}' } else { c })
+        .collect()
 }
 
 /// JavaScript's whitespace and line terminators (`\s` and `trim`).
@@ -210,43 +238,58 @@ pub fn stringify(v: &Value, indent: usize) -> String {
 }
 
 fn write_json(out: &mut String, v: &Value, indent: usize, depth: usize) {
+    let pretty = (indent, depth);
     match v {
-        Value::Null => out.push_str("null"),
-        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
-        Value::Number(n) => {
-            let x = as_f64(n);
-            out.push_str(&if x.is_finite() { num(x) } else { "null".into() });
+        Value::Array(items) if !items.is_empty() => {
+            write_items(out, "[]", items.iter().map(|i| (None, i)), pretty);
         }
-        Value::String(s) => out.push_str(&Value::String(s.clone()).to_string()),
-        Value::Array(items) if items.is_empty() => out.push_str("[]"),
-        Value::Object(map) if map.is_empty() => out.push_str("{}"),
-        Value::Array(items) => {
-            out.push('[');
-            for (i, item) in items.iter().enumerate() {
-                out.push_str(if i == 0 { "" } else { "," });
-                newline(out, indent, depth + 1);
-                write_json(out, item, indent, depth + 1);
-            }
-            newline(out, indent, depth);
-            out.push(']');
+        Value::Object(map) if !map.is_empty() => {
+            write_items(out, "{}", map.iter().map(|(k, i)| (Some(k), i)), pretty);
         }
-        Value::Object(map) => {
-            out.push('{');
-            for (i, (k, item)) in map.iter().enumerate() {
-                out.push_str(if i == 0 { "" } else { "," });
-                newline(out, indent, depth + 1);
-                let _ = write!(
-                    out,
-                    "{}:{}",
-                    Value::String(k.clone()),
-                    if indent > 0 { " " } else { "" }
-                );
-                write_json(out, item, indent, depth + 1);
-            }
-            newline(out, indent, depth);
-            out.push('}');
-        }
+        v => out.push_str(&scalar(v)),
     }
+}
+
+/// A value with nothing inside it to indent.
+fn scalar(v: &Value) -> String {
+    match v {
+        Value::Null => "null".into(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => num(as_f64(n)),
+        Value::String(s) => quote(s),
+        Value::Array(_) => "[]".into(),
+        Value::Object(_) => "{}".into(),
+    }
+}
+
+/// A JSON string literal; a [`slice`]'s stand-in becomes its `\udXXX` escape.
+fn quote(s: &str) -> String {
+    Value::String(s.to_owned())
+        .to_string()
+        .chars()
+        .map(|c| lone(c).map_or_else(|| c.to_string(), |u| format!("\\u{u:04x}")))
+        .collect()
+}
+
+/// An array or object's members between `brackets`, one per line when indenting.
+fn write_items<'a>(
+    out: &mut String,
+    brackets: &str,
+    items: impl Iterator<Item = (Option<&'a String>, &'a Value)>,
+    (indent, depth): (usize, usize),
+) {
+    let (open, close) = brackets.split_at(1);
+    out.push_str(open);
+    for (i, (key, item)) in items.enumerate() {
+        out.push_str(if i == 0 { "" } else { "," });
+        newline(out, indent, depth + 1);
+        if let Some(k) = key {
+            let _ = write!(out, "{}:{}", quote(k), if indent > 0 { " " } else { "" });
+        }
+        write_json(out, item, indent, depth + 1);
+    }
+    newline(out, indent, depth);
+    out.push_str(close);
 }
 
 fn newline(out: &mut String, indent: usize, depth: usize) {
@@ -263,14 +306,14 @@ pub fn json_num(x: f64) -> Value {
 }
 
 /// `a.localeCompare(b)` under the default (root) collation, for ASCII
-/// identifiers: punctuation before digits before letters, letters compared
-/// without case first, then lower case before upper case.
+/// identifiers: space, then punctuation, then digits, then letters; letters
+/// compared without case first, then lower case before upper case.
 ///
 /// # Panics
 /// Never: the collation table is short.
 #[must_use]
 pub fn locale_compare(a: &str, b: &str) -> Ordering {
-    const ORDER: &str = "_-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz";
+    const ORDER: &str = " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz";
     let primary = |c: char| {
         ORDER
             .find(c.to_ascii_lowercase())
