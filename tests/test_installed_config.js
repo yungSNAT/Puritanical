@@ -76,3 +76,40 @@ test('startup uses a cached major update offline and respects the configured sta
   assert.equal(run('off'), 'OK');
   assert.equal(fs.existsSync('claude/.chisle-active'), false);
 });
+
+function interactiveInstaller(t) {
+  const env = isolatedConfig(t);
+  delete env.CI;
+  // The child reads real answers from a pipe, with terminal detection enabled.
+  // The empty PATH prevents any call to an installed GitHub client.
+  fs.writeFileSync('terminal.cjs', 'process.stdin.isTTY = true; process.stdout.isTTY = true;\n');
+  return (agent, answer) => execFileSync(process.execPath,
+    ['--require', './terminal.cjs', installer, '--only', agent, '--no-color'], {
+      env, input: answer + '\n', encoding: 'utf8', timeout: 5000,
+    });
+}
+
+test('interactive installation remembers a refusal and asks again after a deferral', t => {
+  const install = interactiveInstaller(t);
+  fs.mkdirSync('xdg/chisle', { recursive: true });
+  fs.writeFileSync('xdg/chisle/config.json', '{"sections":{"prose":false}}');
+  const config = () => JSON.parse(fs.readFileSync('xdg/chisle/config.json', 'utf8'));
+
+  assert.match(install('cursor', ''), /ask again next time/);
+  assert.deepEqual(config(), { sections: { prose: false } });
+  assert.match(install('cline', 'n'), /won't ask again/);
+  assert.deepEqual(config(), { sections: { prose: false }, starPrompt: 'no' });
+  assert.doesNotMatch(install('kiro', 'y'), /Star and follow on GitHub/);
+  assert.equal(config().starPrompt, 'no');
+});
+
+test('interactive installation prints manual links offline and preserves unreadable settings', t => {
+  const install = interactiveInstaller(t);
+  fs.mkdirSync('xdg/chisle', { recursive: true });
+  fs.writeFileSync('xdg/chisle/config.json', '{"mode":');
+  const output = install('cursor', 'yes');
+  assert.match(output, /Couldn't star through gh\. Star it here: https:\/\/github\.com\//);
+  assert.match(output, /Follow here: https:\/\/github\.com\//);
+  assert.doesNotMatch(output, /Starred/);
+  assert.equal(fs.readFileSync('xdg/chisle/config.json', 'utf8'), '{"mode":');
+});
