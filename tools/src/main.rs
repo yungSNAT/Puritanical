@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use puritanical_tools::{Ctx, run};
-use std::io::Write as _;
+use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -25,9 +25,50 @@ fn main() -> ExitCode {
             .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
             .collect(),
     };
-    let out = run(&ctx, &args);
-    // A closed pipe (`| head`) is not an error worth a panic.
-    let _ = std::io::stdout().write_all(out.stdout.as_bytes());
-    let _ = std::io::stderr().write_all(out.stderr.as_bytes());
-    ExitCode::from(out.code)
+    let mut out = run(&ctx, &args);
+    let mut code = out.code;
+    if let Err(e) = emit(&mut std::io::stdout(), &out.stdout) {
+        out.err(format!("puritanical-tools: cannot write output: {e}"));
+        code = code.max(1);
+    }
+    if emit(&mut std::io::stderr(), &out.stderr).is_err() {
+        code = code.max(1);
+    }
+    ExitCode::from(code)
+}
+
+/// Writes `text`. A closed pipe (`| head`) is not an error; any other failure is.
+fn emit(w: &mut impl Write, text: &str) -> std::io::Result<()> {
+    match w.write_all(text.as_bytes()).and_then(|()| w.flush()) {
+        Err(e) if e.kind() != ErrorKind::BrokenPipe => Err(e),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::emit;
+    use std::io::{Error, ErrorKind, Write};
+
+    /// A writer that fails every write with `kind`.
+    struct Fails(ErrorKind);
+
+    impl Write for Fails {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(Error::from(self.0))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn only_a_closed_pipe_is_ignored() {
+        assert!(emit(&mut Fails(ErrorKind::BrokenPipe), "x").is_ok());
+        assert!(emit(&mut Fails(ErrorKind::StorageFull), "x").is_err());
+        let mut buf = Vec::new();
+        emit(&mut buf, "ok").expect("written");
+        assert_eq!(buf, b"ok");
+        assert!(Fails(ErrorKind::Other).flush().is_ok());
+    }
 }

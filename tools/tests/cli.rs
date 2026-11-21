@@ -69,3 +69,26 @@ fn checks_run_against_the_crate_repository_or_puritanical_root() {
         .output();
     assert_eq!(out.expect("run").status.code(), Some(0));
 }
+
+/// `/dev/full` fails every write with ENOSPC, unlike a closed pipe.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_failed_write_is_an_error() {
+    let full = || std::fs::File::create("/dev/full").expect("/dev/full");
+    let out = bin().arg("--help").stdout(full()).output().expect("run");
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .starts_with("puritanical-tools: cannot write output: "),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let out = bin().arg("--version").stderr(full()).output().expect("run");
+    assert_eq!(out.status.code(), Some(0), "nothing went to stderr");
+    let out = bin()
+        .arg("frobnicate")
+        .stderr(full())
+        .output()
+        .expect("run");
+    assert_eq!(out.status.code(), Some(2));
+}
