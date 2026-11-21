@@ -553,7 +553,7 @@ test('Pi replay resolves default roots and counts every persisted content shape'
   ];
   fs.writeFileSync(
     path.join(sessions, 'session.jsonl'),
-    entries.map(JSON.stringify).join('\n')
+    entries.map((entry) => JSON.stringify(entry)).join('\n')
   );
 
   const env = isolatedChildEnv(home);

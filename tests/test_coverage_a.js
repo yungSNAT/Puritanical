@@ -206,18 +206,22 @@ test('Claude standalone skip result is recorded as skipped rather than installed
   assert.equal(writes.join(''), '\n');
 });
 
-test('failed Claude plugin installation warns and falls back to working standalone hooks', (t) => {
+function fakeClaude(t, logName, unixLines, windowsLines) {
   const root = tempDir(t);
   const home = path.join(root, 'home');
   const cfg = path.join(root, 'claude-config');
   const bin = path.join(root, 'bin');
-  const log = path.join(root, 'claude.log');
+  const log = path.join(root, logName);
   fs.mkdirSync(home);
   fs.mkdirSync(cfg);
+  writeFakeCommand(bin, 'claude', unixLines.join('\n'), windowsLines.join('\n'));
+  return { root, home, cfg, bin, log };
+}
 
-  writeFakeCommand(
-    bin,
-    'claude',
+test('failed Claude plugin installation warns and falls back to working standalone hooks', (t) => {
+  const { root, home, cfg, bin, log } = fakeClaude(
+    t,
+    'claude.log',
     [
       'echo "$@" >> "$FAKE_LOG"',
       'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then',
@@ -225,7 +229,7 @@ test('failed Claude plugin installation warns and falls back to working standalo
       '  exit 0',
       'fi',
       'exit 1',
-    ].join('\n'),
+    ],
     [
       'echo %*>>"%FAKE_LOG%"',
       'if "%1 %2"=="plugin list" (',
@@ -233,7 +237,7 @@ test('failed Claude plugin installation warns and falls back to working standalo
       '  exit /b 0',
       ')',
       'exit /b 1',
-    ].join('\n'),
+    ],
   );
 
   const env = isolatedEnv(home, {
@@ -389,27 +393,19 @@ test('Copilot CLI dry-run describes all files and writes nothing', (t) => {
 });
 
 test('Claude uninstall removes an installed plugin through the Claude CLI', (t) => {
-  const root = tempDir(t);
-  const home = path.join(root, 'home');
-  const cfg = path.join(root, 'claude-config');
-  const bin = path.join(root, 'bin');
-  const log = path.join(root, 'claude-uninstall.log');
-  fs.mkdirSync(home);
-  fs.mkdirSync(cfg);
-
-  writeFakeCommand(
-    bin,
-    'claude',
+  const { root, home, cfg, bin, log } = fakeClaude(
+    t,
+    'claude-uninstall.log',
     [
       'echo "$@" >> "$FAKE_LOG"',
       'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo chisle; fi',
       'exit 0',
-    ].join('\n'),
+    ],
     [
       'echo %*>>"%FAKE_LOG%"',
       'if "%1 %2"=="plugin list" echo chisle',
       'exit /b 0',
-    ].join('\n'),
+    ],
   );
 
   const result = runCLI(

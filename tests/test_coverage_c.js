@@ -68,11 +68,11 @@ test('recordSavings leaves an existing ledger unchanged when opening it is unsaf
 
   try {
     assert.doesNotThrow(() => recordSavings(1000, dir));
-    assert.equal(openAttempted, true);
-    assert.equal(fs.readFileSync(ledger, 'utf8'), original);
   } finally {
     fs.openSync = realOpenSync;
   }
+  assert.equal(openAttempted, true);
+  assert.equal(fs.readFileSync(ledger, 'utf8'), original);
 });
 
 test('Claude hook writes a shape-preserving replacement, spill file, stats, and successful exit', (t) => {
