@@ -119,7 +119,7 @@ function run(source) {
       'Drop articles/filler/pleasantries/hedging. Fragments OK. Technical terms exact.\n\n' +
       '## Code\n\n' +
       'Ladder: YAGNI → reuse → stdlib → native → installed dep → one line → min code.\n' +
-      'No unrequested abstractions. Deletion over addition. Shortest diff wins.';
+      'No unrequested abstractions. Deletion over addition. Shortest diff wins. Check the reported and related cases. Leave correct code alone. Preserve caller contracts: report skips in best-effort imports; reject invalid atomic batches before mutation.';
     output = 'CHISLE ACTIVE\n\n' + filterSections(fallbackBody, sections, ['Prose'], ['Code']);
   }
 

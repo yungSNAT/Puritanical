@@ -24,7 +24,7 @@ Drop articles, filler, pleasantries, and hedging. Fragments OK; technical terms 
 
 ## Code
 
-Code ladder: YAGNI → reuse → stdlib → native → installed dependency → one line → minimum code.
+Code ladder: YAGNI → reuse → stdlib → native → installed dependency → one line → minimum code. Check the reported and related cases. Leave correct code alone. Preserve caller contracts: report skips in best-effort imports; reject invalid atomic batches before mutation.
 
 ## Boundaries
 

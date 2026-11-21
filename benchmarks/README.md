@@ -1,5 +1,7 @@
 # Benchmarks
 
+[Puritanical, Chisle and Ponytail on GPT-6.2 Astra](results/2026-11-21-astra/README.md) compares the fork’s correctness and token use on 48 matched attempts. The historical upstream suites follow.
+
 Every number below is recomputed from the committed `raw*/` cells by the
 scripts in this directory; no hand-copied figures. Full tables, intervals and
 reading notes: [docs/benchmarks.md](../docs/benchmarks.md). Earlier rounds
