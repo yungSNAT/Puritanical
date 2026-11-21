@@ -2,32 +2,32 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { spawnSync } = require('child_process');
+const {
+  fs, absolutePath, listDir, loadModule, makeDir, readJson, readText,
+  repoPath, tempRoot, under, writeText,
+} = require('./helpers/sandbox');
 
-const ROOT = path.join(__dirname, '..');
-const COMPRESS = path.join(ROOT, 'hooks', 'chisle-compress-output.js');
-const PROXY = path.join(ROOT, 'hooks', 'chisle-mcp-proxy.js');
+const SANDBOX = require.resolve('./helpers/sandbox');
+const COMPRESS = repoPath('hooks', 'chisle-compress-output.js');
+const PROXY = repoPath('hooks', 'chisle-mcp-proxy.js');
 
-const { extractText, recordSavings } = require(COMPRESS);
+const { extractText, recordSavings } = loadModule(COMPRESS);
 
 function isolatedEnv(t, prefix, extra = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const dir = tempRoot(t, prefix);
   return {
     dir,
     env: {
       ...process.env,
       HOME: dir,
       USERPROFILE: dir,
-      XDG_CONFIG_HOME: path.join(dir, 'xdg'),
-      APPDATA: path.join(dir, 'appdata'),
-      CLAUDE_CONFIG_DIR: path.join(dir, 'claude'),
-      COPILOT_HOME: path.join(dir, 'copilot'),
-      CHISLE_HOME: path.join(dir, 'chisle'),
-      CHISLE_STATE_DIR: path.join(dir, 'state'),
+      XDG_CONFIG_HOME: under(dir, 'xdg'),
+      APPDATA: under(dir, 'appdata'),
+      CLAUDE_CONFIG_DIR: under(dir, 'claude'),
+      COPILOT_HOME: under(dir, 'copilot'),
+      CHISLE_HOME: under(dir, 'chisle'),
+      CHISLE_STATE_DIR: under(dir, 'state'),
       ...extra,
     },
   };
@@ -47,17 +47,15 @@ test('extractText returns null when an object cannot be JSON-stringified', () =>
 });
 
 test('recordSavings leaves an existing ledger unchanged when opening it is unsafe', (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-safe-read-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-
-  const ledger = path.join(dir, '.chisle-compress-stats.json');
+  const dir = tempRoot(t, 'chisle-safe-read-');
+  const ledger = under(dir, '.chisle-compress-stats.json');
   const original = JSON.stringify({ savedChars: 12, events: 3 });
-  fs.writeFileSync(ledger, original);
+  writeText(ledger, original);
 
   const realOpenSync = fs.openSync;
   let openAttempted = false;
   fs.openSync = function patchedOpenSync(file, ...args) {
-    if (path.resolve(String(file)) === path.resolve(ledger)) {
+    if (absolutePath(String(file)) === absolutePath(ledger)) {
       openAttempted = true;
       const error = new Error('access denied by test');
       error.code = 'EACCES';
@@ -72,7 +70,7 @@ test('recordSavings leaves an existing ledger unchanged when opening it is unsaf
     fs.openSync = realOpenSync;
   }
   assert.equal(openAttempted, true);
-  assert.equal(fs.readFileSync(ledger, 'utf8'), original);
+  assert.equal(readText(ledger), original);
 });
 
 test('Claude hook writes a shape-preserving replacement, spill file, stats, and successful exit', (t) => {
@@ -90,8 +88,8 @@ test('Claude hook writes a shape-preserving replacement, spill file, stats, and 
   });
 
   const claudeDir = env.CLAUDE_CONFIG_DIR;
-  fs.mkdirSync(claudeDir, { recursive: true });
-  fs.writeFileSync(path.join(claudeDir, '.chisle-active'), 'on\n');
+  makeDir(claudeDir, { recursive: true });
+  writeText(under(claudeDir, '.chisle-active'), 'on\n');
 
   const text = bigOutput();
   const payload = {
@@ -129,19 +127,19 @@ test('Claude hook writes a shape-preserving replacement, spill file, stats, and 
   assert.match(rebuilt.stdout, /^line 0 /);
   assert.match(rebuilt.stdout, /line 199 /);
 
-  const statsPath = path.join(claudeDir, '.chisle-compress-stats.json');
-  const stats = JSON.parse(fs.readFileSync(statsPath, 'utf8'));
+  const statsPath = under(claudeDir, '.chisle-compress-stats.json');
+  const stats = readJson(statsPath);
   assert.deepEqual(stats, {
     savedChars: text.length - rebuilt.stdout.length,
     events: 1,
   });
 
-  const spillDir = path.join(claudeDir, 'chisle-spill');
-  const spillFiles = fs.readdirSync(spillDir).filter(name => name.endsWith('.txt'));
+  const spillDir = under(claudeDir, 'chisle-spill');
+  const spillFiles = listDir(spillDir).filter(name => name.endsWith('.txt'));
   assert.equal(spillFiles.length, 1);
-  assert.equal(fs.readFileSync(path.join(spillDir, spillFiles[0]), 'utf8'), text);
+  assert.equal(readText(under(spillDir, spillFiles[0])), text);
 
-  assert.ok(path.resolve(statsPath).startsWith(path.resolve(dir)));
+  assert.ok(absolutePath(statsPath).startsWith(absolutePath(dir)));
 });
 
 test('MCP proxy prints usage and exits with status 2 when no command is supplied', (t) => {
@@ -165,7 +163,7 @@ test('MCP proxy Windows branch quotes special arguments and leaves plain argumen
   });
 
   const bootstrap = `
-    const fs = require('fs');
+    const { clearModule, writeStdoutSync } = require(${JSON.stringify(SANDBOX)});
     const { EventEmitter } = require('events');
     const Module = require('module');
     const cp = require('child_process');
@@ -197,7 +195,7 @@ test('MCP proxy Windows branch quotes special arguments and leaves plain argumen
       ...descriptor,
       value: 'win32',
     });
-    delete require.cache[require.resolve(proxy)];
+    clearModule(proxy);
     process.argv = [
       process.execPath,
       proxy,
@@ -212,7 +210,7 @@ test('MCP proxy Windows branch quotes special arguments and leaves plain argumen
     Object.defineProperty(process, 'platform', descriptor);
 
     setImmediate(() => {
-      fs.writeSync(1, JSON.stringify(captured));
+      writeStdoutSync(JSON.stringify(captured));
       child.emit('close', 0, null);
     });
   `;
@@ -250,7 +248,7 @@ test('MCP proxy pauses server output on backpressure and resumes it after drain'
   });
 
   const bootstrap = `
-    const fs = require('fs');
+    const { clearModule, writeStdoutSync, writeStderrSync } = require(${JSON.stringify(SANDBOX)});
     const { EventEmitter } = require('events');
     const Module = require('module');
     const cp = require('child_process');
@@ -274,7 +272,7 @@ test('MCP proxy pauses server output on backpressure and resumes it after drain'
     process.stdout.write = function write(chunk, encoding, callback) {
       if (typeof encoding === 'function') callback = encoding;
       const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
-      if (text) fs.writeSync(1, text);
+      if (text) writeStdoutSync(text);
       if (callback) queueMicrotask(callback);
       if (!blocked && text.includes('"result"')) {
         blocked = true;
@@ -283,7 +281,7 @@ test('MCP proxy pauses server output on backpressure and resumes it after drain'
       return true;
     };
 
-    delete require.cache[require.resolve(proxy)];
+    clearModule(proxy);
     process.argv = [process.execPath, proxy, '--', 'fake-server'];
     Module._load(proxy, null, true);
 
@@ -304,7 +302,7 @@ test('MCP proxy pauses server output on backpressure and resumes it after drain'
 
     setImmediate(() => {
       process.stdout.emit('drain');
-      fs.writeSync(2, 'REPORT:' + JSON.stringify({ paused, resumed, blocked }));
+      writeStderrSync('REPORT:' + JSON.stringify({ paused, resumed, blocked }));
       child.emit('close', 0, null);
     });
   `;

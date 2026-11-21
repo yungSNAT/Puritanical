@@ -1,24 +1,20 @@
 #!/usr/bin/env node
-/* global __dirname, process, require -- Node.js runtime */
+/* global process, require -- Node.js runtime */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
 const os = require('os');
-const path = require('path');
 const { spawnSync } = require('child_process');
+const {
+  exists, makeDir, readText, repoPath, tempRoot, under, writeJson, writeText,
+} = require('./helpers/sandbox');
 
 const CONFIG = require('../hooks/chisle-config');
 const { filterCommand } = require('../hooks/chisle-command-filters');
 
-const ACTIVATE = path.join(__dirname, '..', 'hooks', 'chisle-activate.js');
-const TRACKER = path.join(__dirname, '..', 'hooks', 'chisle-mode-tracker.js');
-
-function tempDir(t, prefix) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  return dir;
-}
+const SANDBOX = require.resolve('./helpers/sandbox');
+const ACTIVATE = repoPath('hooks', 'chisle-activate.js');
+const TRACKER = repoPath('hooks', 'chisle-mode-tracker.js');
 
 function setEnv(t, values) {
   const previous = new Map();
@@ -39,10 +35,10 @@ function setEnv(t, values) {
 }
 
 function childEnv(root, claudeDir, xdgDir, extra = {}) {
-  const home = path.join(root, 'home');
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(claudeDir, { recursive: true });
-  fs.mkdirSync(xdgDir, { recursive: true });
+  const home = under(root, 'home');
+  makeDir(home, { recursive: true });
+  makeDir(claudeDir, { recursive: true });
+  makeDir(xdgDir, { recursive: true });
   return {
     ...process.env,
     HOME: home,
@@ -56,18 +52,17 @@ function childEnv(root, claudeDir, xdgDir, extra = {}) {
 }
 
 test('activate emits the fallback ruleset and writes the active flag when SKILL.md is unavailable', (t) => {
-  const root = tempDir(t, 'chisle-activate-fallback-');
-  const claudeDir = path.join(root, 'claude');
-  const xdgDir = path.join(root, 'xdg');
-  const skillPath = path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md');
-  const preload = path.join(root, 'hide-skill.js');
+  const root = tempRoot(t, 'chisle-activate-fallback-');
+  const claudeDir = under(root, 'claude');
+  const xdgDir = under(root, 'xdg');
+  const skillPath = repoPath('skills', 'chisle', 'SKILL.md');
+  const preload = under(root, 'hide-skill.js');
 
-  fs.writeFileSync(preload, [
-    "const fs = require('fs');",
-    "const path = require('path');",
+  writeText(preload, [
+    `const { fs, absolutePath } = require(${JSON.stringify(SANDBOX)});`,
     'const original = fs.readFileSync;',
     'fs.readFileSync = function (filename, ...args) {',
-    '  if (path.resolve(String(filename)) === path.resolve(process.env.CHISLE_TEST_MISSING_SKILL)) {',
+    '  if (absolutePath(String(filename)) === absolutePath(process.env.CHISLE_TEST_MISSING_SKILL)) {',
     "    const error = new Error('SKILL.md intentionally unavailable');",
     "    error.code = 'ENOENT';",
     '    throw error;',
@@ -100,16 +95,13 @@ test('activate emits the fallback ruleset and writes the active flag when SKILL.
   assert.ok(result.stdout.includes('Ladder: YAGNI → reuse → stdlib → native'));
   assert.ok(result.stdout.includes('STATUSLINE SETUP NEEDED:'));
   assert.ok(!result.stdout.includes('## Thinking Is Billed Too'));
-  assert.equal(
-    fs.readFileSync(path.join(claudeDir, '.chisle-active'), 'utf8'),
-    'on'
-  );
+  assert.equal(readText(under(claudeDir, '.chisle-active')), 'on');
 });
 
 test('getConfigDir uses the Windows roaming-profile fallback when APPDATA is absent', (t) => {
-  const root = tempDir(t, 'chisle-win-config-');
-  const home = path.join(root, 'profile');
-  fs.mkdirSync(home, { recursive: true });
+  const root = tempRoot(t, 'chisle-win-config-');
+  const home = under(root, 'profile');
+  makeDir(home, { recursive: true });
 
   setEnv(t, {
     HOME: home,
@@ -125,27 +117,21 @@ test('getConfigDir uses the Windows roaming-profile fallback when APPDATA is abs
       ...platformDescriptor,
       value: 'win32',
     });
-    assert.equal(
-      CONFIG.getConfigDir(),
-      path.join(home, 'AppData', 'Roaming', 'chisle')
-    );
+    assert.equal(CONFIG.getConfigDir(), under(home, 'AppData', 'Roaming', 'chisle'));
   } finally {
     Object.defineProperty(process, 'platform', platformDescriptor);
   }
 });
 
 test('getDefaultMode reads and normalizes a valid mode from config.json', (t) => {
-  const root = tempDir(t, 'chisle-default-config-');
-  const home = path.join(root, 'home');
-  const xdgDir = path.join(root, 'xdg');
-  const configDir = path.join(xdgDir, 'chisle');
+  const root = tempRoot(t, 'chisle-default-config-');
+  const home = under(root, 'home');
+  const xdgDir = under(root, 'xdg');
+  const configDir = under(xdgDir, 'chisle');
 
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(configDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(configDir, 'config.json'),
-    JSON.stringify({ defaultMode: 'OFF' })
-  );
+  makeDir(home, { recursive: true });
+  makeDir(configDir, { recursive: true });
+  writeJson(under(configDir, 'config.json'), { defaultMode: 'OFF' });
 
   setEnv(t, {
     HOME: home,
@@ -173,19 +159,19 @@ test('filterSections returns the original content when section inspection throws
 });
 
 test('mode tracker ignores an unreadable transcript while still reinforcing active mode', (t) => {
-  const root = tempDir(t, 'chisle-tracker-transcript-');
-  const claudeDir = path.join(root, 'claude');
-  const xdgDir = path.join(root, 'xdg');
-  const flagPath = path.join(claudeDir, '.chisle-active');
+  const root = tempRoot(t, 'chisle-tracker-transcript-');
+  const claudeDir = under(root, 'claude');
+  const xdgDir = under(root, 'xdg');
+  const flagPath = under(claudeDir, '.chisle-active');
 
-  fs.mkdirSync(claudeDir, { recursive: true });
-  fs.writeFileSync(flagPath, 'on', { mode: 0o600 });
+  makeDir(claudeDir, { recursive: true });
+  writeText(flagPath, 'on', { mode: 0o600 });
 
   const result = spawnSync(process.execPath, [TRACKER], {
     cwd: root,
     input: JSON.stringify({
       prompt: 'continue',
-      transcript_path: path.join(root, 'missing-session.jsonl'),
+      transcript_path: under(root, 'missing-session.jsonl'),
     }),
     env: childEnv(root, claudeDir, xdgDir),
     encoding: 'utf8',
@@ -205,26 +191,26 @@ test('mode tracker ignores an unreadable transcript while still reinforcing acti
   assert.ok(
     output.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.')
   );
-  assert.equal(fs.readFileSync(flagPath, 'utf8'), 'on');
+  assert.equal(readText(flagPath), 'on');
 });
 
 test('mode tracker silently exits without changing state when its input is malformed', (t) => {
-  const root = tempDir(t, 'chisle-tracker-malformed-');
-  const claudeDir = path.join(root, 'claude');
-  const xdgDir = path.join(root, 'xdg');
-  const flagPath = path.join(claudeDir, '.chisle-active');
-  const markerPath = path.join(root, 'parse-attempted');
-  const preload = path.join(root, 'track-json-parse.js');
+  const root = tempRoot(t, 'chisle-tracker-malformed-');
+  const claudeDir = under(root, 'claude');
+  const xdgDir = under(root, 'xdg');
+  const flagPath = under(claudeDir, '.chisle-active');
+  const markerPath = under(root, 'parse-attempted');
+  const preload = under(root, 'track-json-parse.js');
   const malformed = '{ malformed input';
 
-  fs.mkdirSync(claudeDir, { recursive: true });
-  fs.writeFileSync(flagPath, 'on', { mode: 0o600 });
-  fs.writeFileSync(preload, [
-    "const fs = require('fs');",
+  makeDir(claudeDir, { recursive: true });
+  writeText(flagPath, 'on', { mode: 0o600 });
+  writeText(preload, [
+    `const { writeText } = require(${JSON.stringify(SANDBOX)});`,
     'const originalParse = JSON.parse;',
     'JSON.parse = function trackedParse(value, ...args) {',
     '  if (value === process.env.CHISLE_TEST_MALFORMED_PAYLOAD) {',
-    "    fs.writeFileSync(process.env.CHISLE_TEST_PARSE_MARKER, 'attempted');",
+    "    writeText(process.env.CHISLE_TEST_PARSE_MARKER, 'attempted');",
     '  }',
     '  return originalParse.call(this, value, ...args);',
     '};',
@@ -245,8 +231,8 @@ test('mode tracker silently exits without changing state when its input is malfo
   assert.equal(result.signal, null);
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, '');
-  assert.equal(fs.existsSync(markerPath), true);
-  assert.equal(fs.readFileSync(flagPath, 'utf8'), 'on');
+  assert.equal(exists(markerPath), true);
+  assert.equal(readText(flagPath), 'on');
 });
 
 test('grep grouping preserves separator context and resets after an unmatched line', () => {
