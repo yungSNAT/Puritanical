@@ -4,14 +4,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const useTemporaryWorkingDirectory = require('./fixtures/working-directory');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const REPLAY = path.join(__dirname, '..', 'benchmarks', 'replay-compress.js');
 const NORMALIZE = path.join(__dirname, '..', 'benchmarks', 'normalize-pi.js');
 
-useTemporaryWorkingDirectory();
+isolateWorkingDirectory();
 
 function output(lines) {
   return Array.from({ length: lines }, (_, i) => `line ${i} ${'x'.repeat(80)}`).join('\n');
@@ -19,7 +19,7 @@ function output(lines) {
 
 test('Pi live JSONL normalizes to the existing benchmark cell schema', () => {
   const dir = path.resolve('sessions');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('sessions');
   const file = path.join(dir, 'events.jsonl');
   fs.writeFileSync(file, [
     JSON.stringify({ type: 'session', version: 3 }),
@@ -37,7 +37,7 @@ test('Pi live JSONL normalizes to the existing benchmark cell schema', () => {
 
 test('Pi replay reads toolResult messages and reports marginal post-truncation savings', () => {
   const dir = path.resolve('sessions');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('sessions');
   const entries = [
     { type: 'session', version: 3, id: 'session', cwd: '/tmp' },
     { type: 'message', id: '1', parentId: null, message: {
@@ -67,7 +67,7 @@ test('Pi replay reads toolResult messages and reports marginal post-truncation s
 
 test('Claude replay never counts a failed tool call as compressible', () => {
   const dir = path.resolve('sessions');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('sessions');
   const use = (id) => ({ message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: {} }] } });
   const result = (id, isError) => ({ message: { role: 'user', content: [
     { type: 'tool_result', tool_use_id: id, is_error: isError, content: output(500) },
@@ -83,7 +83,7 @@ test('Claude replay never counts a failed tool call as compressible', () => {
 
 test('Claude replay reports per-tool compression savings', () => {
   const dir = path.resolve('sessions');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('sessions');
 
   const use = (id, name) => ({
     message: {

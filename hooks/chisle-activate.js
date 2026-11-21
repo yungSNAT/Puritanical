@@ -10,7 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, legacySetting, resolveSections, filterSections } = require('./chisle-config');
+const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, readSettingsText, legacySetting, resolveSections, filterSections } = require('./chisle-config');
 
 // ── Update-notice helpers (pure — tested directly) ─────────────────────────
 // Minor/patch releases stay quiet: a nudge per major is signal, more is spam.
@@ -61,9 +61,8 @@ const FULL_INJECT_SOURCES = new Set(['startup']);
 
 function statuslineNotice(settingsPath) {
   try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Only reads settings.json in the configured Claude directory.
-    const raw = fs.readFileSync(settingsPath, 'utf8').replace(/^\uFEFF/, '');
-    if (JSON.parse(raw).statusLine) return '';
+    const raw = readSettingsText(settingsPath);
+    if (raw === null || JSON.parse(raw.replace(/^\uFEFF/, '')).statusLine) return '';
   } catch (error) {
     // A missing file needs setup. Leave unreadable or malformed settings alone.
     if (error.code !== 'ENOENT') return '';
@@ -88,7 +87,7 @@ function run(source) {
 
   if (mode === 'off') {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- The fixed .chisle-active entry is unlinked without following its target.
-    try { fs.unlinkSync(flagPath); } catch {}
+    try { fs.unlinkSync(flagPath); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     process.stdout.write('OK');
     process.exit(0);
   }

@@ -8,7 +8,7 @@ const path = require('node:path');
 
 // node --test gives each suite its own process. Each serial test gets a private
 // working directory, so a failed assertion still cleans up its fixture tree.
-module.exports = function useTemporaryWorkingDirectory() {
+module.exports = function isolateWorkingDirectory() {
   beforeEach(t => {
     const previous = process.cwd();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-test-'));

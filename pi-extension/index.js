@@ -52,6 +52,10 @@ function loadRules() {
 // session state, and every caller here already behaves correctly on "unknown":
 // no mode entry leaves `active` at getDefaultMode(), and rulesInContext=false
 // re-injects the ruleset, which promptHasRules still de-duplicates.
+function sameDigest(previous, current) {
+  return previous !== undefined && crypto.timingSafeEqual(previous, current);
+}
+
 function sessionEntries(ctx, method) {
   try {
     const sm = ctx && ctx.sessionManager;
@@ -227,7 +231,7 @@ function chisleExtension(pi) {
           const hash = crypto.createHash('sha256').update(text).digest();
           const previous = dedupBaseline.get(key);
           lastByToolBlock.set(key, hash);
-          if (previous && crypto.timingSafeEqual(previous, hash)) updated = duplicateMarker(event.toolName, text, 'earlier');
+          if (sameDigest(previous, hash)) updated = duplicateMarker(event.toolName, text, 'earlier');
         }
         if (updated == null) updated = transform(text, limitsFor(), event.toolName, undefined, commandOf(event.input));
         if (updated == null || updated.length >= text.length) return block;

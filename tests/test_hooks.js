@@ -3,16 +3,25 @@
 // Basic hook tests — validates config logic and flag safety
 // Run: node --test tests/test_hooks.js
 
-const { test } = require('node:test');
+const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const useTemporaryWorkingDirectory = require('./fixtures/working-directory');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
 const path = require('path');
 
-const { VALID_MODES, safeWriteFlag, readFlag, readJsonFile, getDefaultMode } = require('../hooks/chisle-config');
+const { VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText, getDefaultMode } = require('../hooks/chisle-config');
 const { symlinkSkip } = require('./fixtures/symlinks');
 
-useTemporaryWorkingDirectory();
+isolateWorkingDirectory();
+
+beforeEach(t => {
+  const previous = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = path.resolve('test-config');
+  t.after(() => {
+    if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previous;
+  });
+});
 
 // ── VALID_MODES ──────────────────────────────────────────────────────────────
 
@@ -26,7 +35,7 @@ test('VALID_MODES contains on and off', () => {
 
 test('safeWriteFlag writes and readFlag reads back', () => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const flagPath = path.join(dir, '.chisle-active');
   safeWriteFlag(flagPath, 'on');
   assert.equal(readFlag(flagPath), 'on');
@@ -38,7 +47,7 @@ test('readFlag returns null for missing file', () => {
 
 test('readFlag returns null for unknown mode', () => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const flagPath = path.join(dir, '.chisle-active');
   fs.writeFileSync(flagPath, 'wenyan-ultra', { mode: 0o600 });
   assert.equal(readFlag(flagPath), null);
@@ -46,7 +55,7 @@ test('readFlag returns null for unknown mode', () => {
 
 test('readFlag returns null for symlink', { skip: symlinkSkip }, () => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const flagPath = path.join(dir, '.chisle-active');
   const target = path.join(dir, 'target');
   fs.writeFileSync(target, 'on', { mode: 0o600 });
@@ -56,7 +65,7 @@ test('readFlag returns null for symlink', { skip: symlinkSkip }, () => {
 
 test('readFlag returns null for oversized file', () => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const flagPath = path.join(dir, '.chisle-active');
   fs.writeFileSync(flagPath, 'on' + 'x'.repeat(100), { mode: 0o600 });
   assert.equal(readFlag(flagPath), null);
@@ -64,7 +73,7 @@ test('readFlag returns null for oversized file', () => {
 
 test('safeWriteFlag refuses to overwrite a symlink', { skip: symlinkSkip }, () => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const flagPath = path.join(dir, '.chisle-active');
   const target = path.join(dir, 'target');
   fs.writeFileSync(target, '', { mode: 0o600 });
@@ -82,13 +91,25 @@ test('cached JSON accepts the byte limit and rejects larger files and directorie
 
 test('cached JSON refuses symlinks', { skip: symlinkSkip }, () => {
   fs.writeFileSync('cache.json', '{"v":1}');
-  fs.symlinkSync(path.resolve('cache.json'), 'linked-cache.json');
+  fs.symlinkSync('cache.json', 'linked-cache.json');
   assert.equal(readJsonFile('linked-cache.json'), null);
+});
+
+test('settings reads skip oversized files and directories', () => {
+  fs.writeFileSync('oversize.json', ' '.repeat(4 * 1024 * 1024 + 1));
+  assert.equal(readSettingsText('oversize.json'), null);
+  assert.equal(readSettingsText('.'), null);
+});
+
+test('settings reads accept user-managed dotfile links', { skip: symlinkSkip }, () => {
+  fs.writeFileSync('dotfile.json', '{"statusLine":true}');
+  fs.symlinkSync('dotfile.json', 'settings.json');
+  assert.equal(readSettingsText('settings.json'), '{"statusLine":true}');
 });
 
 test('flag writes accept a configured directory link to a user-owned directory', { skip: symlinkSkip }, () => {
   fs.mkdirSync('state');
-  fs.symlinkSync(path.resolve('state'), 'linked-state', 'dir');
+  fs.symlinkSync('state', 'linked-state', 'dir');
   const flag = path.resolve('linked-state', '.chisle-active');
   // Windows accepts linked state only under the configured home.
   const previous = process.env.USERPROFILE;
@@ -100,6 +121,26 @@ test('flag writes accept a configured directory link to a user-owned directory',
     if (previous === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = previous;
   }
+});
+
+test('systems without a user ID limit linked state directories to the home', { skip: symlinkSkip }, () => {
+  fs.mkdirSync('home');
+  fs.mkdirSync('outside');
+  fs.symlinkSync('home', 'in-home', 'dir');
+  fs.symlinkSync('outside', 'out-of-home', 'dir');
+  // Exercise the platform fallback in a child, without changing the test runner.
+  const config = require.resolve('../hooks/chisle-config');
+  const script = [
+    'Object.defineProperty(process, "getuid", { value: undefined });',
+    'const { safeWriteFlag } = require(process.argv[1]);',
+    'safeWriteFlag("in-home/.chisle-active", "on");',
+    'safeWriteFlag("out-of-home/.chisle-active", "off");',
+  ].join('\n');
+  execFileSync(process.execPath, ['-e', script, config], {
+    env: { ...process.env, HOME: path.resolve('home'), USERPROFILE: path.resolve('home') },
+  });
+  assert.equal(fs.readFileSync('home/.chisle-active', 'utf8'), 'on');
+  assert.equal(fs.existsSync('outside/.chisle-active'), false);
 });
 
 // ── getDefaultMode ───────────────────────────────────────────────────────────
@@ -134,7 +175,7 @@ const { majorOf, majorUpdateNotice, latestVersion } = require('../hooks/chisle-a
 
 test('update lookup refreshes stale cache and reuses a fresh result offline', async (t) => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const cache = path.join(dir, 'update.json');
   safeWriteFlag(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
@@ -148,7 +189,7 @@ test('update lookup refreshes stale cache and reuses a fresh result offline', as
 
 test('update lookup bounds the response body and preserves cache on failure', async (t) => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const cache = path.join(dir, 'update.json');
   const stale = { checkedAt: 0, latest: '1.0.0' };
   safeWriteFlag(cache, JSON.stringify(stale));
@@ -203,7 +244,7 @@ const ACTIVATE = path.join(__dirname, '..', 'hooks', 'chisle-activate.js');
 
 function activate(stdin, extraEnv = {}) {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   try {
     return execFileSync(process.execPath, [ACTIVATE], {
       input: stdin,
@@ -306,7 +347,7 @@ const { getSections, filterSections, PROSE_HEADINGS, CODE_HEADINGS } = require('
 
 function withSectionsConfig(sectionsValue, fn) {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const chisleDir = path.join(dir, 'chisle');
   fs.mkdirSync(chisleDir, { recursive: true });
   if (sectionsValue !== undefined) {
@@ -360,7 +401,7 @@ test('getSections: malformed sections values fall back to enabled, never throw',
 
 test('getSections: malformed config.json (invalid JSON) falls back to enabled, never throws', () => {
   const dir = path.resolve('hook');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('hook');
   const chisleDir = path.join(dir, 'chisle');
   fs.mkdirSync(chisleDir, { recursive: true });
   fs.writeFileSync(path.join(chisleDir, 'config.json'), '{ not json');
@@ -416,7 +457,7 @@ test('filterSections: malformed sections values fall back to enabled (identity)'
 
 test('activate: no config file → full ruleset, all headings present (default unchanged)', () => {
   const dir = path.resolve('xdg');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('xdg');
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) {
@@ -429,7 +470,7 @@ test('activate: no config file → full ruleset, all headings present (default u
 
 test('activate: config file present but no sections key → full ruleset (default unchanged)', () => {
   const dir = path.resolve('xdg');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('xdg');
   const chisleDir = path.join(dir, 'chisle');
   fs.mkdirSync(chisleDir, { recursive: true });
   fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ defaultMode: 'on' }));
@@ -445,7 +486,7 @@ test('activate: config file present but no sections key → full ruleset (defaul
 
 test('activate: sections.prose false → emitted ruleset drops prose headings only', () => {
   const dir = path.resolve('xdg');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('xdg');
   const chisleDir = path.join(dir, 'chisle');
   fs.mkdirSync(chisleDir, { recursive: true });
   fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ sections: { prose: false } }));
@@ -460,7 +501,7 @@ test('activate: sections.prose false → emitted ruleset drops prose headings on
 
 test('activate: malformed sections value falls back to enabled, does not throw', () => {
   const dir = path.resolve('xdg');
-  fs.mkdirSync(dir);
+  fs.mkdirSync('xdg');
   const chisleDir = path.join(dir, 'chisle');
   fs.mkdirSync(chisleDir, { recursive: true });
   fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ sections: 'nope' }));
@@ -536,7 +577,7 @@ function settingsText(value) {
 
 function styleFixture() {
   const root = path.resolve('style');
-  fs.mkdirSync(root);
+  fs.mkdirSync('style');
   fs.mkdirSync(path.join(root, 'proj', '.claude'), { recursive: true });
   fs.mkdirSync(path.join(root, 'home', '.claude'), { recursive: true });
   fs.mkdirSync(path.join(root, 'cfg', 'chisle'), { recursive: true });

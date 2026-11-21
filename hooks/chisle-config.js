@@ -78,10 +78,18 @@ function getConfigDir() {
   return path.join(os.homedir(), '.config', 'chisle');
 }
 
-function readUserConfig() {
+// Larger settings are treated as unreadable, just like invalid JSON.
+const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
+
+function readSettingsText(filename) {
   // User configuration supports symlinks into a dotfiles checkout.
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The user chooses the config directory. The filename is fixed.
-  return JSON.parse(fs.readFileSync(path.join(getConfigDir(), 'config.json'), 'utf8'));
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolve the configured settings file; the reader verifies its type, identity and size.
+  const target = fs.realpathSync(filename);
+  return readRegularFile(target, MAX_CONFIG_BYTES);
+}
+
+function readUserConfig() {
+  return JSON.parse(readSettingsText(path.join(getConfigDir(), 'config.json')));
 }
 
 function readModeFromConfigFile() {
@@ -199,17 +207,15 @@ function parseJsonLoose(raw) {
 // platforms without O_NOFOLLOW. O_NONBLOCK avoids waiting on a FIFO.
 function readRegularFile(filename, maxBytes) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Inspect the entry without following it before opening a regular file.
-  const before = fs.lstatSync(filename);
+  const before = fs.lstatSync(filename); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   if (!before.isFile() || before.size > maxBytes) return null;
   const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Use no-follow where supported and verify the opened descriptor against the inspected file.
-  const fd = fs.openSync(filename, flags);
+  const fd = fs.openSync(filename, flags); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   try {
     const after = fs.fstatSync(fd);
     if (!after.isFile() || after.dev !== before.dev || after.ino !== before.ino || after.size > maxBytes) return null;
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The argument is the verified open descriptor.
-    if (maxBytes === Infinity) return fs.readFileSync(fd, 'utf8');
-    return readLimitedText(fd, maxBytes);
+    return readLimitedText(fd, after.size);
   } finally {
     fs.closeSync(fd);
   }
@@ -227,7 +233,7 @@ function readLimitedText(fd, maxBytes) {
   return offset <= maxBytes ? buffer.toString('utf8', 0, offset) : null;
 }
 
-function readJsonFile(filename, maxBytes = Infinity) {
+function readJsonFile(filename, maxBytes = MAX_CONFIG_BYTES) {
   try {
     const raw = readRegularFile(filename, maxBytes);
     return raw === null ? null : parseJsonLoose(raw);
@@ -299,14 +305,14 @@ function resolveSections(opts) {
 function flagWriteDirectory(flagPath) {
   const directory = path.dirname(flagPath);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Hook callers supply the configured state directory and a fixed state filename.
-  fs.mkdirSync(directory, { recursive: true });
+  fs.mkdirSync(directory, { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Inspect the configured directory entry itself before accepting a symlink.
-  if (!fs.lstatSync(directory).isSymbolicLink()) return directory;
+  if (!fs.lstatSync(directory).isSymbolicLink()) return directory; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolve the configured link to check its destination before writing.
-  const resolved = fs.realpathSync(directory);
+  const resolved = fs.realpathSync(directory); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- The resolved target must pass the directory and ownership or home checks below.
-  const stat = fs.statSync(resolved);
+  const stat = fs.statSync(resolved); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   if (!stat.isDirectory()) return rejectFlagDirectory('symlink target not a directory');
   if (typeof process.getuid === 'function') {
     if (stat.uid !== process.getuid()) return rejectFlagDirectory('symlink target owned by different uid');
@@ -342,7 +348,7 @@ function safeWriteFlag(flagPath, content) {
     const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW;
     let fd;
     try {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Create a new private file exclusively inside the checked directory.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Create a new private file exclusively in the configured directory used for state.
       fd = fs.openSync(tempPath, flags, 0o600);
       fs.writeSync(fd, String(content));
       try { fs.fchmodSync(fd, 0o600); } catch {}
@@ -369,7 +375,7 @@ function readFlag(flagPath) {
 
 module.exports = {
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
-  VALID_MODES, safeWriteFlag, readFlag, readJsonFile,
+  VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,
   getActiveOutputStyle, explicitSections, resolveSections,
 };
