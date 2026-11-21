@@ -162,13 +162,13 @@ before either feature existed. The always-on sections
 of either setting.
 
 Scope: this only affects the runtime-hook agents that read `skills/chisle/SKILL.md` live — Claude
-Code and Pi. The eight static-rule agents built by `scripts/build-rules.js` (Cursor, Windsurf,
+Code and Pi. The eight static-rule agents built by `tools/src/rules.rs` (Cursor, Windsurf,
 Cline, Kiro, Antigravity, Codex, Gemini, Copilot) get flat files baked at build time with no runtime config to
 read, so they can't honor this key.
 
 ## Multi-agent
 
-Ships to thirteen agents: Claude Code and Pi get both axes, live `/chisle` toggling, and a status badge; OpenCode gets both axes too — the global fenced ruleset, on-demand skills, and a native compression plugin — but no live toggle; Copilot CLI gets both axes through its global instructions file and a `postToolUse` hook, also without a live toggle; Cursor, Windsurf, Cline, Kiro, Antigravity, Codex, Gemini, and Copilot get the always-on ruleset; Hermes gets the skills as `/chisle` commands. `npx chisle mcp wrap` adds MCP tool-output compression to Cursor, Windsurf, Cline, Kiro, Gemini, Qwen Code, Copilot CLI, Antigravity, Codex and GitHub Copilot in VS Code ([details](../INSTALL.md#mcp-output-compression-any-agent)). Per-agent static copies come from `scripts/build-rules.js`; Pi uses its package extension plus the Agent Skills standard. See [agent portability](agent-portability.md).
+Ships to thirteen agents: Claude Code and Pi get both axes, live `/chisle` toggling, and a status badge; OpenCode gets both axes too — the global fenced ruleset, on-demand skills, and a native compression plugin — but no live toggle; Copilot CLI gets both axes through its global instructions file and a `postToolUse` hook, also without a live toggle; Cursor, Windsurf, Cline, Kiro, Antigravity, Codex, Gemini, and Copilot get the always-on ruleset; Hermes gets the skills as `/chisle` commands. `npx chisle mcp wrap` adds MCP tool-output compression to Cursor, Windsurf, Cline, Kiro, Gemini, Qwen Code, Copilot CLI, Antigravity, Codex and GitHub Copilot in VS Code ([details](../INSTALL.md#mcp-output-compression-any-agent)). Per-agent static copies come from `tools/src/rules.rs`; Pi uses its package extension plus the Agent Skills standard. See [agent portability](agent-portability.md).
 
 ## Prior art & what stacks with it
 

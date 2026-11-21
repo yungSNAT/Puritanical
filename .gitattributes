@@ -1,0 +1,10 @@
+# Generated files are LF on every platform, so `--check` passes on Windows checkouts too.
+.cursor/rules/chisle.mdc text eol=lf
+.windsurf/rules/chisle.md text eol=lf
+.clinerules/chisle.md text eol=lf
+.kiro/steering/chisle.md text eol=lf
+.github/copilot-instructions.md text eol=lf
+.agents/rules/chisle.md text eol=lf
+assets/benchmark*.svg text eol=lf
+assets/readme/**/*.svg text eol=lf
+site/src/data/samples.json text eol=lf

@@ -7,7 +7,7 @@ to every agent that supports a rules/context file. One source, many targets.
 
 `skills/chisle/SKILL.md` defines behavior. The short always-on rule lives in
 `rules/chisle-activate.md`. Per-agent copies are **generated** from a shared body in
-`scripts/build-rules.js`. Never hand-edit the generated files.
+`tools/src/rules.rs`. Never hand-edit the generated files.
 
 ## Distribution map
 
@@ -89,11 +89,11 @@ Verified against the Hermes skills docs (`~/.hermes/skills/` as source of truth,
 ## Keeping copies in sync
 
 ```bash
-node scripts/build-rules.js          # regenerate all copies
-node scripts/build-rules.js --check  # CI gate, fails if any drifted
+npm run build:rules   # regenerate all copies
+npm run check:rules   # CI gate, fails if any drifted
 ```
 
-CI runs `--check` on every push. Edit the body in `build-rules.js`, regenerate,
+CI runs `--check` on every push. Edit the body in `tools/src/rules.rs`, regenerate,
 commit. The generated files are committed (not built on install) so marketplace
 and `git clone` installs work without a build step.
 

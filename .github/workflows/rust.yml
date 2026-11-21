@@ -1,0 +1,114 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: rust-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: tools (${{ matrix.os }})
+    if: github.event_name != 'schedule'
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Linux runs the tests with line coverage for Codecov; a prebuilt
+      # cargo-llvm-cov, with no fallback to compiling it.
+      - name: Install the pinned cargo-llvm-cov
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-llvm-cov@0.9.1
+          fallback: none
+      # rustup installs the toolchain pinned in tools/rust-toolchain.toml.
+      - name: Check the crate
+        run: |
+          rustup toolchain install
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          if [ "$RUNNER_OS" = Linux ]; then
+            rustup component add llvm-tools
+            cargo llvm-cov --locked --lcov --output-path rust-coverage.lcov
+          fi
+          cargo test --locked
+      - name: Check the generated files
+        run: for c in rules chart samples readme-art; do target/debug/puritanical-tools "$c" --check; done
+      - name: Keep the coverage report for the Codecov upload
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-coverage
+          path: tools/rust-coverage.lcov
+          if-no-files-found: error
+          retention-days: 1
+
+  # The upload runs apart from the tests, so the OIDC token is never available
+  # whilst test code runs; the same rule as the Node upload in coverage.yml.
+  upload:
+    needs: check
+    if: github.event_name != 'schedule' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # Authenticate the Codecov upload with OIDC; no stored token.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: rust-coverage
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: rust-coverage.lcov
+          disable_search: true
+          fail_ci_if_error: true
+
+  # A vulnerability always fails; an unmaintained crate fails only the weekly run.
+  audit:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-audit@0.22.2
+          fallback: none
+      - name: Audit Cargo.lock
+        env:
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          if [ "$SCHEDULED" = true ]; then
+            cargo audit --deny warnings
+          else
+            cargo audit --deny unsound --deny yanked
+          fi
