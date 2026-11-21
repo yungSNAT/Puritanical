@@ -10,6 +10,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { readSettings } = require('../bin/lib/settings');
+const { readFlag } = require('../hooks/chisle-config');
+const { recordSavings } = require('../hooks/chisle-compress-output');
 
 const CLI = path.join(__dirname, '..', 'bin', 'install.js');
 
@@ -189,22 +192,22 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   const install = ['--only', 'claude', '--config-dir', cfg];
   assert.equal(runCLI(install, { env }).status, 0);
   const settingsPath = path.join(cfg, 'settings.json');
-  const installed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const installed = readSettings(settingsPath);
   const hookPath = path.join(cfg, 'chisle-hooks', 'chisle-activate.js');
   assert.equal(installed.hooks.SessionStart[0].hooks[0].command, `"${process.execPath}" "${hookPath}"`);
   const extension = process.platform === 'win32' ? 'ps1' : 'sh';
   assert.ok(installed.statusLine.command.endsWith(`"${path.join(cfg, 'chisle-hooks', 'chisle-statusline.' + extension)}"`));
   assert.equal(runCLI([...install, '--update'], { env }).status, 0);
-  assert.deepEqual(JSON.parse(fs.readFileSync(settingsPath, 'utf8')), installed);
+  assert.deepEqual(readSettings(settingsPath), installed);
   const startup = execFileSync(process.execPath, [hookPath], {
     input: '{}', encoding: 'utf8', timeout: 5000,
     env: { ...process.env, ...env, CLAUDE_CONFIG_DIR: cfg, XDG_CONFIG_HOME: home, CHISLE_DEFAULT_MODE: 'on' },
   });
   assert.match(startup, /CHISLE ACTIVE/);
   assert.doesNotMatch(startup, /STATUSLINE SETUP NEEDED/);
-  assert.equal(fs.readFileSync(path.join(cfg, '.chisle-active'), 'utf8'), 'on');
+  assert.equal(readFlag(path.join(cfg, '.chisle-active')), 'on');
   if (process.platform === 'win32') {
-    fs.writeFileSync(path.join(cfg, '.chisle-compress-stats.json'), JSON.stringify({ savedChars: 4000 }));
+    recordSavings(4000, cfg);
     const powershell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const badge = execFileSync(powershell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
       path.join(cfg, 'chisle-hooks', 'chisle-statusline.ps1')], {
