@@ -37,6 +37,8 @@ cd tools && cargo test   # generators and benchmark analysis
 
 `tools/` is a Rust crate (`puritanical-tools`) that writes and checks the generated files (rule copies, charts, site samples, README art) and runs the benchmark analysis. It needs a Rust toolchain; `tools/rust-toolchain.toml` pins the version CI uses.
 
+`.gitattributes` checks the generated files out with LF endings. A Windows clone made before that keeps CRLF copies, which fail `--check`: commit or stash your work, then check them out again with `git rm -r --cached -q . && git reset --hard`.
+
 Add a test for any hook logic change. Compressor changes go in `tests/test_compress.js`.
 
 ## Benchmarks

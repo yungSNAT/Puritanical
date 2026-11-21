@@ -700,7 +700,7 @@ function installProjectRule(ctx, prov) {
   const src = path.join(REPO_ROOT, prov.rule);
   const dst = path.join(process.cwd(), prov.rule);
 
-  if (!fs.existsSync(src)) { warn(`  missing source rule ${prov.rule} (run scripts/build-rules.js)`); results.failed.push([prov.id, 'source rule missing']); process.stdout.write('\n'); return; }
+  if (!fs.existsSync(src)) { warn(`  missing source rule ${prov.rule} (run npm run build:rules)`); results.failed.push([prov.id, 'source rule missing']); process.stdout.write('\n'); return; }
 
   if (opts.dryRun) { note(`  would write ${dst} (project-scoped)`); results.installed.push(prov.id); process.stdout.write('\n'); return; }
 
