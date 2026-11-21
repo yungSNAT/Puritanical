@@ -552,7 +552,7 @@ for (const [name, extra] of [
     assert.equal(r.status, 0, r.out);
     const agents = path.join(root, 'AGENTS.md');
     assert.match(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
-    assert.ok(fs.existsSync(path.join(root, 'plugins', 'chisle.js')));
+    assert.ok(fs.existsSync('home/xdg/opencode/plugins/chisle.js'));
 
     fs.writeFileSync(agents, fs.readFileSync(agents, 'utf8').replace(/# Chisle[\s\S]*<!-- chisle-end -->/, 'STALE\n<!-- chisle-end -->'));
     r = runCLI(['--only', 'opencode', '--update'], { env });
@@ -568,7 +568,7 @@ for (const [name, extra] of [
     r = runCLI(['--uninstall', '--only', 'opencode'], { env });
     assert.equal(r.status, 0, r.out);
     assert.doesNotMatch(fs.readFileSync(agents, 'utf8'), /chisle-begin/);
-    assert.equal(fs.existsSync(path.join(root, 'plugins', 'chisle.js')), false);
+    assert.equal(fs.existsSync('home/xdg/opencode/plugins/chisle.js'), false);
     assert.equal(fs.existsSync(path.join(root, 'chisle-spill')), false);
     assert.equal(fs.existsSync(path.join(root, 'chisle-dedup')), false);
     assert.equal(fs.existsSync(path.join(root, '.chisle-compress-stats.json')), false);
