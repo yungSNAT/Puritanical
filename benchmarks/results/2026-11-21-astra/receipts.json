@@ -1,0 +1,1346 @@
+[
+  {
+    "task": "csv-sum",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "c4e28949ff4c923647a3932ac21ec7ea3f8ee8231331a1af465eecc4cdc949f0",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"sales.py\": \"import csv\\nfrom decimal import Decimal, InvalidOperation\\n\\n\\ndef sum_amount(path):\\n    \\\"\\\"\\\"Sum finite amounts, skipping rows with the wrong width or an invalid amount.\\\"\\\"\\\"\\n    total = Decimal(0)\\n    with open(path, encoding='utf-8-sig', newline='') as source:\\n        rows = csv.reader(source)\\n        header = next(rows, [])\\n        if 'amount' not in header:\\n            raise ValueError(\\\"CSV is missing the 'amount' column\\\")\\n        column = header.index('amount')\\n        for row in rows:\\n            if len(row) != len(header):\\n                continue\\n            try:\\n                amount = Decimal(row[column])\\n            except InvalidOperation:\\n                continue\\n            if amount.is_finite():\\n                total += amount\\n    return total\\n\",\n    \"test_sales.py\": \"from decimal import Decimal\\nfrom pathlib import Path\\nfrom tempfile import TemporaryDirectory\\nimport unittest\\n\\nfrom sales import sum_amount\\n\\n\\nclass SalesTests(unittest.TestCase):\\n    def test_mixed_export(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('item,amount\\\\n\\\"apples, red\\\",1.20\\\\nshort\\\\nextra,9,x\\\\nblank,\\\\nbad,oops\\\\ninvalid,NaN\\\\nrefund,-0.35\\\\n', encoding='utf-8-sig')\\n            self.assertEqual(sum_amount(path), Decimal('0.85'))\\n\\n    def test_missing_column(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('item,price\\\\n', encoding='utf-8')\\n            with self.assertRaisesRegex(ValueError, 'amount'):\\n                sum_amount(path)\\n\"\n  }\n}",
+    "answer_sha256": "85e90498d23acd62d7604b7715f688b4a4bf08a6c9c650cf9f41d443baedeca0",
+    "usage": {
+      "input_tokens": 12448,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 458,
+      "reasoning_output_tokens": 27
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": false
+    }
+  },
+  {
+    "task": "csv-sum",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "964265bc8a9fd269a9f692d461d1c27842aa4191f64d7dae0384976080c32048",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"sales.py\": \"import csv\\nimport warnings\\nfrom decimal import Decimal, InvalidOperation\\n\\n\\ndef sum_amount(path):\\n    \\\"\\\"\\\"Sum finite decimal amounts, warning for each malformed record skipped.\\\"\\\"\\\"\\n    total = Decimal(0)\\n    with open(path, encoding='utf-8-sig', newline='') as source:\\n        reader = csv.reader(source, strict=True)\\n        header = next(reader, [])\\n        if header.count('amount') != 1:\\n            raise ValueError(\\\"CSV header must contain exactly one 'amount' column\\\")\\n        column = header.index('amount')\\n        while True:\\n            line = reader.line_num + 1\\n            try:\\n                row = next(reader)\\n                if not row:\\n                    continue\\n                if len(row) != len(header):\\n                    raise ValueError('wrong number of fields')\\n                amount = Decimal(row[column])\\n                if not amount.is_finite():\\n                    raise ValueError('non-finite amount')\\n            except StopIteration:\\n                break\\n            except (csv.Error, InvalidOperation, ValueError) as error:\\n                warnings.warn(f'{path}:{line}: skipping malformed record ({error})', stacklevel=2)\\n                continue\\n            total += amount\\n    return total\\n\",\n    \"test_sales.py\": \"import tempfile\\nimport unittest\\nimport warnings\\nfrom decimal import Decimal\\nfrom pathlib import Path\\n\\nfrom sales import sum_amount\\n\\n\\nclass SumAmountTests(unittest.TestCase):\\n    def test_mixed_export(self):\\n        with tempfile.TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('\\\\ufeffitem,amount\\\\n\\\"x,y\\\",2.30\\\\nshort\\\\nx,\\\\nx,NaN\\\\nx,Infinity\\\\nx,4,extra\\\\nrefund,-0.20\\\\n', encoding='utf-8')\\n            with warnings.catch_warnings(record=True) as skipped:\\n                warnings.simplefilter('always')\\n                self.assertEqual(sum_amount(path), Decimal('2.10'))\\n            self.assertEqual(len(skipped), 5)\\n\\n    def test_header(self):\\n        with tempfile.TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('amount\\\\n', encoding='utf-8')\\n            self.assertEqual(sum_amount(path), 0)\\n            path.write_text('item,price\\\\n', encoding='utf-8')\\n            with self.assertRaisesRegex(ValueError, 'amount'):\\n                sum_amount(path)\\n\"\n  }\n}",
+    "answer_sha256": "6a596305be6395f5a1a45a7f113723d395024128615774acbd75d6a90019b845",
+    "usage": {
+      "input_tokens": 12426,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 643,
+      "reasoning_output_tokens": 56
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": true
+    }
+  },
+  {
+    "task": "csv-sum",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "de6fe148c30a23d292617d59f02e80dbeb4556d966d89299150b38ff31402478",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"sales.py\": \"import csv\\nfrom decimal import Decimal, InvalidOperation\\n\\n\\ndef sum_amount(path):\\n    \\\"\\\"\\\"Sum finite amounts, skipping rows with missing, extra, or invalid fields.\\\"\\\"\\\"\\n    total = Decimal(0)\\n    with open(path, encoding='utf-8-sig', newline='') as source:\\n        rows = csv.reader(source, strict=True)\\n        header = next(rows, [])\\n        if 'amount' not in header:\\n            raise ValueError(\\\"CSV header is missing 'amount'\\\")\\n        column = header.index('amount')\\n        for row in rows:\\n            if len(row) != len(header):\\n                continue\\n            try:\\n                amount = Decimal(row[column])\\n            except InvalidOperation:\\n                continue\\n            if amount.is_finite():\\n                total += amount\\n    return total\\n\",\n    \"test_sales.py\": \"import unittest\\nfrom decimal import Decimal\\nfrom pathlib import Path\\nfrom tempfile import TemporaryDirectory\\n\\nfrom sales import sum_amount\\n\\n\\nclass SumAmountTests(unittest.TestCase):\\n    def test_mixed_rows(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('item,amount\\\\n\\\"red, large\\\",0.30\\\\nshort\\\\nextra,50,x\\\\nempty,\\\\nbad,oops\\\\nnan,NaN\\\\ninf,Infinity\\\\nrefund,-0.10\\\\n', encoding='utf-8-sig')\\n            self.assertEqual(sum_amount(path), Decimal('0.20'))\\n\\n    def test_header_only(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('amount\\\\n', encoding='utf-8')\\n            self.assertEqual(sum_amount(path), 0)\\n\\n    def test_missing_column(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('item,quantity\\\\n', encoding='utf-8')\\n            with self.assertRaisesRegex(ValueError, 'amount'):\\n                sum_amount(path)\\n\"\n  }\n}",
+    "answer_sha256": "db42eab898473ea89957700de579b7c99df9244ba694f29e1a0d822f8db3a51d",
+    "usage": {
+      "input_tokens": 12524,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 531,
+      "reasoning_output_tokens": 33
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": false
+    }
+  },
+  {
+    "task": "dupepaths",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "e95aeb3ff1e2c4ce72a55f2e2f0577cd3ca9e74674bf1f05af0afa920ac05f66",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/money.js\": \"function formatMoney(cents) {\\n  return (cents < 0 ? '-$' : '$') + Math.abs(cents / 100).toFixed(2);\\n}\\n\\nmodule.exports = { formatMoney };\\n\",\n    \"src/receipt.js\": \"const { formatMoney } = require('./money');\\n\\nfunction receiptTotal(cents) {\\n  return 'TOTAL ' + formatMoney(cents);\\n}\\n\\nmodule.exports = { receiptTotal };\\n\",\n    \"src/statement.js\": \"const { formatMoney } = require('./money');\\n\\nfunction statementRow(label, cents) {\\n  return label + '\\\\t' + formatMoney(cents);\\n}\\n\\nmodule.exports = { statementRow };\\n\",\n    \"test/money.test.js\": \"const test = require('node:test');\\nconst assert = require('node:assert/strict');\\nconst { invoiceLine } = require('../src/invoice');\\nconst { receiptTotal } = require('../src/receipt');\\nconst { statementRow } = require('../src/statement');\\n\\nfor (const [cents, expected] of [[-450, '-$4.50'], [-1, '-$0.01'], [0, '$0.00'], [450, '$4.50']]) {\\n  test(`customer amounts render ${cents} cents as ${expected}`, () => {\\n    assert.equal(invoiceLine({ name: 'Item', cents }), 'Item: ' + expected);\\n    assert.equal(receiptTotal(cents), 'TOTAL ' + expected);\\n    assert.equal(statementRow('Item', cents), 'Item\\\\t' + expected);\\n  });\\n}\\n\"\n  }\n}",
+    "answer_sha256": "f2356472a1436c3620629897c69fe7877e84a75dd9a73ceb6c073d5480ac73fe",
+    "usage": {
+      "input_tokens": 12626,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 413,
+      "reasoning_output_tokens": 23
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "dupepaths",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "26976f548bf683a711a3af9480e4ab579328b6cb6737d1e7e1457bb99b626163",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/money.js\": \"function formatMoney(cents) {\\n  const prefix = cents < 0 ? '-$' : '$';\\n  return prefix + (Math.abs(cents) / 100).toFixed(2);\\n}\\n\\nmodule.exports = { formatMoney };\\n\",\n    \"src/receipt.js\": \"const { formatMoney } = require('./money');\\n\\nfunction receiptTotal(cents) {\\n  return 'TOTAL ' + formatMoney(cents);\\n}\\n\\nmodule.exports = { receiptTotal };\\n\",\n    \"src/statement.js\": \"const { formatMoney } = require('./money');\\n\\nfunction statementRow(label, cents) {\\n  return label + '\\\\t' + formatMoney(cents);\\n}\\n\\nmodule.exports = { statementRow };\\n\",\n    \"test/money.test.js\": \"const test = require('node:test');\\nconst assert = require('node:assert/strict');\\nconst { invoiceLine } = require('../src/invoice');\\nconst { receiptTotal } = require('../src/receipt');\\nconst { statementRow } = require('../src/statement');\\n\\ntest('customer documents display signed dollar amounts consistently', () => {\\n  for (const [cents, expected] of [[-450, '-$4.50'], [-1, '-$0.01'], [0, '$0.00'], [450, '$4.50']]) {\\n    assert.equal(invoiceLine({ name: 'Item', cents }), 'Item: ' + expected);\\n    assert.equal(receiptTotal(cents), 'TOTAL ' + expected);\\n    assert.equal(statementRow('Item', cents), 'Item\\\\t' + expected);\\n  }\\n});\\n\"\n  }\n}",
+    "answer_sha256": "1bdccc4cac49da4ebc5abf82cbb2ca2756b391072771851c48cf97fe33b007d7",
+    "usage": {
+      "input_tokens": 12724,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 392,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "dupepaths",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "bdfe7c43ede7816c2d09059e6bab05ab9cf768a5654b534f1108b1ec455fdea7",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/money.js\": \"function formatMoney(cents) {\\n  const prefix = cents < 0 ? '-$' : '$';\\n  return prefix + (Math.abs(cents) / 100).toFixed(2);\\n}\\n\\nmodule.exports = { formatMoney };\\n\",\n    \"src/receipt.js\": \"const { formatMoney } = require('./money');\\n\\nfunction receiptTotal(cents) {\\n  return 'TOTAL ' + formatMoney(cents);\\n}\\n\\nmodule.exports = { receiptTotal };\\n\",\n    \"src/statement.js\": \"const { formatMoney } = require('./money');\\n\\nfunction statementRow(label, cents) {\\n  return label + '\\\\t' + formatMoney(cents);\\n}\\n\\nmodule.exports = { statementRow };\\n\",\n    \"test/money.test.js\": \"const assert = require('node:assert/strict');\\nconst { formatMoney } = require('../src/money');\\nconst { invoiceLine } = require('../src/invoice');\\nconst { receiptTotal } = require('../src/receipt');\\nconst { statementRow } = require('../src/statement');\\n\\nassert.equal(invoiceLine({ name: 'Credit', cents: -450 }), 'Credit: -$4.50');\\nassert.equal(receiptTotal(-450), 'TOTAL -$4.50');\\nassert.equal(statementRow('Credit', -450), 'Credit\\\\t-$4.50');\\nassert.equal(formatMoney(450), '$4.50');\\nassert.equal(formatMoney(0), '$0.00');\\n\"\n  }\n}",
+    "answer_sha256": "27cddbda7c25179e7f8aab4aac2ce3122da0ea6f49c661e33cf15dc0f8ca1a81",
+    "usage": {
+      "input_tokens": 12648,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 363,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "atomic-batch",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "4f1faf376d27e868c854a8a5960b7a475470a5fd185fe811a6247a74b5f30bfb",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"stock.py\": \"def apply_batch(stock, updates):\\n    \\\"\\\"\\\"Apply an inventory count in place after validating every update.\\\"\\\"\\\"\\n    pending = {}\\n    for entry in updates:\\n        try:\\n            sku, count = entry\\n        except (TypeError, ValueError) as error:\\n            raise ValueError('expected a (sku, count) pair') from error\\n        if not isinstance(sku, str) or not sku:\\n            raise ValueError('sku must be a non-empty string')\\n        if not isinstance(count, int) or isinstance(count, bool) or count < 0:\\n            raise ValueError('count must be a non-negative integer')\\n        pending[sku] = count\\n    stock.update(pending)\\n\",\n    \"test_stock.py\": \"import unittest\\n\\nfrom stock import apply_batch\\n\\n\\nclass ApplyBatchTests(unittest.TestCase):\\n    def test_iterator_applies_last_count_and_preserves_other_stock(self):\\n        stock = {'A': 3, 'B': 4}\\n        apply_batch(stock, iter([('A', 1), ('C', 2), ('A', 0)]))\\n        self.assertEqual(stock, {'A': 0, 'B': 4, 'C': 2})\\n\\n    def test_invalid_entry_leaves_stock_unchanged(self):\\n        for entry in (None, ('A',), ('A', 1, 2), ('', 1), (5, 1),\\n                      ('A', -1), ('A', 1.5), ('A', False), ('A', True)):\\n            with self.subTest(entry=entry):\\n                stock = {'A': 3}\\n                with self.assertRaises(ValueError):\\n                    apply_batch(stock, iter([('A', 8), ('B', 2), entry]))\\n                self.assertEqual(stock, {'A': 3})\\n\"\n  }\n}",
+    "answer_sha256": "cc2b7670206bcb199e0668975e26765106739e4ce2f2621e04be2fba5bbeb469",
+    "usage": {
+      "input_tokens": 12571,
+      "cached_input_tokens": 3840,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 461,
+      "reasoning_output_tokens": 18
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "atomic-batch",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "eca0492490f0f283f7cc4466fcf6912b1c7703faa75ee4af679de77a005a8b74",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"stock.py\": \"def apply_batch(stock, updates):\\n    \\\"\\\"\\\"Apply an inventory count in place after validating every entry.\\\"\\\"\\\"\\n    pending = {}\\n    for entry in updates:\\n        try:\\n            sku, count = entry\\n        except (TypeError, ValueError) as exc:\\n            raise ValueError('expected a (sku, count) pair') from exc\\n        if not isinstance(sku, str) or not sku:\\n            raise ValueError('sku must be a non-empty string')\\n        if not isinstance(count, int) or isinstance(count, bool) or count < 0:\\n            raise ValueError('count must be a non-negative integer')\\n        pending[sku] = count\\n    stock.update(pending)\\n\",\n    \"test_stock.py\": \"import unittest\\n\\nfrom stock import apply_batch\\n\\n\\nclass ApplyBatchTests(unittest.TestCase):\\n    def test_iterator_applies_last_count_and_preserves_other_stock(self):\\n        stock = {'a': 5, 'b': 8}\\n        apply_batch(stock, iter([('a', 4), ('c', 2), ('a', 0)]))\\n        self.assertEqual(stock, {'a': 0, 'b': 8, 'c': 2})\\n\\n    def test_invalid_entry_leaves_stock_unchanged(self):\\n        for entry in [None, ('x',), ('x', 1, 2), ('', 1), (3, 1),\\n                      ('x', -1), ('x', False), ('x', True), ('x', 1.0)]:\\n            with self.subTest(entry=entry):\\n                stock = {'a': 5}\\n                with self.assertRaises(ValueError):\\n                    apply_batch(stock, iter([('a', 3), ('b', 2), entry]))\\n                self.assertEqual(stock, {'a': 5})\\n\"\n  }\n}",
+    "answer_sha256": "c35d8b06b9b1192dad09c7ab842dcb74e54fec0d89331e744a5eb28077a9156e",
+    "usage": {
+      "input_tokens": 12473,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 461,
+      "reasoning_output_tokens": 17
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "atomic-batch",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "e5a38b171ddc0593320b4840dee1f04ca1e477920ececcb8db458c8608f8046e",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"stock.py\": \"def apply_batch(stock, updates):\\n    \\\"\\\"\\\"Apply an inventory count in place after validating every entry.\\\"\\\"\\\"\\n    pending = {}\\n    for entry in updates:\\n        try:\\n            sku, count = entry\\n        except (TypeError, ValueError) as exc:\\n            raise ValueError('expected a (sku, count) pair') from exc\\n        if not isinstance(sku, str) or not sku:\\n            raise ValueError('sku must be a non-empty string')\\n        if not isinstance(count, int) or isinstance(count, bool) or count < 0:\\n            raise ValueError('count must be a non-negative integer')\\n        pending[sku] = count\\n    stock.update(pending)\\n\",\n    \"test_stock.py\": \"import unittest\\n\\nfrom stock import apply_batch\\n\\n\\nclass ApplyBatchTests(unittest.TestCase):\\n    def test_iterator_and_repeated_sku(self):\\n        stock = {'A': 9, 'B': 4}\\n        apply_batch(stock, iter([('A', 3), ('C', 2), ('A', 0)]))\\n        self.assertEqual(stock, {'A': 0, 'B': 4, 'C': 2})\\n\\n    def test_invalid_entry_leaves_stock_intact(self):\\n        for entry in [None, ('A',), ('A', 2, 3), ('', 1), (1, 0),\\n                      ('A', -1), ('A', False), ('A', 1.0)]:\\n            with self.subTest(entry=entry):\\n                stock = {'A': 9}\\n                with self.assertRaises(ValueError):\\n                    apply_batch(stock, iter([('A', 3), ('C', 2), entry]))\\n                self.assertEqual(stock, {'A': 9})\\n\"\n  }\n}",
+    "answer_sha256": "9518b8ee6f056958ad5a756bed0119a3b26d93b6e97e6397bdad230c21eac1db",
+    "usage": {
+      "input_tokens": 12495,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 456,
+      "reasoning_output_tokens": 22
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-wrongfix",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "45d00f512dcd0b328adb4c24647f07487cc083b437228d022588b0cb0a6a8b7e",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"pager.py\":\"def page_count(total, per_page):\\n    \\\"\\\"\\\"Pages needed to show `total` items, `per_page` to a page.\\\"\\\"\\\"\\n    return -(-total // per_page)\\n\",\"test_pager.py\":\"import unittest\\n\\nfrom pager import page_count\\n\\n\\nclass PageCountTests(unittest.TestCase):\\n    def test_page_count(self):\\n        for total, expected in [(0, 0), (5, 1), (10, 1), (100, 10), (101, 11)]:\\n            with self.subTest(total=total):\\n                self.assertEqual(page_count(total, 10), expected)\\n\"}}",
+    "answer_sha256": "8a6ba0ef57bb2366622335a946e1d7a6e7abbac0214c93f1de77a632585ac20b",
+    "usage": {
+      "input_tokens": 12591,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 156,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-wrongfix",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "9f2d5e8847349e210f469a235c46237c1907024122ce2e5859076e1a6a55147f",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"pager.py\":\"def page_count(total, per_page):\\n    \\\"\\\"\\\"Pages needed to show `total` items, `per_page` to a page.\\\"\\\"\\\"\\n    return -(-total // per_page)\\n\"}}",
+    "answer_sha256": "f88f6c32c75e570be9fd67c286ae609be56a182e8bcfa93974750ed8c57cbcc0",
+    "usage": {
+      "input_tokens": 12493,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 55,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-wrongfix",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "b8eff771446aa5e43b8ca5019c8116548f8d803f739dd2ef9c56480b4d29b49b",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"pager.py\": \"def page_count(total, per_page):\\n    \\\"\\\"\\\"Pages needed to show `total` items, `per_page` to a page.\\\"\\\"\\\"\\n    return -(-total // per_page)\\n\",\n    \"test_pager.py\": \"from unittest import TestCase\\n\\nfrom pager import page_count\\n\\n\\nclass PageCountTest(TestCase):\\n    def test_page_count(self):\\n        for total, expected in ((0, 0), (5, 1), (100, 10), (101, 11)):\\n            with self.subTest(total=total):\\n                self.assertEqual(page_count(total, 10), expected)\\n\"\n  }\n}",
+    "answer_sha256": "ca164f9d8427fefa55ed157f4aa0aea5ebb1b2b0899abf250af54f07c2709cf5",
+    "usage": {
+      "input_tokens": 12515,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 163,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-fixed",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "e980515223978d39422b3a6983033093ee3ef2547e980dc74850044d12c38b55",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"test_pager.py\":\"import unittest\\n\\nfrom pager import page_count\\n\\n\\nclass PageCountTests(unittest.TestCase):\\n    def test_partial_last_page(self):\\n        self.assertEqual(page_count(101, 10), 11)\\n        self.assertEqual(page_count(5, 10), 1)\\n\"},\"notes\":\"The supplied formula already returns 11 and 1. The regression test was checked by inspection only.\"}",
+    "answer_sha256": "40031c35555cc02813a439400eda90eec87cc1dee1b91851a767084b1c04dfcd",
+    "usage": {
+      "input_tokens": 12480,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 101,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": false,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-fixed",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "718b3c5892ff46925179207a0b0eb480fee01a9ea525981a49bf97cb581e0c49",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{}}",
+    "answer_sha256": "aae5a71db7cd42382ef749f87ca847684d9d4a517cc8235f53ea31bd492c3577",
+    "usage": {
+      "input_tokens": 12458,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 9,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-fixed",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "215a1fb9c2e7d5429cab76b352800fdf122b0605ca6577811761748ec45b65b5",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"test_pager.py\":\"import unittest\\n\\nfrom pager import page_count\\n\\n\\nclass PageCountTests(unittest.TestCase):\\n    def test_partial_last_page(self):\\n        self.assertEqual(page_count(101, 10), 11)\\n        self.assertEqual(page_count(5, 10), 1)\\n\"}}",
+    "answer_sha256": "53e4d20824af41459defcb10baa6ac8b358d0c6ac7dd01ae36163aa89742fb3a",
+    "usage": {
+      "input_tokens": 12556,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 109,
+      "reasoning_output_tokens": 30
+    },
+    "verdict": {
+      "pass": false,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "stdlib",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "73eaed6321f1736ebea51c6d054fae615f74adeb680bc0d9c615c0260fbbff61",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"src/importer.js\":\"function parseIds(csvLine) {\\n  return csvLine.split(',').map((s) => s.trim()).filter(Boolean);\\n}\\n\\nfunction uniqueIds(ids) {\\n  return [...new Set(ids)];\\n}\\n\\nmodule.exports = { parseIds, uniqueIds };\\n\"}}",
+    "answer_sha256": "e1b1f05ee300a7bb6f6ea0279ea99800dd4f6f4506c8f9a3b631017f594534c4",
+    "usage": {
+      "input_tokens": 12542,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 75,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "stdlib",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "16296e0246e687918c9921f2e58a28ebc88ee307d10c9044b327e4a622d6388a",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/importer.js\": \"function parseIds(csvLine) {\\n  return csvLine.split(',').map((s) => s.trim()).filter(Boolean);\\n}\\n\\nfunction uniqueIds(ids) {\\n  return [...new Set(ids)];\\n}\\n\\nmodule.exports = { parseIds, uniqueIds };\\n\"\n  }\n}",
+    "answer_sha256": "25b5fac705755441098bf6da6f2eb1b9cee112a6071828a9f356413e77abd6d4",
+    "usage": {
+      "input_tokens": 12466,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 84,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "stdlib",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "a2b37bfa41756ffd2f7c6085ac3a4a447b407d1385b84bc21cd5a84b0a9d443a",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"src/importer.js\":\"function parseIds(csvLine) {\\n  return csvLine.split(',').map((s) => s.trim()).filter(Boolean);\\n}\\n\\nfunction uniqueIds(ids) {\\n  return [...new Set(ids)];\\n}\\n\\nmodule.exports = { parseIds, uniqueIds };\\n\"}}",
+    "answer_sha256": "e1b1f05ee300a7bb6f6ea0279ea99800dd4f6f4506c8f9a3b631017f594534c4",
+    "usage": {
+      "input_tokens": 12444,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 75,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "reuse-money",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "21f8563dfb87218a60aaceb574d61c9a76cf9173709aa76b7c75d419b2fd560e",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"invoice.py\": \"from money import format_money\\n\\n\\ndef line_item(name, cents, qty):\\n    \\\"\\\"\\\"Return an invoice line 'name xQTY - $TOTAL' for qty units at `cents` each\\n    (line total = cents * qty), the total shown the way the rest of the app shows money.\\\"\\\"\\\"\\n    return f\\\"{name} x{qty} - {format_money(cents * qty)}\\\"\\n\"\n  }\n}",
+    "answer_sha256": "dff841d12d1509db64d15f57ee67f9ce376ca02221e4b6d99473a501dde23550",
+    "usage": {
+      "input_tokens": 12664,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 113,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "reuse-money",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "898b21198f517e4b1f8a4f47ef492809daddeaaebdb5e725267d56678c616915",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"invoice.py\":\"from money import format_money\\n\\n\\ndef line_item(name, cents, qty):\\n    \\\"\\\"\\\"Return an invoice line 'name xQTY - $TOTAL' for qty units at `cents` each\\n    (line total = cents * qty), the total shown the way the rest of the app shows money.\\\"\\\"\\\"\\n    return f\\\"{name} x{qty} - {format_money(cents * qty)}\\\"\\n\"}}",
+    "answer_sha256": "dc193a826f58fcc14d910000cace1e87d916ef67e789018ae37265f7f990b2de",
+    "usage": {
+      "input_tokens": 12566,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 104,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "reuse-money",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "65efca09c5c23f3cb6778309b44ac4b5a8b624802eb8bb792bb85a2772e8f400",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"invoice.py\": \"from money import format_money\\n\\n\\ndef line_item(name, cents, qty):\\n    \\\"\\\"\\\"Return an invoice line 'name xQTY - $TOTAL' for qty units at `cents` each\\n    (line total = cents * qty), the total shown the way the rest of the app shows money.\\\"\\\"\\\"\\n    return f\\\"{name} x{qty} - {format_money(cents * qty)}\\\"\\n\",\n    \"test_invoice.py\": \"from unittest import TestCase\\n\\nfrom invoice import line_item\\n\\n\\nclass InvoiceTest(TestCase):\\n    def test_line_item_formats_total_for_all_units(self):\\n        self.assertEqual(line_item('Widget', 61728, 2), 'Widget x2 - $1,234.56')\\n\"\n  }\n}",
+    "answer_sha256": "7cb873871d7bb1883b542cbddfa0948da20c3a114224ae9e974ccfb471dd3949",
+    "usage": {
+      "input_tokens": 12588,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 201,
+      "reasoning_output_tokens": 11
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "scope-rename",
+    "arm": "puritanical",
+    "repeat": 1,
+    "prompt_sha256": "8f1754f81d651ebe2f7332564d042c2f1d3dfeb95994bee94a105e89798e8be0",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"fixtures/orders.json\": \"[\\n  {\\\"sku\\\": \\\"A-100\\\", \\\"quantity\\\": 2, \\\"unit_cents\\\": 500},\\n  {\\\"sku\\\": \\\"B-200\\\", \\\"quantity\\\": 1, \\\"unit_cents\\\": 1250}\\n]\\n\",\n    \"shop/orders.py\": \"from dataclasses import dataclass\\n\\n\\n@dataclass\\nclass Order:\\n    sku: str\\n    quantity: int\\n    unit_cents: int\\n\\n\\ndef order_total(orders):\\n    \\\"\\\"\\\"Total of a list of orders, in cents.\\\"\\\"\\\"\\n    return sum(o.quantity * o.unit_cents for o in orders)\\n\\n\\ndef from_dict(d):\\n    \\\"\\\"\\\"Build an Order from one record of the partner feed.\\\"\\\"\\\"\\n    return Order(sku=d[\\\"sku\\\"], quantity=d[\\\"quantity\\\"], unit_cents=d[\\\"unit_cents\\\"])\\n\",\n    \"tests/test_orders.py\": \"from shop import Order, from_dict, order_total\\nfrom shop.loader import load_orders\\n\\n\\ndef test_total():\\n    assert order_total([Order(sku=\\\"A\\\", quantity=2, unit_cents=500)]) == 1000\\n\\n\\ndef test_from_dict():\\n    assert from_dict({\\\"sku\\\": \\\"A\\\", \\\"quantity\\\": 3, \\\"unit_cents\\\": 100}).quantity == 3\\n\\n\\ndef test_fixture_total():\\n    assert order_total(load_orders()) == 2250\\n\"\n  }\n}",
+    "answer_sha256": "7380cdc6846d8348b5babaa7959d18405ce907b6b3d5e28f3772ffd0b77ddd69",
+    "usage": {
+      "input_tokens": 12840,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 339,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "scope-rename",
+    "arm": "chisle",
+    "repeat": 1,
+    "prompt_sha256": "3a1345c7b33ea9b37a9a96c51d000908bcd06f89da455faf1edb7150a710bd6b",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"shop/orders.py\": \"from dataclasses import dataclass\\n\\n\\n@dataclass\\nclass Order:\\n    sku: str\\n    quantity: int\\n    unit_cents: int\\n\\n\\ndef order_total(orders):\\n    \\\"\\\"\\\"Total of a list of orders, in cents.\\\"\\\"\\\"\\n    return sum(o.quantity * o.unit_cents for o in orders)\\n\\n\\ndef from_dict(d):\\n    \\\"\\\"\\\"Build an Order from one record of the partner feed.\\\"\\\"\\\"\\n    return Order(sku=d[\\\"sku\\\"], quantity=d[\\\"quantity\\\"], unit_cents=d[\\\"unit_cents\\\"])\\n\",\n    \"fixtures/orders.json\": \"[\\n  {\\\"sku\\\": \\\"A-100\\\", \\\"quantity\\\": 2, \\\"unit_cents\\\": 500},\\n  {\\\"sku\\\": \\\"B-200\\\", \\\"quantity\\\": 1, \\\"unit_cents\\\": 1250}\\n]\\n\",\n    \"tests/test_orders.py\": \"from shop import Order, from_dict, order_total\\nfrom shop.loader import load_orders\\n\\n\\ndef test_total():\\n    assert order_total([Order(sku=\\\"A\\\", quantity=2, unit_cents=500)]) == 1000\\n\\n\\ndef test_from_dict():\\n    assert from_dict({\\\"sku\\\": \\\"A\\\", \\\"quantity\\\": 3, \\\"unit_cents\\\": 100}).quantity == 3\\n\\n\\ndef test_fixture_total():\\n    assert order_total(load_orders()) == 2250\\n\"\n  }\n}",
+    "answer_sha256": "305f6bb24519d90416e74e5debe68eae91e82af5df49d4779eb9dd3653a2812a",
+    "usage": {
+      "input_tokens": 12938,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 339,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "scope-rename",
+    "arm": "ponytail",
+    "repeat": 1,
+    "prompt_sha256": "275f6d132e1dab069e53184b9f43fcb7bb490a0d40af2fbdf55005e8b3635a83",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"shop/orders.py\": \"from dataclasses import dataclass\\n\\n\\n@dataclass\\nclass Order:\\n    sku: str\\n    quantity: int\\n    unit_cents: int\\n\\n\\ndef order_total(orders):\\n    \\\"\\\"\\\"Total of a list of orders, in cents.\\\"\\\"\\\"\\n    return sum(o.quantity * o.unit_cents for o in orders)\\n\\n\\ndef from_dict(d):\\n    \\\"\\\"\\\"Build an Order from one record of the partner feed.\\\"\\\"\\\"\\n    return Order(sku=d[\\\"sku\\\"], quantity=d[\\\"quantity\\\"], unit_cents=d[\\\"unit_cents\\\"])\\n\",\n    \"fixtures/orders.json\": \"[\\n  {\\\"sku\\\": \\\"A-100\\\", \\\"quantity\\\": 2, \\\"unit_cents\\\": 500},\\n  {\\\"sku\\\": \\\"B-200\\\", \\\"quantity\\\": 1, \\\"unit_cents\\\": 1250}\\n]\\n\",\n    \"tests/test_orders.py\": \"from shop import Order, from_dict, order_total\\nfrom shop.loader import load_orders\\n\\n\\ndef test_total():\\n    assert order_total([Order(sku=\\\"A\\\", quantity=2, unit_cents=500)]) == 1000\\n\\n\\ndef test_from_dict():\\n    assert from_dict({\\\"sku\\\": \\\"A\\\", \\\"quantity\\\": 3, \\\"unit_cents\\\": 100}).quantity == 3\\n\\n\\ndef test_fixture_total():\\n    assert order_total(load_orders()) == 2250\\n\"\n  }\n}",
+    "answer_sha256": "305f6bb24519d90416e74e5debe68eae91e82af5df49d4779eb9dd3653a2812a",
+    "usage": {
+      "input_tokens": 12862,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 339,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "csv-sum",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "de6fe148c30a23d292617d59f02e80dbeb4556d966d89299150b38ff31402478",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"sales.py\": \"import csv\\nfrom decimal import Decimal, InvalidOperation\\n\\n\\ndef sum_amount(path):\\n    \\\"\\\"\\\"Sum finite decimal amounts, skipping malformed records.\\\"\\\"\\\"\\n    total = Decimal(0)\\n    with open(path, encoding='utf-8-sig', newline='') as source:\\n        rows = csv.reader(source, strict=True)\\n        header = next(rows, [])\\n        if header.count('amount') != 1:\\n            raise ValueError(\\\"CSV must contain exactly one 'amount' column\\\")\\n        index = header.index('amount')\\n        while True:\\n            try:\\n                row = next(rows)\\n            except StopIteration:\\n                break\\n            except csv.Error:\\n                continue\\n            if len(row) != len(header):\\n                continue\\n            try:\\n                amount = Decimal(row[index])\\n            except InvalidOperation:\\n                continue\\n            if amount.is_finite():\\n                total += amount\\n    return total\\n\",\n    \"test_sales.py\": \"import tempfile\\nimport unittest\\nfrom decimal import Decimal\\nfrom pathlib import Path\\n\\nfrom sales import sum_amount\\n\\n\\nclass SumAmountTests(unittest.TestCase):\\n    def test_mixed_export(self):\\n        with tempfile.TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_bytes(b'\\\\xef\\\\xbb\\\\xbfnote,amount\\\\r\\\\n\\\"sale, online\\\",1.10\\\\r\\\\nshort\\\\r\\\\nextra,99,x\\\\r\\\\nblank,\\\\r\\\\ninvalid,oops\\\\r\\\\nnan,NaN\\\\r\\\\ninfinite,Infinity\\\\r\\\\n\\\"bad\\\"x,8\\\\r\\\\nrefund,-0.20\\\\r\\\\n')\\n            self.assertEqual(sum_amount(path), Decimal('0.90'))\\n\\n    def test_header_only(self):\\n        with tempfile.TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('amount\\\\n', encoding='utf-8')\\n            self.assertEqual(sum_amount(path), 0)\\n\"\n  }\n}",
+    "answer_sha256": "eb0465998b971184664f814d09488fdf98a10564ea197cdd848e6149694e271d",
+    "usage": {
+      "input_tokens": 12524,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 523,
+      "reasoning_output_tokens": 41
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": false
+    }
+  },
+  {
+    "task": "csv-sum",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "964265bc8a9fd269a9f692d461d1c27842aa4191f64d7dae0384976080c32048",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"sales.py\": \"import csv\\nimport warnings\\nfrom decimal import Decimal, InvalidOperation\\n\\n\\ndef sum_amount(path):\\n    \\\"\\\"\\\"Sum finite Decimal amounts, warning once per malformed record skipped.\\\"\\\"\\\"\\n    total = Decimal(0)\\n    with open(path, encoding=\\\"utf-8-sig\\\", newline=\\\"\\\") as source:\\n        reader = csv.reader(source, strict=True)\\n        header = next(reader, [])\\n        if header.count(\\\"amount\\\") != 1:\\n            raise ValueError(\\\"CSV header must contain exactly one 'amount' column\\\")\\n        column = header.index(\\\"amount\\\")\\n        while True:\\n            line = reader.line_num + 1\\n            try:\\n                row = next(reader)\\n            except StopIteration:\\n                break\\n            except csv.Error as error:\\n                warnings.warn(f\\\"Skipping CSV record at line {line}: {error}\\\", stacklevel=2)\\n                continue\\n            if not row:\\n                continue\\n            if len(row) != len(header):\\n                warnings.warn(f\\\"Skipping CSV record at line {line}: wrong field count\\\", stacklevel=2)\\n                continue\\n            try:\\n                amount = Decimal(row[column].strip())\\n            except InvalidOperation:\\n                amount = Decimal('NaN')\\n            if not amount.is_finite():\\n                warnings.warn(f\\\"Skipping CSV record at line {line}: invalid amount\\\", stacklevel=2)\\n                continue\\n            total += amount\\n    return total\\n\",\n    \"test_sales.py\": \"import tempfile\\nimport unittest\\nimport warnings\\nfrom decimal import Decimal\\nfrom pathlib import Path\\n\\nfrom sales import sum_amount\\n\\n\\nclass SalesTests(unittest.TestCase):\\n    def write_csv(self, text):\\n        directory = tempfile.TemporaryDirectory()\\n        self.addCleanup(directory.cleanup)\\n        path = Path(directory.name) / 'sales.csv'\\n        path.write_bytes(text.encode('utf-8'))\\n        return path\\n\\n    def test_malformed_records_preserve_valid_amounts(self):\\n        path = self.write_csv('\\\\ufeffnote,amount\\\\r\\\\n\\\"a,b\\\",0.30\\\\r\\\\nshort\\\\r\\\\nbad,text\\\\r\\\\nempty,\\\\r\\\\nbad,NaN\\\\r\\\\nbad,Infinity\\\\r\\\\nextra,99,x\\\\r\\\\n\\\"bad\\\"x,50\\\\r\\\\n\\\"two\\\\nlines\\\",-0.10\\\\r\\\\n')\\n        with warnings.catch_warnings(record=True) as skipped:\\n            warnings.simplefilter('always')\\n            self.assertEqual(sum_amount(path), Decimal('0.20'))\\n        self.assertEqual(len(skipped), 7)\\n\\n    def test_header_only(self):\\n        self.assertEqual(sum_amount(self.write_csv('amount\\\\n')), 0)\\n\\n    def test_missing_or_ambiguous_column(self):\\n        for header in ('', 'price\\\\n', 'amount,amount\\\\n'):\\n            with self.subTest(header=header), self.assertRaises(ValueError):\\n                sum_amount(self.write_csv(header))\\n\"\n  }\n}",
+    "answer_sha256": "01411102e3108765287b6435813079c84e694cf09ae6ab1307a510b12dd666e6",
+    "usage": {
+      "input_tokens": 12426,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 761,
+      "reasoning_output_tokens": 68
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": true
+    }
+  },
+  {
+    "task": "csv-sum",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "c4e28949ff4c923647a3932ac21ec7ea3f8ee8231331a1af465eecc4cdc949f0",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"sales.py\": \"import csv\\nfrom decimal import Decimal, InvalidOperation\\n\\n\\ndef sum_amount(path):\\n    \\\"\\\"\\\"Sum finite decimal amounts, skipping malformed or incomplete records.\\\"\\\"\\\"\\n    total = Decimal(0)\\n    with open(path, encoding='utf-8-sig', newline='') as source:\\n        rows = csv.reader(source, strict=True)\\n        header = next(rows, [])\\n        if header.count('amount') != 1:\\n            raise ValueError(\\\"Expected exactly one 'amount' column\\\")\\n        column = header.index('amount')\\n        while True:\\n            try:\\n                row = next(rows, None)\\n            except csv.Error:\\n                continue\\n            if row is None:\\n                break\\n            if len(row) != len(header):\\n                continue\\n            try:\\n                amount = Decimal(row[column])\\n            except InvalidOperation:\\n                continue\\n            if amount.is_finite():\\n                total += amount\\n    return total\\n\",\n    \"test_sales.py\": \"from decimal import Decimal\\nfrom pathlib import Path\\nfrom tempfile import TemporaryDirectory\\nimport unittest\\n\\nfrom sales import sum_amount\\n\\n\\nclass SalesTests(unittest.TestCase):\\n    def test_sum_skips_bad_records_and_continues(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('item,amount\\\\n\\\"tea, iced\\\",1.10\\\\nmissing\\\\nextra,8,9\\\\nblank,\\\\nbad,oops\\\\nnan,NaN\\\\ninf,Infinity\\\\n\\\"bad\\\"quote,99\\\\nrefund,-0.20\\\\n', encoding='utf-8')\\n            self.assertEqual(sum_amount(path), Decimal('0.90'))\\n\\n    def test_missing_amount_header(self):\\n        with TemporaryDirectory() as directory:\\n            path = Path(directory) / 'sales.csv'\\n            path.write_text('item,price\\\\ntea,2\\\\n', encoding='utf-8')\\n            with self.assertRaisesRegex(ValueError, 'amount'):\\n                sum_amount(path)\\n\"\n  }\n}",
+    "answer_sha256": "4dd0e65c3ca1310c9e65ba8acc7e2df41a530110655024eae013e188c80ccc82",
+    "usage": {
+      "input_tokens": 12448,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 529,
+      "reasoning_output_tokens": 45
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": false
+    }
+  },
+  {
+    "task": "dupepaths",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "bdfe7c43ede7816c2d09059e6bab05ab9cf768a5654b534f1108b1ec455fdea7",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/money.js\": \"function formatMoney(cents) {\\n  const prefix = cents < 0 ? '-$' : '$';\\n  return prefix + (Math.abs(cents) / 100).toFixed(2);\\n}\\n\\nmodule.exports = { formatMoney };\\n\",\n    \"src/receipt.js\": \"const { formatMoney } = require('./money');\\n\\nfunction receiptTotal(cents) {\\n  return 'TOTAL ' + formatMoney(cents);\\n}\\n\\nmodule.exports = { receiptTotal };\\n\",\n    \"src/statement.js\": \"const { formatMoney } = require('./money');\\n\\nfunction statementRow(label, cents) {\\n  return label + '\\\\t' + formatMoney(cents);\\n}\\n\\nmodule.exports = { statementRow };\\n\",\n    \"test/money.test.js\": \"const assert = require('assert').strict;\\nconst { formatMoney } = require('../src/money');\\nconst { invoiceLine } = require('../src/invoice');\\nconst { receiptTotal } = require('../src/receipt');\\nconst { statementRow } = require('../src/statement');\\n\\nassert.equal(invoiceLine({ name: 'Credit', cents: -450 }), 'Credit: -$4.50');\\nassert.equal(receiptTotal(-450), 'TOTAL -$4.50');\\nassert.equal(statementRow('Credit', -450), 'Credit\\\\t-$4.50');\\nassert.equal(formatMoney(450), '$4.50');\\nassert.equal(formatMoney(0), '$0.00');\\n\"\n  }\n}",
+    "answer_sha256": "462de7be53492c948eb345e4424302fc5914a2b8d7b00894adc90e4f1ae03494",
+    "usage": {
+      "input_tokens": 12648,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 360,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "dupepaths",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "e95aeb3ff1e2c4ce72a55f2e2f0577cd3ca9e74674bf1f05af0afa920ac05f66",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/money.js\": \"function formatMoney(cents) {\\n  return (cents < 0 ? '-$' : '$') + (Math.abs(cents) / 100).toFixed(2);\\n}\\n\\nmodule.exports = { formatMoney };\\n\",\n    \"src/receipt.js\": \"const { formatMoney } = require('./money');\\n\\nfunction receiptTotal(cents) {\\n  return 'TOTAL ' + formatMoney(cents);\\n}\\n\\nmodule.exports = { receiptTotal };\\n\",\n    \"src/statement.js\": \"const { formatMoney } = require('./money');\\n\\nfunction statementRow(label, cents) {\\n  return label + '\\\\t' + formatMoney(cents);\\n}\\n\\nmodule.exports = { statementRow };\\n\",\n    \"test/money.test.js\": \"const test = require('node:test');\\nconst assert = require('node:assert/strict');\\nconst { invoiceLine } = require('../src/invoice');\\nconst { receiptTotal } = require('../src/receipt');\\nconst { statementRow } = require('../src/statement');\\n\\nfor (const [cents, expected] of [[-450, '-$4.50'], [0, '$0.00'], [450, '$4.50']]) {\\n  test(`customer-facing amounts for ${cents} cents`, () => {\\n    assert.equal(invoiceLine({ name: 'Item', cents }), 'Item: ' + expected);\\n    assert.equal(receiptTotal(cents), 'TOTAL ' + expected);\\n    assert.equal(statementRow('Item', cents), 'Item\\\\t' + expected);\\n  });\\n}\\n\"\n  }\n}",
+    "answer_sha256": "3e53b8d37a143529ebc33776e5650aa1ae749e4651e411dd45fd1b76d78f9856",
+    "usage": {
+      "input_tokens": 12626,
+      "cached_input_tokens": 3840,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 400,
+      "reasoning_output_tokens": 19
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "dupepaths",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "26976f548bf683a711a3af9480e4ab579328b6cb6737d1e7e1457bb99b626163",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/money.js\": \"function formatMoney(cents) {\\n  const prefix = cents < 0 ? '-$' : '$';\\n  return prefix + (Math.abs(cents) / 100).toFixed(2);\\n}\\n\\nmodule.exports = { formatMoney };\\n\",\n    \"src/receipt.js\": \"const { formatMoney } = require('./money');\\n\\nfunction receiptTotal(cents) {\\n  return 'TOTAL ' + formatMoney(cents);\\n}\\n\\nmodule.exports = { receiptTotal };\\n\",\n    \"src/statement.js\": \"const { formatMoney } = require('./money');\\n\\nfunction statementRow(label, cents) {\\n  return label + '\\\\t' + formatMoney(cents);\\n}\\n\\nmodule.exports = { statementRow };\\n\",\n    \"test/money.test.js\": \"const test = require('node:test');\\nconst assert = require('node:assert/strict');\\nconst { formatMoney } = require('../src/money');\\nconst { invoiceLine } = require('../src/invoice');\\nconst { receiptTotal } = require('../src/receipt');\\nconst { statementRow } = require('../src/statement');\\n\\ntest('negative amounts show the sign before the dollar symbol everywhere', () => {\\n  assert.equal(invoiceLine({ name: 'Credit', cents: -450 }), 'Credit: -$4.50');\\n  assert.equal(receiptTotal(-450), 'TOTAL -$4.50');\\n  assert.equal(statementRow('Credit', -450), 'Credit\\\\t-$4.50');\\n});\\n\\ntest('zero and positive amounts keep their dollar prefix and two decimal places', () => {\\n  assert.equal(formatMoney(0), '$0.00');\\n  assert.equal(formatMoney(450), '$4.50');\\n});\\n\"\n  }\n}",
+    "answer_sha256": "3b3f15584da81f983719619ebf0442def6cc3c2d57bfa301e2131558637ebefd",
+    "usage": {
+      "input_tokens": 12724,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 423,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-wrongfix",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "9f2d5e8847349e210f469a235c46237c1907024122ce2e5859076e1a6a55147f",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"pager.py\":\"def page_count(total, per_page):\\n    \\\"\\\"\\\"Pages needed to show `total` items, `per_page` to a page.\\\"\\\"\\\"\\n    return -(-total // per_page)\\n\"}}",
+    "answer_sha256": "f88f6c32c75e570be9fd67c286ae609be56a182e8bcfa93974750ed8c57cbcc0",
+    "usage": {
+      "input_tokens": 12493,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 55,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-wrongfix",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "45d00f512dcd0b328adb4c24647f07487cc083b437228d022588b0cb0a6a8b7e",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"pager.py\": \"def page_count(total, per_page):\\n    \\\"\\\"\\\"Pages needed to show `total` items, `per_page` to a page.\\\"\\\"\\\"\\n    return -(-total // per_page)\\n\",\n    \"test_pager.py\": \"from unittest import TestCase\\n\\nfrom pager import page_count\\n\\n\\nclass PageCountTests(TestCase):\\n    def test_page_count(self):\\n        for total, expected in [(0, 0), (5, 1), (10, 1), (100, 10), (101, 11)]:\\n            with self.subTest(total=total):\\n                self.assertEqual(page_count(total, 10), expected)\\n\"\n  }\n}",
+    "answer_sha256": "597d7dab61c9e7a31638292da3295bce8909eea3781fa67b3f59efc62d79b6ff",
+    "usage": {
+      "input_tokens": 12591,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 170,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-wrongfix",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "b8eff771446aa5e43b8ca5019c8116548f8d803f739dd2ef9c56480b4d29b49b",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"pager.py\": \"def page_count(total, per_page):\\n    \\\"\\\"\\\"Pages needed to show `total` items, `per_page` to a page.\\\"\\\"\\\"\\n    return -(total // -per_page)\\n\",\n    \"test_pager.py\": \"from pager import page_count\\n\\n\\ndef test_page_count():\\n    assert page_count(5, 10) == 1\\n    assert page_count(101, 10) == 11\\n    assert page_count(100, 10) == 10\\n    assert page_count(0, 10) == 0\\n\"\n  }\n}",
+    "answer_sha256": "360fe63af44bfd0955b0ededc2a6544b86dcffb47c732a86441966ca14255a0c",
+    "usage": {
+      "input_tokens": 12515,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 144,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "reuse-money",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "65efca09c5c23f3cb6778309b44ac4b5a8b624802eb8bb792bb85a2772e8f400",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"invoice.py\": \"from money import format_money\\n\\n\\ndef line_item(name, cents, qty):\\n    \\\"\\\"\\\"Return an invoice line 'name xQTY - $TOTAL' for qty units at `cents` each\\n    (line total = cents * qty), the total shown the way the rest of the app shows money.\\\"\\\"\\\"\\n    return f\\\"{name} x{qty} - {format_money(cents * qty)}\\\"\\n\"\n  }\n}",
+    "answer_sha256": "dff841d12d1509db64d15f57ee67f9ce376ca02221e4b6d99473a501dde23550",
+    "usage": {
+      "input_tokens": 12588,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 113,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "reuse-money",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "21f8563dfb87218a60aaceb574d61c9a76cf9173709aa76b7c75d419b2fd560e",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"invoice.py\": \"from money import format_money\\n\\n\\ndef line_item(name, cents, qty):\\n    \\\"\\\"\\\"Return an invoice line 'name xQTY - $TOTAL' for qty units at `cents` each\\n    (line total = cents * qty), the total shown the way the rest of the app shows money.\\\"\\\"\\\"\\n    return f\\\"{name} x{qty} - {format_money(cents * qty)}\\\"\\n\"\n  }\n}",
+    "answer_sha256": "dff841d12d1509db64d15f57ee67f9ce376ca02221e4b6d99473a501dde23550",
+    "usage": {
+      "input_tokens": 12664,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 113,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "reuse-money",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "898b21198f517e4b1f8a4f47ef492809daddeaaebdb5e725267d56678c616915",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"invoice.py\":\"from money import format_money\\n\\n\\ndef line_item(name, cents, qty):\\n    \\\"\\\"\\\"Return an invoice line 'name xQTY - $TOTAL' for qty units at `cents` each\\n    (line total = cents * qty), the total shown the way the rest of the app shows money.\\\"\\\"\\\"\\n    return f\\\"{name} x{qty} - {format_money(cents * qty)}\\\"\\n\"}}",
+    "answer_sha256": "dc193a826f58fcc14d910000cace1e87d916ef67e789018ae37265f7f990b2de",
+    "usage": {
+      "input_tokens": 12566,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 104,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-fixed",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "e980515223978d39422b3a6983033093ee3ef2547e980dc74850044d12c38b55",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"test_pager.py\":\"import unittest\\n\\nfrom pager import page_count\\n\\n\\nclass PageCountTest(unittest.TestCase):\\n    def test_partial_last_page(self):\\n        self.assertEqual(page_count(101, 10), 11)\\n        self.assertEqual(page_count(5, 10), 1)\\n\"}}",
+    "answer_sha256": "8072ee8481f4ebb2f0572a73320d5552d9b37619e51d07d99632db1c212fad8f",
+    "usage": {
+      "input_tokens": 12480,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 77,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": false,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-fixed",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "718b3c5892ff46925179207a0b0eb480fee01a9ea525981a49bf97cb581e0c49",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{}}",
+    "answer_sha256": "aae5a71db7cd42382ef749f87ca847684d9d4a517cc8235f53ea31bd492c3577",
+    "usage": {
+      "input_tokens": 12458,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 9,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "abstain-fixed",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "215a1fb9c2e7d5429cab76b352800fdf122b0605ca6577811761748ec45b65b5",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{}}",
+    "answer_sha256": "aae5a71db7cd42382ef749f87ca847684d9d4a517cc8235f53ea31bd492c3577",
+    "usage": {
+      "input_tokens": 12556,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 9,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "stdlib",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "73eaed6321f1736ebea51c6d054fae615f74adeb680bc0d9c615c0260fbbff61",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\"files\":{\"src/importer.js\":\"function parseIds(csvLine) {\\n  return csvLine.split(',').map((s) => s.trim()).filter(Boolean);\\n}\\n\\nfunction uniqueIds(ids) {\\n  return [...new Set(ids)];\\n}\\n\\nmodule.exports = { parseIds, uniqueIds };\\n\"}}",
+    "answer_sha256": "e1b1f05ee300a7bb6f6ea0279ea99800dd4f6f4506c8f9a3b631017f594534c4",
+    "usage": {
+      "input_tokens": 12542,
+      "cached_input_tokens": 3968,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 75,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "stdlib",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "a2b37bfa41756ffd2f7c6085ac3a4a447b407d1385b84bc21cd5a84b0a9d443a",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/importer.js\": \"function parseIds(csvLine) {\\n  return csvLine.split(',').map((s) => s.trim()).filter(Boolean);\\n}\\n\\nfunction uniqueIds(ids) {\\n  return [...new Set(ids)];\\n}\\n\\nmodule.exports = { parseIds, uniqueIds };\\n\"\n  }\n}",
+    "answer_sha256": "25b5fac705755441098bf6da6f2eb1b9cee112a6071828a9f356413e77abd6d4",
+    "usage": {
+      "input_tokens": 12444,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 84,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "stdlib",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "16296e0246e687918c9921f2e58a28ebc88ee307d10c9044b327e4a622d6388a",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"src/importer.js\": \"function parseIds(csvLine) {\\n  return csvLine.split(',').map((s) => s.trim()).filter(Boolean);\\n}\\n\\nfunction uniqueIds(ids) {\\n  return [...new Set(ids)];\\n}\\n\\nmodule.exports = { parseIds, uniqueIds };\\n\"\n  }\n}",
+    "answer_sha256": "25b5fac705755441098bf6da6f2eb1b9cee112a6071828a9f356413e77abd6d4",
+    "usage": {
+      "input_tokens": 12466,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 84,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "scope-rename",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "3a1345c7b33ea9b37a9a96c51d000908bcd06f89da455faf1edb7150a710bd6b",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"shop/orders.py\": \"from dataclasses import dataclass\\n\\n\\n@dataclass\\nclass Order:\\n    sku: str\\n    quantity: int\\n    unit_cents: int\\n\\n\\ndef order_total(orders):\\n    \\\"\\\"\\\"Total of a list of orders, in cents.\\\"\\\"\\\"\\n    return sum(o.quantity * o.unit_cents for o in orders)\\n\\n\\ndef from_dict(d):\\n    \\\"\\\"\\\"Build an Order from one record of the partner feed.\\\"\\\"\\\"\\n    return Order(sku=d[\\\"sku\\\"], quantity=d[\\\"quantity\\\"], unit_cents=d[\\\"unit_cents\\\"])\\n\",\n    \"fixtures/orders.json\": \"[\\n  {\\\"sku\\\": \\\"A-100\\\", \\\"quantity\\\": 2, \\\"unit_cents\\\": 500},\\n  {\\\"sku\\\": \\\"B-200\\\", \\\"quantity\\\": 1, \\\"unit_cents\\\": 1250}\\n]\\n\",\n    \"tests/test_orders.py\": \"from shop import Order, from_dict, order_total\\nfrom shop.loader import load_orders\\n\\n\\ndef test_total():\\n    assert order_total([Order(sku=\\\"A\\\", quantity=2, unit_cents=500)]) == 1000\\n\\n\\ndef test_from_dict():\\n    assert from_dict({\\\"sku\\\": \\\"A\\\", \\\"quantity\\\": 3, \\\"unit_cents\\\": 100}).quantity == 3\\n\\n\\ndef test_fixture_total():\\n    assert order_total(load_orders()) == 2250\\n\"\n  }\n}",
+    "answer_sha256": "305f6bb24519d90416e74e5debe68eae91e82af5df49d4779eb9dd3653a2812a",
+    "usage": {
+      "input_tokens": 12938,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 339,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "scope-rename",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "8f1754f81d651ebe2f7332564d042c2f1d3dfeb95994bee94a105e89798e8be0",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"shop/orders.py\": \"from dataclasses import dataclass\\n\\n\\n@dataclass\\nclass Order:\\n    sku: str\\n    quantity: int\\n    unit_cents: int\\n\\n\\ndef order_total(orders):\\n    \\\"\\\"\\\"Total of a list of orders, in cents.\\\"\\\"\\\"\\n    return sum(o.quantity * o.unit_cents for o in orders)\\n\\n\\ndef from_dict(d):\\n    \\\"\\\"\\\"Build an Order from one record of the partner feed.\\\"\\\"\\\"\\n    return Order(sku=d[\\\"sku\\\"], quantity=d[\\\"quantity\\\"], unit_cents=d[\\\"unit_cents\\\"])\\n\",\n    \"fixtures/orders.json\": \"[\\n  {\\\"sku\\\": \\\"A-100\\\", \\\"quantity\\\": 2, \\\"unit_cents\\\": 500},\\n  {\\\"sku\\\": \\\"B-200\\\", \\\"quantity\\\": 1, \\\"unit_cents\\\": 1250}\\n]\\n\",\n    \"tests/test_orders.py\": \"from shop import Order, from_dict, order_total\\nfrom shop.loader import load_orders\\n\\n\\ndef test_total():\\n    assert order_total([Order(sku=\\\"A\\\", quantity=2, unit_cents=500)]) == 1000\\n\\n\\ndef test_from_dict():\\n    assert from_dict({\\\"sku\\\": \\\"A\\\", \\\"quantity\\\": 3, \\\"unit_cents\\\": 100}).quantity == 3\\n\\n\\ndef test_fixture_total():\\n    assert order_total(load_orders()) == 2250\\n\"\n  }\n}",
+    "answer_sha256": "305f6bb24519d90416e74e5debe68eae91e82af5df49d4779eb9dd3653a2812a",
+    "usage": {
+      "input_tokens": 12840,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 339,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "scope-rename",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "275f6d132e1dab069e53184b9f43fcb7bb490a0d40af2fbdf55005e8b3635a83",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"shop/orders.py\": \"from dataclasses import dataclass\\n\\n\\n@dataclass\\nclass Order:\\n    sku: str\\n    quantity: int\\n    unit_cents: int\\n\\n\\ndef order_total(orders):\\n    \\\"\\\"\\\"Total of a list of orders, in cents.\\\"\\\"\\\"\\n    return sum(o.quantity * o.unit_cents for o in orders)\\n\\n\\ndef from_dict(d):\\n    \\\"\\\"\\\"Build an Order from one record of the partner feed.\\\"\\\"\\\"\\n    return Order(sku=d[\\\"sku\\\"], quantity=d[\\\"quantity\\\"], unit_cents=d[\\\"unit_cents\\\"])\\n\",\n    \"fixtures/orders.json\": \"[\\n  {\\\"sku\\\": \\\"A-100\\\", \\\"quantity\\\": 2, \\\"unit_cents\\\": 500},\\n  {\\\"sku\\\": \\\"B-200\\\", \\\"quantity\\\": 1, \\\"unit_cents\\\": 1250}\\n]\\n\",\n    \"tests/test_orders.py\": \"from shop import Order, from_dict, order_total\\nfrom shop.loader import load_orders\\n\\n\\ndef test_total():\\n    assert order_total([Order(sku=\\\"A\\\", quantity=2, unit_cents=500)]) == 1000\\n\\n\\ndef test_from_dict():\\n    assert from_dict({\\\"sku\\\": \\\"A\\\", \\\"quantity\\\": 3, \\\"unit_cents\\\": 100}).quantity == 3\\n\\n\\ndef test_fixture_total():\\n    assert order_total(load_orders()) == 2250\\n\"\n  }\n}",
+    "answer_sha256": "305f6bb24519d90416e74e5debe68eae91e82af5df49d4779eb9dd3653a2812a",
+    "usage": {
+      "input_tokens": 12862,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 339,
+      "reasoning_output_tokens": 0
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "atomic-batch",
+    "arm": "puritanical",
+    "repeat": 2,
+    "prompt_sha256": "eca0492490f0f283f7cc4466fcf6912b1c7703faa75ee4af679de77a005a8b74",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"stock.py\": \"def apply_batch(stock, updates):\\n    \\\"\\\"\\\"Apply an inventory count in place after validating every entry.\\\"\\\"\\\"\\n    pending = {}\\n    for entry in updates:\\n        try:\\n            sku, count = entry\\n        except (TypeError, ValueError) as exc:\\n            raise ValueError('expected a (sku, count) pair') from exc\\n        if not isinstance(sku, str) or not sku:\\n            raise ValueError('sku must be a non-empty string')\\n        if not isinstance(count, int) or isinstance(count, bool) or count < 0:\\n            raise ValueError('count must be a non-negative integer')\\n        pending[sku] = count\\n    stock.update(pending)\\n\",\n    \"test_stock.py\": \"import unittest\\n\\nfrom stock import apply_batch\\n\\n\\nclass ApplyBatchTests(unittest.TestCase):\\n    def test_iterator_and_duplicate_skus(self):\\n        stock = {'a': 4, 'b': 2}\\n        apply_batch(stock, iter([('a', 1), ('c', 3), ('a', 0)]))\\n        self.assertEqual(stock, {'a': 0, 'b': 2, 'c': 3})\\n\\n    def test_invalid_entry_leaves_stock_untouched(self):\\n        for entry in [None, ('a',), ('a', 1, 2), ('', 1), (3, 1),\\n                      ('a', -1), ('a', True), ('a', False), ('a', 2.0)]:\\n            with self.subTest(entry=entry):\\n                stock = {'a': 4}\\n                with self.assertRaises(ValueError):\\n                    apply_batch(stock, iter([('a', 1), ('b', 2), entry]))\\n                self.assertEqual(stock, {'a': 4})\\n\"\n  }\n}",
+    "answer_sha256": "5e5db1a83265b11a7761764a8859775159a95422c40504eb5cab4fa56265b35c",
+    "usage": {
+      "input_tokens": 12473,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 455,
+      "reasoning_output_tokens": 16
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "atomic-batch",
+    "arm": "ponytail",
+    "repeat": 2,
+    "prompt_sha256": "e5a38b171ddc0593320b4840dee1f04ca1e477920ececcb8db458c8608f8046e",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"stock.py\": \"def apply_batch(stock, updates):\\n    \\\"\\\"\\\"Apply an inventory count in place after validating the entire batch.\\\"\\\"\\\"\\n    pending = {}\\n    for entry in updates:\\n        try:\\n            sku, count = entry\\n        except (TypeError, ValueError) as exc:\\n            raise ValueError('expected a (sku, count) pair') from exc\\n        if not isinstance(sku, str) or not sku:\\n            raise ValueError('sku must be a non-empty string')\\n        if isinstance(count, bool) or not isinstance(count, int) or count < 0:\\n            raise ValueError('count must be a non-negative integer')\\n        pending[sku] = count\\n    stock.update(pending)\\n\",\n    \"test_stock.py\": \"import unittest\\n\\nfrom stock import apply_batch\\n\\n\\nclass ApplyBatchTests(unittest.TestCase):\\n    def test_iterator_updates_stock_and_last_count_wins(self):\\n        stock = {'keep': 2, 'a': 7}\\n        apply_batch(stock, iter([('a', 3), ('b', 5), ('a', 0)]))\\n        self.assertEqual(stock, {'keep': 2, 'a': 0, 'b': 5})\\n\\n    def test_invalid_entry_leaves_stock_untouched(self):\\n        for entry in [None, ('a',), ('a', 1, 2), ('', 1), (3, 1),\\n                      ('a', True), ('a', False), ('a', -1), ('a', 1.0)]:\\n            with self.subTest(entry=entry):\\n                stock = {'a': 7}\\n                with self.assertRaises(ValueError):\\n                    apply_batch(stock, iter([('a', 3), ('b', 5), entry]))\\n                self.assertEqual(stock, {'a': 7})\\n\"\n  }\n}",
+    "answer_sha256": "6e070f11ad917fc9caaa230a7828114e7c93996895936f208643abf2ab4d8513",
+    "usage": {
+      "input_tokens": 12495,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 462,
+      "reasoning_output_tokens": 19
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  },
+  {
+    "task": "atomic-batch",
+    "arm": "chisle",
+    "repeat": 2,
+    "prompt_sha256": "4f1faf376d27e868c854a8a5960b7a475470a5fd185fe811a6247a74b5f30bfb",
+    "events": {
+      "thread.started": 1,
+      "item.completed/error": 1,
+      "turn.started": 1,
+      "item.completed/agent_message": 1,
+      "turn.completed": 1
+    },
+    "cli_exit": 0,
+    "status": "completed",
+    "answer": "{\n  \"files\": {\n    \"stock.py\": \"def apply_batch(stock, updates):\\n    \\\"\\\"\\\"Apply an inventory count in place after validating the whole batch.\\\"\\\"\\\"\\n    pending = {}\\n    for entry in updates:\\n        try:\\n            sku, count = entry\\n        except (TypeError, ValueError) as exc:\\n            raise ValueError('expected a (sku, count) pair') from exc\\n        if not isinstance(sku, str) or not sku:\\n            raise ValueError('sku must be a non-empty string')\\n        if isinstance(count, bool) or not isinstance(count, int) or count < 0:\\n            raise ValueError('count must be a non-negative integer')\\n        pending[sku] = count\\n    stock.update(pending)\\n\",\n    \"test_stock.py\": \"import unittest\\n\\nfrom stock import apply_batch\\n\\n\\nclass ApplyBatchTests(unittest.TestCase):\\n    def test_iterator_and_duplicate_skus(self):\\n        stock = {'keep': 4, 'A': 2}\\n        apply_batch(stock, iter([('A', 5), ('B', 3), ('A', 0)]))\\n        self.assertEqual(stock, {'keep': 4, 'A': 0, 'B': 3})\\n\\n    def test_invalid_entry_leaves_stock_unchanged(self):\\n        for entry in (None, ('A',), ('A', 1, 2), ('', 1), (3, 1),\\n                      ('A', -1), ('A', 1.0), ('A', True), ('A', False)):\\n            with self.subTest(entry=entry):\\n                stock = {'A': 7}\\n                with self.assertRaises(ValueError):\\n                    apply_batch(stock, iter([('A', 2), ('B', 0), entry]))\\n                self.assertEqual(stock, {'A': 7})\\n\"\n  }\n}",
+    "answer_sha256": "d2eca8ecb0d1611819280a52aa7c6315357ec35f5d5227a4943ff90886e6e039",
+    "usage": {
+      "input_tokens": 12571,
+      "cached_input_tokens": 10624,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 453,
+      "reasoning_output_tokens": 14
+    },
+    "verdict": {
+      "pass": true,
+      "skip_notice": null
+    }
+  }
+]
