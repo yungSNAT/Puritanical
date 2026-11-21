@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync, spawnSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { readSettings } = require('../bin/lib/settings');
 const { readFlag } = require('../hooks/chisle-config');
 const { recordSavings } = require('../hooks/chisle-compress-output');
@@ -45,20 +45,6 @@ test('unknown flag exits 2', () => {
   const { status, out } = runCLI(['--frobnicate']);
   assert.equal(status, 2);
   assert.match(out, /unknown flag/);
-});
-
-test('tools subcommand reports an empty config and rejects invalid options', (t) => {
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-tools-'));
-  t.after(() => fs.rmSync(cfg, { recursive: true, force: true }));
-  const invoke = (...args) => spawnSync(process.execPath,
-    [CLI, 'tools', '--config-dir', cfg, ...args], { encoding: 'utf8', timeout: 5000 });
-  const empty = invoke();
-  assert.equal(empty.status, 0);
-  assert.match(empty.stdout, /no tool schemas or skill listings found in 0 session/);
-  const invalid = invoke('--days', '0');
-  assert.equal(invalid.status, 2);
-  assert.match(invalid.stderr, /positive number/);
-  assert.deepEqual(fs.readdirSync(cfg), []);
 });
 
 test('--only with bad agent exits 2', () => {

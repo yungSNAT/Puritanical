@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 
 const installer = path.resolve(__dirname, '../bin/install.js');
 const activate = path.resolve(__dirname, '../hooks/chisle-activate.js');
@@ -59,6 +59,20 @@ test('update refreshes installed agents and preserves user rules and absent inte
   assert.equal(fs.readFileSync('.codex/AGENTS.md', 'utf8').trim(), 'Local instructions');
   assert.equal(fs.existsSync('claude/chisle-hooks'), false);
   assert.equal(fs.existsSync('.hermes/skills/chisle'), false);
+});
+
+test('tools reports empty sessions and rejects invalid options without writing configuration', t => {
+  const env = isolatedConfig(t);
+  const invoke = (...args) => spawnSync(process.execPath, [installer, 'tools', '--config-dir', 'claude', ...args], {
+    env, encoding: 'utf8', timeout: 5000,
+  });
+  const empty = invoke();
+  assert.equal(empty.status, 0);
+  assert.match(empty.stdout, /no tool schemas or skill listings found in 0 session/);
+  const invalid = invoke('--days', '0');
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /positive number/);
+  assert.deepEqual(fs.readdirSync('claude'), []);
 });
 
 test('startup uses a cached major update offline and respects the configured statusline', t => {
