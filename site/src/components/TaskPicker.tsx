@@ -2,11 +2,11 @@ import { useCallback } from "react";
 import { TASKS } from "./compare-data";
 
 interface Props {
-  selected: string;
-  onSelect: (id: string) => void;
+  readonly selected: string;
+  readonly onSelect: (id: string) => void;
 }
 
-export default function TaskPicker({ selected, onSelect }: Props): React.JSX.Element {
+export default function TaskPicker({ selected, onSelect }: Readonly<Props>): React.JSX.Element {
   const choose = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       onSelect(event.currentTarget.value);

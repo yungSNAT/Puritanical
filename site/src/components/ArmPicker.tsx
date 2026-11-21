@@ -2,12 +2,12 @@ import { useCallback } from "react";
 import { RIVALS, type Task } from "./compare-data";
 
 interface Props {
-  task: Task;
-  selected: string;
-  onSelect: (key: string) => void;
+  readonly task: Task;
+  readonly selected: string;
+  readonly onSelect: (key: string) => void;
 }
 
-export default function ArmPicker({ task, selected, onSelect }: Props): React.JSX.Element {
+export default function ArmPicker({ task, selected, onSelect }: Readonly<Props>): React.JSX.Element {
   const choose = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       onSelect(event.currentTarget.value);

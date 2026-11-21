@@ -37,7 +37,7 @@ const TAIL = [" Tasks:    3 successful, 3 total"];
 
 export default function Terminal(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-120px" });
+  const inView: boolean = useInView(ref, { once: true, margin: "-120px" });
   const [summaryVisible, setSummaryVisible] = useState(false);
   const [flood, setFlood] = useState<number>(0);
   const phase = !inView ? "idle" : summaryVisible ? "done" : "flood";

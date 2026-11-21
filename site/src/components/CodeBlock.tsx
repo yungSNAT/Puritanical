@@ -11,7 +11,7 @@ export default function CodeBlock({ children }: Readonly<{ children: React.React
   const [copied, copyText] = useCopyText(CODE_COPY_NOTICE_MS);
   const code = useRef<HTMLPreElement>(null);
   const copyCode = useCallback((): void => {
-    if (code.current) copyText(code.current.innerText);
+    if (code.current !== null) copyText(code.current.innerText);
   }, [copyText]);
   return (
     <div className="group relative">

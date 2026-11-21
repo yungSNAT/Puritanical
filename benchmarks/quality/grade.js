@@ -20,10 +20,10 @@ const { fisher, wilson, fmtP } = require('../stats.js');
 const HERE = __dirname;
 const RAW = process.env.RAW_DIR ? path.resolve(process.env.RAW_DIR) : path.join(HERE, 'raw');
 const ARMS = ['vanilla', 'chisle'];
-const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8'));
-const code = JSON.parse(fs.readFileSync(path.join(HERE, 'code.json'), 'utf8'));
-const mathById = Object.fromEntries(math.map((m) => [m.id, m]));
-const codeById = Object.fromEntries(code.map((c) => [c.id, c]));
+const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+const code = JSON.parse(fs.readFileSync(path.join(HERE, 'code.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+const mathById = new Map(math.map((m) => [m.id, m]));
+const codeById = new Map(code.map((c) => [c.id, c]));
 
 // --- graders ---------------------------------------------------------------
 
@@ -103,17 +103,20 @@ function gradeCode(item, answer) {
 // --- load + grade ----------------------------------------------------------
 
 function load() {
-  if (!fs.existsSync(RAW)) return [];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- RAW_DIR from the environment or raw/ beside this script.
+  if (!fs.existsSync(RAW)) return []; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   const rows = [];
-  for (const f of fs.readdirSync(RAW)) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- RAW_DIR from the environment or raw/ beside this script.
+  for (const f of fs.readdirSync(RAW)) { // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     const m = f.match(/^(math|code)__(.+)__(vanilla|chisle)__(\d+)\.json$/);
     if (!m) continue;
     const [, suite, id, arm, seed] = m;
     let d;
-    try { d = JSON.parse(fs.readFileSync(path.join(RAW, f), 'utf8')); } catch { continue; }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file readdirSync just listed in RAW.
+    try { d = JSON.parse(fs.readFileSync(path.join(RAW, f), 'utf8')); } catch { continue; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     if (!d || d.is_error) continue;
     const answer = d.result || '';
-    const item = suite === 'math' ? mathById[id] : codeById[id];
+    const item = (suite === 'math' ? mathById : codeById).get(id);
     if (!item) continue;
     const g = suite === 'math' ? gradeMath(item, answer) : gradeCode(item, answer);
     rows.push({
@@ -135,17 +138,29 @@ function main() {
   const dropped = all.length - rows.length;
   if (!rows.length) { console.error('no graded cells — run: node benchmarks/quality/run.js'); process.exit(1); }
 
-  const agg = {};
+  const agg = aggregate(rows);
+  if (process.argv.includes('--json')) { console.log(JSON.stringify({ rows, agg: Object.fromEntries(agg) }, null, 2)); return; }
+  printAccuracy(rows, agg, dropped);
+  printSignificance(agg);
+  printDisagreements(rows);
+  printFailures(rows);
+}
+
+// Totals per "<suite> <tier>|<arm>" segment, plus "all|<arm>".
+function aggregate(rows) {
+  const agg = new Map();
   for (const r of rows) {
     for (const seg of [`${r.suite} ${r.tier}`, 'all']) {
       const k = seg + '|' + r.arm;
-      (agg[k] ||= { n: 0, pass: 0, clean: 0, out: 0, chars: 0 });
-      agg[k].n++; agg[k].pass += r.pass ? 1 : 0; agg[k].clean += r.clean ? 1 : 0; agg[k].out += r.out; agg[k].chars += r.chars;
+      if (!agg.has(k)) agg.set(k, { n: 0, pass: 0, clean: 0, out: 0, chars: 0 });
+      const a = agg.get(k);
+      a.n++; a.pass += r.pass ? 1 : 0; a.clean += r.clean ? 1 : 0; a.out += r.out; a.chars += r.chars;
     }
   }
+  return agg;
+}
 
-  if (process.argv.includes('--json')) { console.log(JSON.stringify({ rows, agg }, null, 2)); return; }
-
+function printAccuracy(rows, agg, dropped) {
   console.log('## Accuracy (auto-graded, no judge model)\n');
   if (dropped) console.log(`_${dropped} cell(s) excluded: no counterpart in the other arm._\n`);
   console.log('| suite | arm | n | correct | accuracy | format-clean | mean output tokens | mean answer chars |');
@@ -153,33 +168,35 @@ function main() {
   const segs = [...new Set(rows.map((r) => `${r.suite} ${r.tier}`))].sort().concat('all');
   for (const seg of segs) {
     for (const arm of ARMS) {
-      const a = agg[seg + '|' + arm];
+      const a = agg.get(seg + '|' + arm);
       if (!a) continue;
       console.log(`| ${seg} | ${arm} | ${a.n} | ${a.pass} | ${pct(a.pass, a.n)} | ${pct(a.clean, a.n)} | ${Math.round(a.out / a.n)} | ${Math.round(a.chars / a.n)} |`);
     }
   }
+}
 
-  // Overall significance, stated whether or not it flatters the tool.
-  {
-    const v = agg['all|vanilla'], h = agg['all|chisle'];
-    if (v && h) {
-      const ci = (k, n) => wilson(k, n).map((x) => (100 * x).toFixed(1) + '%').join('–');
-      const p = fisher(h.pass, h.n - h.pass, v.pass, v.n - v.pass);
-      console.log('\n## Significance\n');
-      console.log(`vanilla ${v.pass}/${v.n}, 95% CI ${ci(v.pass, v.n)}`);
-      console.log(`chisle  ${h.pass}/${h.n}, 95% CI ${ci(h.pass, h.n)}`);
-      console.log(`Fisher exact, two-sided: p = ${fmtP(p)}` + (p < 0.05 ? '' : ' — not separable from noise at this cell count.'));
-    }
-  }
+// Overall significance, stated whether or not it flatters the tool.
+function printSignificance(agg) {
+  const v = agg.get('all|vanilla'), h = agg.get('all|chisle');
+  if (!v || !h) return;
+  const ci = (k, n) => wilson(k, n).map((x) => (100 * x).toFixed(1) + '%').join('–');
+  const p = fisher(h.pass, h.n - h.pass, v.pass, v.n - v.pass);
+  console.log('\n## Significance\n');
+  console.log(`vanilla ${v.pass}/${v.n}, 95% CI ${ci(v.pass, v.n)}`);
+  console.log(`chisle  ${h.pass}/${h.n}, 95% CI ${ci(h.pass, h.n)}`);
+  console.log(`Fisher exact, two-sided: p = ${fmtP(p)}` + (p < 0.05 ? '' : ' — not separable from noise at this cell count.'));
+}
 
-  // Per-item, paired: where do the arms actually differ?
-  const byItem = {};
+// Per-item, paired: where do the arms actually differ?
+function printDisagreements(rows) {
+  const byItem = new Map();
   for (const r of rows) {
     const k = r.suite + '/' + r.id;
-    (byItem[k] ||= { vanilla: [], chisle: [] })[r.arm].push(r);
+    if (!byItem.has(k)) byItem.set(k, { vanilla: [], chisle: [] });
+    byItem.get(k)[r.arm].push(r);
   }
   const diffs = [];
-  for (const [k, v] of Object.entries(byItem)) {
+  for (const [k, v] of byItem) {
     const van = v.vanilla.filter((r) => r.pass).length, vn = v.vanilla.length;
     const chi = v.chisle.filter((r) => r.pass).length, cn = v.chisle.length;
     if (!vn || !cn) continue;
@@ -194,8 +211,10 @@ function main() {
     console.log('|------|--------:|-------:|');
     for (const d of diffs) console.log(`| ${d.k} | ${d.van} | ${d.chi} |`);
   }
+}
 
-  // Every failure, so the losses are auditable rather than summarised away.
+// Every failure, so the losses are auditable rather than summarised away.
+function printFailures(rows) {
   const fails = rows.filter((r) => !r.pass).sort((a, b) => a.arm.localeCompare(b.arm) || a.suite.localeCompare(b.suite) || a.id.localeCompare(b.id));
   console.log('\n## Every failed cell\n');
   if (!fails.length) console.log('_None._');

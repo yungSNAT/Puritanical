@@ -1,6 +1,6 @@
 import { SUITE } from "./compare-data";
 
-export default function CompareNote({ taskId }: { taskId: string }): React.JSX.Element {
+export default function CompareNote({ taskId }: Readonly<{ taskId: string }>): React.JSX.Element {
   return (
     <p className="mt-5 max-w-3xl text-xs text-dim">
       <span className="mr-2 rounded bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] text-accent">

@@ -23,23 +23,25 @@ const PAR = Number(process.argv[4] || 8);
 
 const HERE = __dirname;
 const RAW = process.env.RAW_DIR ? path.resolve(process.env.RAW_DIR) : path.join(HERE, 'raw');
-fs.mkdirSync(RAW, { recursive: true });
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- RAW_DIR from the environment or raw/ beside this script.
+fs.mkdirSync(RAW, { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
 // Isolated config: credentials only, so no personal settings/CLAUDE.md/plugins leak in.
 const ISO = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-bench-'));
 fs.copyFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), path.join(ISO, '.credentials.json'));
-const skill = fs.readFileSync(path.join(HERE, '..', '..', 'skills', 'chisle', 'SKILL.md'), 'utf8');
+const skill = fs.readFileSync(path.join(HERE, '..', '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 const body = skill.split(/^---\s*$/m).slice(2).join('---').trim();
 if (!body) { console.error('empty chisle system prompt'); process.exit(1); }
-fs.writeFileSync(path.join(ISO, 'chisle.txt'), body + '\n');
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- The prompt file in the private temporary config directory.
+fs.writeFileSync(path.join(ISO, 'chisle.txt'), body + '\n'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 process.on('exit', () => fs.rmSync(ISO, { recursive: true, force: true }));
 
 // Response-format lines are appended here so both arms get byte-identical prompts.
 const MATH_FMT = ' End your reply with a final line of exactly: ANSWER: <value>';
 const CODE_FMT = ' Reply with exactly one JavaScript code block containing the function, and no other code block.';
 
-const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8'));
-const code = JSON.parse(fs.readFileSync(path.join(HERE, 'code.json'), 'utf8'));
+const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+const code = JSON.parse(fs.readFileSync(path.join(HERE, 'code.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
 const cells = [];
 for (const arm of ['vanilla', 'chisle']) {
@@ -49,8 +51,9 @@ for (const arm of ['vanilla', 'chisle']) {
   }
 }
 
-const todo = cells.filter((c) => !fs.existsSync(outPath(c)));
-function outPath(c) { return path.join(RAW, `${c.suite}__${c.id}__${c.arm}__${c.seed}.json`); }
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file under RAW, named from the item list in this directory.
+const todo = cells.filter((c) => !fs.existsSync(outPath(c))); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+function outPath(c) { return path.join(RAW, `${c.suite}__${c.id}__${c.arm}__${c.seed}.json`); } // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 
 console.log(`model ${MODEL} | seeds ${SEEDS} | parallel ${PAR} | ${todo.length} of ${cells.length} cells to run`);
 
@@ -65,7 +68,7 @@ function runCell(c) {
       maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env, HOME: os.tmpdir(), CLAUDE_CONFIG_DIR: ISO },
     }, (err, stdout) => {
-      if (err || !stdout) { failed++; console.log(`  fail ${c.suite}/${c.id}/${c.arm}/${c.seed}`); return resolve(); }
+      if (err || !stdout) { failed++; console.log(`  fail ${c.suite}/${c.id}/${c.arm}/${c.seed}`); resolve(); return; }
 
       // A usage-limit refusal is not a measurement -- it grades as a wrong
       // answer and silently poisons every later cell. Drop it and stop.
@@ -77,10 +80,12 @@ function runCell(c) {
       if (!(parsed.usage && parsed.usage.output_tokens) || (text.length < 300 && /limit reached|hit your .{0,20}limit|usage limit|session limit|rate_limit_error/i.test(text))) {
         limited = true;
         console.log(`  ${c.suite}/${c.id}/${c.arm}/${c.seed} LIMITED — not recorded`);
-        return resolve();
+        resolve();
+        return;
       }
 
-      fs.writeFileSync(outPath(c), stdout);
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file under RAW, named from the item list in this directory.
+      fs.writeFileSync(outPath(c), stdout); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       if (++done % 10 === 0) console.log(`  ${done}/${todo.length}`);
       resolve();
     });

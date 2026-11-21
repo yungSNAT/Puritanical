@@ -53,7 +53,13 @@ fn normalize_pi_marks_errors_and_usage() {
         json!(true),
         "an empty answer is an error"
     );
+}
 
+#[test]
+fn normalize_pi_keeps_lone_surrogates_and_refuses_stand_ins() {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let events = tmp.path().join("events.jsonl");
+    let path = utf8(&events);
     let bs = char::from(0x5C_u8);
     let event = |content: &str| {
         format!(
@@ -78,7 +84,11 @@ fn normalize_pi_marks_errors_and_usage() {
             "a stand-in code point is refused, raw or escaped"
         );
     }
+}
 
+#[test]
+fn normalize_pi_reports_usage_and_missing_input() {
+    let tmp = tempfile::tempdir().expect("temp dir");
     let usage = cmd(tmp.path(), &[], &["normalize-pi"]);
     assert_eq!(
         (usage.code, usage.stderr.as_str()),

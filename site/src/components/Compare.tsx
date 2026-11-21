@@ -14,7 +14,7 @@ export default function Compare(): React.JSX.Element {
   const [arm, setArm] = useState<string>("chisle");
 
   const task = TASKS.find((t) => t.id === taskId) ?? TASKS[0];
-  const base = task.base;
+  const { base } = task;
   const cur = task.arms.get(arm) ?? task.chisle;
   const share = pct(cur.answerTokens, base.answerTokens);
 

@@ -1,4 +1,3 @@
-/* global require, module -- Node.js runtime */
 'use strict';
 
 // Installed beside ./chisle-hooks/; running from the repo, the core is in

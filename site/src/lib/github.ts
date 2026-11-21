@@ -14,6 +14,6 @@ async function fetchRepoStats(): Promise<{ stars: number; forks: number }> {
 }
 
 // Any failure (network, status, bad JSON) shows the zero placeholder instead.
-export function getRepoStats(): Promise<{ stars: number; forks: number }> {
+export async function getRepoStats(): Promise<{ stars: number; forks: number }> {
   return fetchRepoStats().catch(() => NO_STATS);
 }

@@ -50,7 +50,7 @@ const CORRECT = [
 
 export default function Benchmarks(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const inView: boolean = useInView(ref, { once: true, margin: "-100px" });
 
   return (
     <section id="numbers" className="border-y border-line bg-surface py-28">

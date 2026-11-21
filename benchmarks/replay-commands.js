@@ -82,7 +82,8 @@ const CAP = 30000;
 const cap = (s) => (s.length > CAP ? s.slice(0, CAP) : s);
 
 function run(cmd, cwd) {
-  const r = spawnSync('bash', ['-c', `{ ${cmd}\n} 2>&1`], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } });
+  // The shell runs a command from the fixed CORPUS above (or RTK's rewrite of one), in a fixture repo.
+  const r = spawnSync('bash', ['-c', `{ ${cmd}\n} 2>&1`], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } }); // nosemgrep: javascript.lang.security.audit.dangerous-spawn-shell.dangerous-spawn-shell
   return { text: (r.stdout || '').replace(/\n$/, ''), failed: r.status !== 0 };
 }
 
@@ -96,7 +97,8 @@ function rtkRewrite(cmd) {
   } catch { return cmd; }
 }
 
-const PREV = process.env.CHISLE_PREV ? require(path.resolve(process.env.CHISLE_PREV, 'hooks', 'chisle-compress-output')) : null;
+// eslint-disable-next-line security/detect-non-literal-require, security-node/detect-non-literal-require-calls -- The compressor of the older checkout CHISLE_PREV names.
+const PREV = process.env.CHISLE_PREV ? require(path.resolve(process.env.CHISLE_PREV, 'hooks', 'chisle-compress-output')) : null; // nosemgrep: javascript_require_rule-non-literal-require
 
 function compress(text, failed, command, filters, core = { transform, limitsFor }) {
   if (failed) return text;
@@ -125,26 +127,27 @@ for (const [dir, cmd, held] of CORPUS) {
     rtk: rtkError ? rtk.text + '\n' + raw.text : rtk.text,
     'rtk+chisle': rtkError ? rtk.text + '\n' + compress(raw.text, false, 'rtk proxy ' + cmd, true) : compress(rtk.text, rtk.failed && !(rcmd === cmd && wrapped), rcmd, true),
   };
-  rows.push({ dir, cmd, held: !!held, wrapped, rtk: rcmd !== cmd, rtkError, failed: raw.failed, chars: Object.fromEntries(ARMS.map((a) => [a, cap(out[a]).length])) });
+  rows.push({ dir, cmd, held: !!held, wrapped, rtk: rcmd !== cmd, rtkError, failed: raw.failed, chars: Object.fromEntries(Object.entries(out).map(([a, text]) => [a, cap(text).length])) });
 }
 
 if (process.argv.includes('--json')) { console.log(JSON.stringify(rows, null, 2)); process.exit(0); }
 
 const fmt = (n) => n.toLocaleString('en-US');
 const pct = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—');
+const size = (r, arm) => new Map(Object.entries(r.chars)).get(arm);
 console.log(`| command | ${ARMS.join(' | ')} |`);
 console.log(`|---|${ARMS.map(() => '---:').join('|')}|`);
 for (const r of rows) {
   const tag = `${r.held ? '† ' : ''}${r.dir}: \`${r.cmd.length > 46 ? r.cmd.slice(0, 45) + '…' : r.cmd}\`${r.failed ? ' (fails)' : ''}${r.rtk ? '' : ' (rtk: no rewrite)'}${r.rtkError ? ' (rtk errors, re-run raw)' : ''}`;
-  console.log(`| ${tag} | ${ARMS.map((a) => fmt(r.chars[a])).join(' | ')} |`);
+  console.log(`| ${tag} | ${ARMS.map((a) => fmt(size(r, a))).join(' | ')} |`);
 }
 for (const [label, sel] of [['all', () => true], ['succeeded', (r) => !r.failed], ['failed', (r) => r.failed],
   ['rtk rewrites', (r) => r.rtk], ['rtk skips', (r) => !r.rtk], ['tuned', (r) => !r.held], ['held out †', (r) => r.held]]) {
   const rs = rows.filter(sel);
   if (!rs.length) continue;
-  const sum = (a) => rs.reduce((s, r) => s + r.chars[a], 0);
+  const sum = (a) => rs.reduce((s, r) => s + size(r, a), 0);
   console.log(`| **total, ${label} (${rs.length})** | ${ARMS.map((a) => `**${fmt(sum(a))}** (${pct(sum(a), sum('bare'))})`).join(' | ')} |`);
 }
-const vs = (a, b) => rows.reduce((n, r) => n + (r.chars[a] < r.chars[b] ? 1 : 0), 0);
+const vs = (a, b) => rows.reduce((n, r) => n + (size(r, a) < size(r, b) ? 1 : 0), 0);
 console.log(`\nchisle vs rtk, per command: chisle smaller ${vs('chisle', 'rtk')}, rtk smaller ${vs('rtk', 'chisle')}, tied ${rows.length - vs('chisle', 'rtk') - vs('rtk', 'chisle')}`);
 for (const r of rows.filter((r) => r.chars.rtk < r.chars.chisle)) console.log(`  rtk smaller: ${r.dir}: ${r.cmd} (${r.chars.chisle} vs ${r.chars.rtk})`);

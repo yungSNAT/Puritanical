@@ -33,7 +33,7 @@ const BARS = ROWS.map((r, i) => {
 
 export default function Filters(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const inView: boolean = useInView(ref, { once: true, margin: "-100px" });
 
   return (
     <section className="mx-auto max-w-6xl px-5 pb-28">

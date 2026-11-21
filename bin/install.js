@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global __dirname, process, require -- Node.js runtime */
+/* global process, require -- Node.js runtime */
 // chisle: cross-platform installer.
 //
 // Detects the AI coding agents on this machine and installs Chisle for each:
