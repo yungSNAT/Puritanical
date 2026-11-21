@@ -23,7 +23,7 @@ jobs:
           package-manager-cache: false
       - name: Run the Node suite with line coverage
         run: >-
-          node --test --experimental-test-coverage --test-coverage-exclude='tests/**'
+          node --test --experimental-test-coverage --test-coverage-exclude='tests/**' --test-coverage-lines=95
           --test-reporter=spec --test-reporter-destination=stdout
           --test-reporter=lcov --test-reporter-destination=coverage.lcov
           tests/*.js
