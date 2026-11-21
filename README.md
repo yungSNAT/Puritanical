@@ -1,227 +1,92 @@
-# Puritanical
-
-Puritanical checks a reported bug against the current code before editing. Its coding rules preserve the caller’s error policy for partial imports and atomic updates.
-
-For Codex, run `node bin/install.js --only codex` from this checkout. Add `--force` to refresh an existing rules block. For a single Claude Code session, run `claude --plugin-dir .` here. The package name and commands in the upstream guide below refer to the upstream release.
-
-## Benchmarks
-
-[GPT-6.2 Astra correctness and token use across 3 coding rulesets](benchmarks/results/2026-11-21-astra/README.md)
-
-## Upstream guide
-
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-dark.svg">
-    <img src="assets/readme/banner-light.svg" width="100%" alt="Chisle: fewer tokens in, fewer tokens out, same answers.">
+    <source media="(max-width: 600px) and (prefers-color-scheme: light)" srcset=".github/assets/banner-phone-light.svg">
+    <source media="(max-width: 600px)" srcset=".github/assets/banner-phone.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.svg">
+    <img src=".github/assets/banner.svg" width="100%" alt="Puritanical. No accretions. The smallest correct change, verified.">
   </picture>
 </h1>
 
-<p align="center">
-  <a href="https://github.com/JayPokale/Chisle/stargazers"><img src="https://img.shields.io/github/stars/JayPokale/Chisle?style=flat-square&color=d78a3c&label=stars" alt="GitHub stars"></a>
-  <a href="https://www.npmjs.com/package/chisle"><img src="https://img.shields.io/npm/v/chisle?style=flat-square&color=d78a3c&label=npm" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/chisle"><img src="https://img.shields.io/npm/dm/chisle?style=flat-square&color=d78a3c&label=downloads" alt="npm downloads per month"></a>
-  <img src="https://img.shields.io/badge/agents-13-d78a3c?style=flat-square" alt="Works with 13 agents">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-d78a3c?style=flat-square" alt="MIT license"></a>
-  <a href="https://github.com/JayPokale"><img src="https://img.shields.io/github/followers/JayPokale?style=flat-square&logo=github&color=d78a3c&label=follow%20%40JayPokale" alt="Follow @JayPokale on GitHub"></a>
-  <a href="https://buymeacoffee.com/jaypokale3b"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
-</p>
+<div align="center">
 
-<p align="center">
-  <sub><b>English</b> &middot; <a href="i18n/README.es.md">Español</a> &middot; <a href="i18n/README.ko.md">한국어</a> &middot; <a href="i18n/README.zh-CN.md">简体中文</a> &middot; <a href="i18n/README.ja.md">日本語</a></sub>
-</p>
+[![Tests](https://img.shields.io/github/actions/workflow/status/yungSNAT/Puritanical/test.yml?branch=main&label=tests)](https://github.com/yungSNAT/Puritanical/actions/workflows/test.yml) [![Codecov](https://codecov.io/gh/yungSNAT/Puritanical/graph/badge.svg)](https://codecov.io/gh/yungSNAT/Puritanical) [![CodeQL · no workflow](.github/assets/badges/codeql.svg)](#project-checks) [![OSV-Scanner · no workflow](.github/assets/badges/osv-scanner.svg)](#project-checks) [![SonarCloud · awaiting analysis](.github/assets/badges/sonarcloud.svg)](#project-checks) [![Codacy · awaiting analysis](.github/assets/badges/codacy.svg)](#project-checks)<br>
+[![OpenSSF Scorecard · awaiting assessment](.github/assets/badges/scorecard.svg)](#project-checks)<br>
+[![Code licence · MIT](.github/assets/badges/licence.svg)](#licence) [![GitHub release](https://img.shields.io/github/v/release/yungSNAT/Puritanical?color=66023C&labelColor=000000&style=flat)](https://github.com/yungSNAT/Puritanical/releases) [![Fork of Chisle](.github/assets/badges/fork-of.svg)](https://github.com/JayPokale/Chisle)
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/stats-dark.svg">
-    <img src="assets/readme/stats-light.svg" width="880" alt="Chisle versus the same model with no ruleset: 31% fewer billed output tokens, answers 49% shorter, oversized tool output 48% smaller, accuracy 156 of 156, the same as the bare model.">
-  </picture>
-</p>
+[Install](#install) · [Use](#use) · [The rules](#the-rules) · [Benchmarks](#benchmarks) · [Development](#development) · [Credits](#credits) · [Licence](#licence)
 
-<p align="center"><b>Shorter answers than caveman and ponytail. No accuracy lost.</b></p>
+</div>
 
-```bash
-npx chisle
-```
+Puritanical guides coding agents towards the smallest correct change. It asks the agent to read the code and its callers, check whether a reported bug still exists and preserve the behaviour callers rely on. The name comes from the Puritan practice of stripping away what scripture did not warrant.
 
-<p align="center">
-  <a href="https://buymeacoffee.com/jaypokale3b">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/readme/strip-dark.svg">
-      <img src="assets/readme/strip-light.svg" width="880" alt="Chisle is free. Its benchmarks aren't. Saved you tokens? Buy me a coffee.">
-    </picture>
-  </a>
-</p>
+## Install
 
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/race-dark.svg">
-    <img src="assets/readme/race-light.svg" width="880" alt="Same prompt, four rulesets, visible answer tokens: Chisle 567, ponytail 740, caveman 1,018, no ruleset 1,571. Chisle is 64% shorter than no ruleset.">
-  </picture>
-</p>
-
-<details>
-<summary><b>See both answers</b></summary>
-<br>
-
-The prompt: *"Implement an order state machine covering created, paid, shipped, delivered, cancelled and refunded, with the legal transitions enforced and invalid ones rejected."* Excerpts from the verbatim committed answers in [`raw-314-sidebyside/large-s2`](benchmarks/results/raw-314-sidebyside/large-s2/):
-
-<table>
-<tr><th align="left" width="50%">no ruleset: 126 lines, 1,571 answer tokens</th><th align="left" width="50%">Chisle: 58 lines, 567 answer tokens</th></tr>
-<tr valign="top"><td>
-
-```python
-class OrderStateMachine:
-    VALID_TRANSITIONS: Dict[OrderState, Set[OrderState]] = {
-        OrderState.CREATED: {OrderState.PAID, OrderState.CANCELLED},
-        …
-    }
-    def can_transition_to(self, next_state: OrderState) -> bool:
-        """Check if transition from current state to next state is valid."""
-    def transition_to(self, next_state: OrderState) -> None:
-        """Transition to the next state. Raises ValueError if transition is invalid."""
-    def get_current_state(self) -> str:
-    def get_valid_next_states(self) -> Set[str]:
-```
-
-…all inside a file-write tool call it could not make (tools were off), plus a four-scenario demo, a feature list and a recap of the transitions.
-
-</td><td>
-
-```python
-class OrderStateMachine:
-    VALID_TRANSITIONS = {
-        OrderState.CREATED: {OrderState.PAID, OrderState.CANCELLED},
-        OrderState.PAID: {OrderState.SHIPPED, OrderState.CANCELLED, OrderState.REFUNDED},
-        …
-    }
-    def transition(self, new_state: OrderState) -> None:
-        """Transition to new_state or raise ValueError if invalid."""
-        if new_state not in self.VALID_TRANSITIONS[self.state]:
-            raise ValueError(
-                f"Cannot transition from {self.state.value} to {new_state.value}"
-            )
-        self.state = new_state
-```
-
-Then a short usage block and a one-line recap of the transitions.
-
-</td></tr>
-</table>
-
-</details>
-
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/benchmark.svg">
-    <img src="assets/benchmark-light.svg" width="860" alt="Claude Code benchmark, 26 answers in one run, billed output tokens as percent of the same model with no ruleset. caveman 69%, ponytail 80%, Chisle 3.13 70%, Chisle 69%.">
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/benchmark-terminal.svg">
-    <img src="assets/benchmark-terminal-light.svg" width="860" alt="Terminal output Claude reads across 37 shell commands, as percent of the raw output: caveman 100%, ponytail 100% (rulesets only, they never touch tool output), RTK 84%, Chisle 28%.">
-  </picture>
-</p>
-
-<p align="center"><sub>Every raw transcript is committed, losses included. <a href="docs/benchmarks.md">Method and data</a> · <a href="https://jaypokale.me/writing/chisle-benchmarks-it-loses">why we publish the losses</a></sub></p>
-
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/trim-dark.svg">
-    <img src="assets/readme/trim-light.svg" width="880" alt="Animated illustration of the Chisle tool-output compressor: raw npm test output with colour codes, six identical lines and 172 passing lines becomes a short version with the codes stripped, the repeats collapsed, the middle elided with the full output saved to a file, and the failing test and its error kept.">
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/filters-dark.svg">
-    <img src="assets/readme/filters-light.svg" width="880" alt="Command-aware filters on real output, raw characters to what Claude reads: npm test 19,374 → 445 (−98%), a failing npm test 16,107 → 309 (−98%), git status 485 → 92 (−81%), git log -n 15 6,561 → 3,784 (−42%). Across 37 commands Claude reads 28% of the raw output with Chisle, 84% with RTK.">
-  </picture>
-</p>
-
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/ladder-dark.svg">
-    <img src="assets/readme/ladder-light.svg" width="880" alt="The Chisle efficiency ladder. Before writing code, stop at the first rung that holds: 1 does this need to exist at all, 2 already in this codebase, 3 does the stdlib do it, 4 a native platform feature, 5 an already-installed dependency, 6 can it be one line, 7 only then the minimum code that works.">
-  </picture>
-</p>
-
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/install-dark.svg">
-    <img src="assets/readme/install-light.svg" width="880" alt="Animated terminal: npx chisle detects Claude Code, Gemini CLI, Codex, OpenCode, Copilot CLI and Cursor, installs into each, and prints Done.">
-  </picture>
-</p>
-
-<details>
-<summary><b>Other ways to install</b></summary>
-<br>
-
-```bash
-# Claude Code plugin marketplace
-claude plugin marketplace add JayPokale/Chisle
-claude plugin install chisle@chisle
-
-# curl
-curl -fsSL https://raw.githubusercontent.com/JayPokale/Chisle/main/install.sh | bash
-```
+For Codex, clone the fork and install its rules with Node.js 18 or later.
 
 ```powershell
-# Windows
-irm https://raw.githubusercontent.com/JayPokale/Chisle/main/install.ps1 | iex
+git clone https://github.com/yungSNAT/Puritanical.git
+Set-Location Puritanical
+node bin/install.js --only codex
 ```
 
-Per-agent setup, upgrading and config: [docs/usage.md](docs/usage.md).
+The installer adds a marked block to your personal `~/.codex/AGENTS.md`. If the block already exists, add `--force` to refresh it. Start a new chat to load the rules. To remove the block, run `node bin/install.js --uninstall --only codex`.
 
-</details>
+For one Claude Code session, run `claude --plugin-dir .` from the clone. For a project that reads `AGENTS.md`, you can also copy the [project rules](AGENTS.md) into its existing instructions.
 
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
+## Use
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/commands-dark.svg">
-    <img src="assets/readme/commands-light.svg" width="880" alt="Cheat sheet: npx chisle wires every agent; --dry-run previews; --uninstall puts everything back; /chisle off pauses it; /chisle-review finds over-engineering; /chisle-audit finds bloated code and prose; npx chisle tools shows tool schemas you pay for but never use; npx chisle mcp wrap trims MCP output in any agent.">
-  </picture>
-</p>
+Ask the agent to ‘fix pagination dropping the first item on page 2’. If the reported case and nearby page boundaries already work, it should explain what it checked and leave the files alone. If the bug persists, it should fix the calculation shared by the affected callers. Review the evidence and the diff.
 
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
+The Claude Code plugin keeps its upstream command names. Use `/chisle off` to pause it and `/chisle` to resume. Its review skill looks for unnecessary code in a diff. [Commands and configuration](docs/usage.md#usage) · [Review skill](skills/chisle-review/SKILL.md)
 
-<p align="center">
-  <a href="https://www.star-history.com/?repos=JayPokale%2FChisle&type=date&legend=top-left">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jaypokale%2Fchisle&type=date&legend=top-left&theme=dark">
-      <img src="https://api.star-history.com/svg?repos=jaypokale%2Fchisle&type=date&legend=top-left" width="800" alt="GitHub stars over time">
-    </picture>
-  </a>
-</p>
+## The rules
 
-<p align="center"><img src="assets/readme/line.svg" width="100%" height="4" alt=""></p>
+1. Check the report against the current implementation and its callers.
+2. Reuse existing code, the standard library, platform features or installed dependencies where they meet the request. Write new code when the simpler options fall short.
+3. Follow the caller’s error policy. A best-effort CSV import can keep valid rows and report skips. An atomic inventory update must reject an invalid batch before changing any stock.
+4. Keep input validation, security, accessibility and error handling that prevents data loss. Keep the explanation short enough to read and complete enough to act on.
 
-<p align="center">
-  <a href="https://buymeacoffee.com/jaypokale3b">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/readme/support-dark.svg">
-      <img src="assets/readme/support-light.svg" width="880" alt="Chisle is free. Its benchmarks aren't. Every benchmark run costs real API money. Saved you tokens? Buy me a coffee.">
-    </picture>
-  </a>
-</p>
+[Full coding rules](skills/chisle/SKILL.md)
 
-<p align="center"><a href="https://github.com/JayPokale/Chisle/stargazers">⭐ Star the repo</a>: it costs zero tokens. · <a href="https://github.com/JayPokale">Follow @JayPokale</a> for more tools.</p>
+## Benchmarks
 
-<p align="center">
-  <a href="https://github.com/JayPokale/Chisle/graphs/contributors"><img src="https://contrib.rocks/image?repo=JayPokale/Chisle" alt="Contributors"></a>
-</p>
+On 21 November 2026, GPT-6.2 Astra answered 8 coding tasks twice with each ruleset. Puritanical passed all 16 attempts and used the fewest total tokens. It used the most output tokens.
 
-<p align="center"><sub><a href="LICENSE">MIT</a> · <a href="CONTRIBUTING.md">Contributing</a> · Began as a merge of <a href="https://github.com/JuliusBrussee/caveman">caveman</a> and <a href="https://github.com/DietrichGebert/ponytail">ponytail</a> (<a href="NOTICE">notices</a>) · Command filters follow <a href="https://github.com/rtk-ai/rtk">RTK</a>'s design</sub></p>
+![Passed attempts out of 16 on GPT-6.2 Astra. Puritanical 16, Chisle 15, Ponytail 14.](.github/assets/astra-results.svg)
+
+| Ruleset | Passed | Input tokens | Output tokens | Total tokens |
+| --- | ---: | ---: | ---: | ---: |
+| **Puritanical** | **16/16** | 200,652 | 4,306 | **204,958** |
+| Chisle | 15/16 | 202,220 | 4,281 | 206,501 |
+| Ponytail | 14/16 | 201,004 | 4,273 | 205,277 |
+
+The difference in passes came from the already-fixed pagination task. Puritanical left the files alone both times. Chisle added an unnecessary test once and Ponytail twice. All 3 repaired the paired task where pagination still failed. The 8 tasks were deliberately chosen and the model had no tools. [Method, per-task results and replay](benchmarks/results/2026-11-21-astra/README.md) · [All 48 answers and token counts](benchmarks/results/2026-11-21-astra/receipts.json)
+
+## Development
+
+Edit the [canonical skill](skills/chisle/SKILL.md), then run `npm run build:rules` to regenerate its copies. Run the following checks from the clone.
+
+```powershell
+npm test
+npm run check:rules
+npm run check:chart
+npm run check:samples
+```
+
+### Project checks
+
+The test workflow covers Node.js 18, 20 and 22. Codecov has no coverage upload for this fork yet. It has no CodeQL or OSV-Scanner workflow. The SonarCloud, Codacy and OpenSSF badges are awaiting results for the replacement repository. [Test workflow](.github/workflows/test.yml) · [Workflow history](https://github.com/yungSNAT/Puritanical/actions)
+
+## Credits
+
+Ryan Duguid maintains Puritanical. Jay Pokale wrote the upstream plugin. The original Puritanical banner uses Cascadia Mono and Besley lettering. [Upstream and third-party credits](NOTICE)
+
+## Licence
+
+The code uses the [MIT licence](LICENSE). The restored banner artwork is © 2026 Ryan Duguid and carries its original [Apache 2.0 licence](.github/assets/LICENSE-banner.txt). Its lettering uses glyphs distributed under SIL OFL 1.1.
+
+Scripture quoted by permission. Quotations designated (NET) are from the NET Bible® copyright ©1996, 2019 by Biblical Studies Press, L.L.C. All rights reserved.
+
+---
+
+<p align="center"><sub><i>'Do not add a thing to what I command you nor subtract from it.'</i> Deuteronomy 4:2 (<a href="https://netbible.org/">NET</a>)<br>Maintained by <a href="https://github.com/yungSNAT">yungSNAT</a>. <i>Ad gloriam eius, non meam.</i></sub></p>
