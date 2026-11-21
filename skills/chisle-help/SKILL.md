@@ -1,5 +1,7 @@
 ---
 name: chisle-help
+metadata:
+  author: Jay Pokale
 description: >
   Quick-reference card for Chisle commands. One-shot
   display, not a persistent mode. Use when the user says "chisle help", "how do I

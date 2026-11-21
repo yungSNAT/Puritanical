@@ -1,5 +1,7 @@
 ---
 name: chisle
+metadata:
+  author: Jay Pokale
 description: >
   Maximum-efficiency dev mode: terse zero-fluff prose + YAGNI/ladder-first code.
   Use when user says "chisle mode", "activate chisle", "chislify", "be efficient",

@@ -1,5 +1,7 @@
 ---
 name: chisle-audit
+metadata:
+  author: Jay Pokale
 description: >
   One-shot efficiency audit of a file, diff, or whole repo across BOTH axes at
   once: over-engineered code (reinvented stdlib, needless abstractions,

@@ -1,5 +1,7 @@
 ---
 name: chisle-review
+metadata:
+  author: Jay Pokale
 description: >
   Review a diff or file through the Chisle lens: flag over-engineering,
   speculative abstractions, reinvented stdlib, and verbose code that a lazier
