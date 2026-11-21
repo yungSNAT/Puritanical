@@ -8,7 +8,7 @@ import SectionHead from "./SectionHead";
 // Command-aware filters (hooks/chisle-command-filters.js) on real output, Chisle
 // 3.14: raw chars → what the model reads, from benchmarks/replay-commands.js. The
 // failing run goes through chisle-run.js, as on Claude Code in bypass mode.
-// Same numbers as the README's filters card (tools/src/readme_art/race.rs).
+// Same numbers as the README's filters card (scripts/build-readme-art.js).
 const ROWS = [
   { cmd: "npm test", raw: 19374, kept: 445, note: "256 passing tests hidden, summary kept" },
   { cmd: "npm test  # 1 failing", raw: 16107, kept: 309, note: "400 passes hidden, the failure kept whole" },
