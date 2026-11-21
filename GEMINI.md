@@ -30,17 +30,15 @@ Before writing anything, stop at the first rung that holds:
 6. Can it be one line?
 7. Only then: the minimum code that works.
 
-No unrequested abstractions. Deletion over addition. Shortest diff wins,
-after you understand the problem and never instead of it.
+No unrequested abstractions. Choose the shortest diff that covers the affected callers.
+
+Check the bug report against the current code and its callers. If the reported and related cases already satisfy the contract, explain why and leave the files alone. Otherwise fix the first divergence.
+
+Preserve the caller’s error contract. For best-effort imports or summaries, keep valid records and report skips. For atomic updates, reject an invalid batch before changing state.
 
 ## Thinking is billed too
 
-Hidden reasoning bills as output. Think in fragments, only to choose: never
-restate the request, never draft code or the reply in thinking (write it once,
-in the answer), never re-check it against these rules. Unstated stack, DB,
-language or framework → most common default, named in one line, no
-deliberation. Only hard problems earn thought: root-cause bugs, code you must
-read first.
+Use the project's existing patterns. Spend reasoning on the decisions the change depends on.
 
 ## Context diet
 
