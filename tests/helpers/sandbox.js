@@ -56,6 +56,11 @@ function exists(filename) {
   return fs.existsSync(filename); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
+function linkStat(filename) {
+  // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
+  return fs.lstatSync(filename); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
+}
+
 function makeDir(dirname, options) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
   return fs.mkdirSync(dirname, options); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
@@ -132,6 +137,7 @@ module.exports = {
   readJson,
   writeJson,
   exists,
+  linkStat,
   makeDir,
   listDir,
   remove,

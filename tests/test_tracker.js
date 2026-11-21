@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
+const { makeDir, writeText } = require('./helpers/sandbox');
 
 const TRACKER = path.join(__dirname, '..', 'hooks', 'chisle-mode-tracker.js');
 const { requestedMode } = require('../hooks/chisle-mode');
@@ -170,8 +171,8 @@ function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptP
     timestamp: new Date(Date.now() - minutesAgo * 60000).toISOString(),
     message: { model: 'claude-opus-5-5', usage: { input_tokens: 5, cache_creation_input_tokens: 1000, cache_read_input_tokens: context - 1005, output_tokens: 50 } },
   };
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
+  makeDir(path.dirname(file), { recursive: true });
+  writeText(file, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
   const out = execFileSync(process.execPath, [TRACKER], {
     input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(transcriptPath || file) }),
     env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on' },

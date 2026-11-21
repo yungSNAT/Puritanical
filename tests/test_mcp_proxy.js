@@ -10,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
+const { linkStat, readText } = require('./helpers/sandbox');
 
 const ROOT = path.join(__dirname, '..');
 const PROXY = path.join(ROOT, 'hooks', 'chisle-mcp-proxy.js');
@@ -307,8 +308,8 @@ test('mcp wrap replaces a planted proxy-file link without writing through it', (
     ['chisle-mcp-proxy.js', fs.readFileSync(PROXY, 'utf8')],
     ['package.json', '{ "type": "commonjs" }\n'],
   ]) {
-    const st = fs.lstatSync(path.join(proxyDir, file));
+    const st = linkStat(path.join(proxyDir, file));
     assert.ok(st.isFile() && !st.isSymbolicLink(), file);
-    assert.equal(fs.readFileSync(path.join(proxyDir, file), 'utf8'), content, file);
+    assert.equal(readText(path.join(proxyDir, file)), content, file);
   }
 });
