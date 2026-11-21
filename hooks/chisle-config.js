@@ -84,7 +84,7 @@ const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
 function readSettingsText(filename) {
   // User configuration supports symlinks into a dotfiles checkout.
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolve the configured settings file; the reader verifies its type, identity and size.
-  const target = fs.realpathSync(filename);
+  const target = fs.realpathSync(filename); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   return readRegularFile(target, MAX_CONFIG_BYTES);
 }
 

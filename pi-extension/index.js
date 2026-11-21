@@ -44,6 +44,10 @@ function loadRules() {
   }
 }
 
+function sameDigest(previous, current) {
+  return previous !== undefined && crypto.timingSafeEqual(previous, current);
+}
+
 // OMP (oh-my-pi) ships a subset of Pi's sessionManager: buildContextEntries and
 // getBranch are absent there, so calling one throws inside session_start and
 // takes the whole extension down —
@@ -52,10 +56,6 @@ function loadRules() {
 // session state, and every caller here already behaves correctly on "unknown":
 // no mode entry leaves `active` at getDefaultMode(), and rulesInContext=false
 // re-injects the ruleset, which promptHasRules still de-duplicates.
-function sameDigest(previous, current) {
-  return previous !== undefined && crypto.timingSafeEqual(previous, current);
-}
-
 function sessionEntries(ctx, method) {
   try {
     const sm = ctx && ctx.sessionManager;
