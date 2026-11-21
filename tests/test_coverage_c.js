@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global Buffer, process, require, setImmediate -- Node.js runtime */
+/* global process, require -- Node.js runtime */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

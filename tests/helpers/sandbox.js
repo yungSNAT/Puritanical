@@ -80,7 +80,7 @@ function clearModule(absPath) {
 
 function loadModule(absPath) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  return require(absPath); // eslint-disable-line security/detect-non-literal-require -- Test-only helper; loads modules from the repository checkout.
+  return require(absPath); // eslint-disable-line security/detect-non-literal-require, security-node/detect-non-literal-require-calls -- Test-only helper; loads modules from the repository checkout.
 }
 
 function loadFresh(absPath) {
