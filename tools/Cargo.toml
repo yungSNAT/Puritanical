@@ -27,7 +27,3 @@ many_single_char_names = "allow"
 # `endsWith('.json')` is case-sensitive; the port keeps it so.
 case_sensitive_file_extension_comparisons = "allow"
 too_many_lines = "warn"
-
-[profile.release]
-lto = true
-codegen-units = 1

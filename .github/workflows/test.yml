@@ -28,6 +28,15 @@ jobs:
         run: bash -n hooks/chisle-statusline.sh && bash -n install.sh
       - name: Installer smoke test
         run: node bin/install.js --list && node bin/install.js --help
+      # The required gate for the generated files. rustup installs the
+      # toolchain pinned in tools/rust-toolchain.toml.
+      - name: Test the tools crate and check the generated files
+        if: matrix.node == 22
+        working-directory: tools
+        run: |
+          rustup toolchain install
+          cargo test --locked
+          for c in rules chart samples readme-art; do target/debug/puritanical-tools "$c" --check; done
 
   windows-installer:
     runs-on: windows-latest
