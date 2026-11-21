@@ -102,7 +102,42 @@ test('getDefaultMode ignores invalid CHISLE_DEFAULT_MODE', () => {
 
 // ── major-version update notice ──────────────────────────────────────────────
 
-const { majorOf, majorUpdateNotice } = require('../hooks/chisle-activate');
+const { majorOf, majorUpdateNotice, latestVersion } = require('../hooks/chisle-activate');
+
+test('update lookup refreshes stale cache and reuses a fresh result offline', async (t) => {
+  const dir = tmpDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const cache = path.join(dir, 'update.json');
+  fs.writeFileSync(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
+    ok: true, json: async () => ({ version: '4.0.0' }),
+  }));
+  assert.equal(await latestVersion(cache), '4.0.0');
+  assert.equal(JSON.parse(fs.readFileSync(cache, 'utf8')).latest, '4.0.0');
+  assert.equal(await latestVersion(cache), '4.0.0');
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test('update lookup bounds the response body and preserves cache on failure', async (t) => {
+  const dir = tmpDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const cache = path.join(dir, 'update.json');
+  fs.writeFileSync(cache, 'old cache');
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false }));
+  assert.equal(await latestVersion(cache), null);
+  fetchMock.mock.mockImplementation(async (_url, { signal }) => ({
+    ok: true,
+    json: () => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve({ version: '99.0.0' }), 3000);
+      signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      }, { once: true });
+    }),
+  }));
+  assert.equal(await latestVersion(cache), null);
+  assert.equal(fs.readFileSync(cache, 'utf8'), 'old cache');
+});
 
 test('majorOf parses majors, rejects garbage', () => {
   assert.equal(majorOf('1.1.2'), 1);
@@ -153,6 +188,11 @@ test('REGRESSION #2: startup gets the full ruleset', () => {
   const out = activate(JSON.stringify({ source: 'startup' }));
   assert.ok(out.length > 2000, `expected full ruleset, got ${out.length} chars`);
   assert.match(out, /CHISLE ACTIVE/);
+});
+
+test('startup honours disabled mode and explains a legacy intensity setting', () => {
+  assert.equal(activate('{}', { CHISLE_DEFAULT_MODE: 'off' }), 'OK');
+  assert.match(activate('{}', { CHISLE_DEFAULT_MODE: 'lite' }), /CHISLE NOTE: .*lite.*CHISLE_DEFAULT_MODE/);
 });
 
 test('REGRESSION #2: resume/clear/compact do not re-inject the ruleset', () => {

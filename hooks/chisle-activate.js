@@ -42,10 +42,7 @@ async function latestVersion(cachePath) {
     if (c && Date.now() - c.checkedAt < UPDATE_CACHE_MS) return c.latest;
   } catch (e) {}
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 1500);
-    const res = await fetch('https://registry.npmjs.org/chisle/latest', { signal: ctrl.signal });
-    clearTimeout(t);
+    const res = await fetch('https://registry.npmjs.org/chisle/latest', { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return null;
     const latest = (await res.json()).version;
     try {
@@ -193,4 +190,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { majorOf, majorUpdateNotice };
+module.exports = { majorOf, majorUpdateNotice, latestVersion };

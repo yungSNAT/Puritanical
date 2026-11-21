@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const CLI = path.join(__dirname, '..', 'bin', 'install.js');
 
@@ -41,6 +41,20 @@ test('unknown flag exits 2', () => {
   const { status, out } = runCLI(['--frobnicate']);
   assert.equal(status, 2);
   assert.match(out, /unknown flag/);
+});
+
+test('tools subcommand reports an empty config and rejects invalid options', (t) => {
+  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-tools-'));
+  t.after(() => fs.rmSync(cfg, { recursive: true, force: true }));
+  const invoke = (...args) => spawnSync(process.execPath,
+    [CLI, 'tools', '--config-dir', cfg, ...args], { encoding: 'utf8', timeout: 5000 });
+  const empty = invoke();
+  assert.equal(empty.status, 0);
+  assert.match(empty.stdout, /no tool schemas or skill listings found in 0 session/);
+  const invalid = invoke('--days', '0');
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /positive number/);
+  assert.deepEqual(fs.readdirSync(cfg), []);
 });
 
 test('--only with bad agent exits 2', () => {
@@ -160,7 +174,7 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   // --only claude. Uninstall must stay scoped (#39): without --only it removes
   // every host's integration, and with a real `claude` on PATH it would run
   // `claude plugin uninstall` against the live install. So: empty PATH, temp HOME.
-  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-cfg-'));
+  const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle config '));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-home-'));
   const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-nopath-'));
   const env = { HOME: home, USERPROFILE: home, PATH: emptyBin };
@@ -171,10 +185,40 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   // Dry-run must not have altered the seeded file.
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8')), { model: 'opus' });
 
+  const install = ['--only', 'claude', '--config-dir', cfg];
+  assert.equal(runCLI(install, { env }).status, 0);
+  const settingsPath = path.join(cfg, 'settings.json');
+  const installed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const hookPath = path.join(cfg, 'chisle-hooks', 'chisle-activate.js');
+  assert.equal(installed.hooks.SessionStart[0].hooks[0].command, `"${process.execPath}" "${hookPath}"`);
+  const extension = process.platform === 'win32' ? 'ps1' : 'sh';
+  assert.ok(installed.statusLine.command.endsWith(`"${path.join(cfg, 'chisle-hooks', 'chisle-statusline.' + extension)}"`));
+  assert.equal(runCLI([...install, '--update'], { env }).status, 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(settingsPath, 'utf8')), installed);
+  const startup = execFileSync(process.execPath, [hookPath], {
+    input: '{}', encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, ...env, CLAUDE_CONFIG_DIR: cfg, XDG_CONFIG_HOME: home, CHISLE_DEFAULT_MODE: 'on' },
+  });
+  assert.match(startup, /CHISLE ACTIVE/);
+  assert.doesNotMatch(startup, /STATUSLINE SETUP NEEDED/);
+  assert.equal(fs.readFileSync(path.join(cfg, '.chisle-active'), 'utf8'), 'on');
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(cfg, '.chisle-compress-stats.json'), JSON.stringify({ savedChars: 4000 }));
+    const badge = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(cfg, 'chisle-hooks', 'chisle-statusline.ps1')], {
+      encoding: 'utf8', timeout: 10000, env: { ...process.env, CLAUDE_CONFIG_DIR: cfg },
+    });
+    assert.match(badge, /\[CHISLE\].*1k tok/);
+    assert.doesNotMatch(badge, /[\r\n]/);
+  }
+
   // Uninstall against the same dir must not corrupt the foreign settings.
   runCLI(['--uninstall', '--only', 'claude', '--config-dir', cfg], { env });
   const after = JSON.parse(fs.readFileSync(path.join(cfg, 'settings.json'), 'utf8'));
   assert.equal(after.model, 'opus', 'foreign settings preserved through uninstall');
+  assert.equal(after.statusLine, undefined);
+  assert.equal(after.hooks, undefined);
+  assert.equal(fs.existsSync(hookPath), false);
 
   for (const d of [cfg, home, emptyBin]) fs.rmSync(d, { recursive: true, force: true });
 });

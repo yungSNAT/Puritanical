@@ -113,7 +113,10 @@ function chisleExtension(pi) {
 
   function updateStatus(ctx) {
     if (!ctx.hasUI) return;
-    if (!active) return ctx.ui.setStatus('chisle', undefined);
+    if (!active) {
+      ctx.ui.setStatus('chisle', undefined);
+      return;
+    }
     const tokens = Math.floor(savedChars / 4);
     const saved = tokens >= 1000 ? ` ⇣${Math.floor(tokens / 1000)}k tok` : tokens ? ` ⇣${tokens} tok` : '';
     ctx.ui.setStatus('chisle', ctx.ui.theme.fg('accent', `[CHISLE]${saved}`));

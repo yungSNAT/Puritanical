@@ -80,6 +80,24 @@ test('Claude replay never counts a failed tool call as compressible', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('Claude replay counts duplicate successful results separately from elision', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-replay-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const projects = path.join(root, 'projects', 'sample');
+  fs.mkdirSync(projects, { recursive: true });
+  const messages = ['first', 'second'].flatMap(id => [
+    { message: { content: [{ type: 'tool_use', id, name: 'Bash' }] } },
+    { message: { content: [{ type: 'tool_result', tool_use_id: id, content: output(500) }] } },
+  ]);
+  fs.writeFileSync(path.join(projects, 'session.jsonl'), messages.map(JSON.stringify).join('\n'));
+  const report = execFileSync(process.execPath, [REPLAY, 'claude'], {
+    env: { ...process.env, CLAUDE_CONFIG_DIR: root, CHISLE_COMPRESS_DEDUP: '1' }, encoding: 'utf8',
+  });
+  assert.match(report, /tool_results scanned:\s+2 /);
+  assert.match(report, /scrubbed\/elided outputs:\s+1 /);
+  assert.match(report, /deduped repeat outputs:\s+1 /);
+});
+
 test('Claude replay reports per-tool compression savings', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-claude-breakdown-'));
 
