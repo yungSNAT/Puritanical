@@ -1,0 +1,29 @@
+[package]
+name = "puritanical-tools"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.100"
+description = "Maintainer tooling for Chisle: generated rule copies, charts, site samples, README art and benchmark analysis."
+license = "MIT"
+repository = "https://github.com/yungSNAT/Puritanical"
+publish = false
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+ref_option = "warn"
+# JavaScript numbers are doubles: the port casts counts to f64 and back as Node
+# did, and every count stays far below 2^53.
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+# The SVG layouts keep the JavaScript's short names (t, l, o, x, y, w, h, d).
+many_single_char_names = "allow"
+# `endsWith('.json')` is case-sensitive; the port keeps it so.
+case_sensitive_file_extension_comparisons = "allow"
+too_many_lines = "warn"

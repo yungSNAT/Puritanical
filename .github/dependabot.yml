@@ -7,6 +7,10 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /tools
+    schedule:
+      interval: weekly
   - package-ecosystem: npm
     directory: /.github/tools/codacy
     schedule:

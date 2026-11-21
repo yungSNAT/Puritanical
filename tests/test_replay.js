@@ -9,31 +9,12 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const REPLAY = path.join(__dirname, '..', 'benchmarks', 'replay-compress.js');
-const NORMALIZE = path.join(__dirname, '..', 'benchmarks', 'normalize-pi.js');
 
 isolateWorkingDirectory();
 
 function output(lines) {
   return Array.from({ length: lines }, (_, i) => `line ${i} ${'x'.repeat(80)}`).join('\n');
 }
-
-test('Pi live JSONL normalizes to the existing benchmark cell schema', () => {
-  const dir = path.resolve('sessions');
-  fs.mkdirSync('sessions');
-  const file = path.join(dir, 'events.jsonl');
-  fs.writeFileSync(file, [
-    JSON.stringify({ type: 'session', version: 3 }),
-    JSON.stringify({ type: 'message_end', message: {
-      role: 'assistant', content: [{ type: 'text', text: 'answer' }],
-      usage: { output: 42 }, stopReason: 'stop',
-    } }),
-  ].join('\n'));
-
-  const result = JSON.parse(execFileSync(process.execPath, [NORMALIZE, file], { encoding: 'utf8' }));
-  assert.deepEqual(result, {
-    harness: 'pi', is_error: false, result: 'answer', usage: { output_tokens: 42 },
-  });
-});
 
 test('Pi replay reads toolResult messages and reports marginal post-truncation savings', () => {
   const dir = path.resolve('sessions');

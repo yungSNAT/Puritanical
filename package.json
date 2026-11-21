@@ -74,13 +74,15 @@
   },
   "scripts": {
     "test": "node --test tests/*.js",
-    "build:rules": "node scripts/build-rules.js",
-    "check:rules": "node scripts/build-rules.js --check",
-    "build:chart": "node scripts/build-chart.js",
-    "check:chart": "node scripts/build-chart.js --check",
+    "build:rules": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- rules",
+    "check:rules": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- rules --check",
+    "build:chart": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- chart",
+    "check:chart": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- chart --check",
     "bench": "bash benchmarks/run-live.sh",
-    "build:samples": "node scripts/build-samples.js",
-    "check:samples": "node scripts/build-samples.js --check"
+    "build:samples": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- samples",
+    "check:samples": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- samples --check",
+    "build:readme-art": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- readme-art",
+    "check:readme-art": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- readme-art --check"
   },
   "files": [
     "bin/",
