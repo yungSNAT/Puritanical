@@ -1,0 +1,45 @@
+name: Codacy analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install the Codacy Analysis CLI
+        run: |
+          npm install --prefix "$RUNNER_TEMP/codacy" --no-audit --no-fund @codacy/analysis-cli@0.32.0
+          echo "$RUNNER_TEMP/codacy/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Analyse the repository
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          codacy-analysis init --auto
+          scope=()
+          if [[ -n "$BASE_SHA" ]]; then
+            scope=(--diff "$BASE_SHA")
+          fi
+          codacy-analysis analyze "${scope[@]}" --install-dependencies --output-format sarif --output "$RUNNER_TEMP/codacy.sarif"
+      - name: Retain findings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codacy-sarif
+          path: ${{ runner.temp }}/codacy.sarif
+          if-no-files-found: error
