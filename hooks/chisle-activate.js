@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getDefaultMode, getClaudeDir, safeWriteFlag, legacySetting, resolveSections, filterSections } = require('./chisle-config');
+const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, legacySetting, resolveSections, filterSections } = require('./chisle-config');
 
 // ── Update-notice helpers (pure — tested directly) ─────────────────────────
 // Minor/patch releases stay quiet: a nudge per major is signal, more is spam.
@@ -24,6 +24,7 @@ function majorOf(v) {
 function majorUpdateNotice(installed, latest) {
   const i = majorOf(installed), l = majorOf(latest);
   if (i == null || l == null || l <= i) return null;
+  if (typeof latest !== 'string' || latest.length > 128 || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(latest)) return null;
   return '\n\nCHISLE UPDATE AVAILABLE: v' + latest + ' (major; you run v' + installed + '). ' +
     'Mention this to the user once: update with `claude plugin update chisle@chisle` or `npx chisle`.';
 }
@@ -37,17 +38,14 @@ function installedVersion() {
 
 // Registry lookup, cached on disk. Network capped at 1.5s inside the 5s hook budget.
 async function latestVersion(cachePath) {
-  try {
-    const c = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    if (c && Date.now() - c.checkedAt < UPDATE_CACHE_MS) return c.latest;
-  } catch (e) {}
+  const cached = readJsonFile(cachePath, 1024);
+  if (cached && Date.now() - cached.checkedAt < UPDATE_CACHE_MS) return cached.latest;
   try {
     const res = await fetch('https://registry.npmjs.org/chisle/latest', { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return null;
     const latest = (await res.json()).version;
-    try {
-      fs.writeFileSync(cachePath, JSON.stringify({ checkedAt: Date.now(), latest }), { mode: 0o600 });
-    } catch (e) {}
+    if (typeof latest !== 'string' || latest.length > 128) return null;
+    safeWriteFlag(cachePath, JSON.stringify({ checkedAt: Date.now(), latest }));
     return latest;
   } catch (e) { return null; }
 }

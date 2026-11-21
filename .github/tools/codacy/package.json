@@ -1,0 +1,7 @@
+{
+  "name": "puritanical-codacy-ci",
+  "private": true,
+  "dependencies": {
+    "@codacy/analysis-cli": "0.32.0"
+  }
+}

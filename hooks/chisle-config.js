@@ -190,10 +190,10 @@ function parseJsonLoose(raw) {
   } catch (e) { return null; }
 }
 
-function readJsonFile(p) {
+function readJsonFile(p, maxBytes = Infinity) {
   try {
     const st = fs.lstatSync(p);
-    if (st.isSymbolicLink() || !st.isFile()) return null;
+    if (st.isSymbolicLink() || !st.isFile() || st.size > maxBytes) return null;
     return parseJsonLoose(fs.readFileSync(p, 'utf8'));
   } catch (e) { return null; }
 }
@@ -358,7 +358,7 @@ function readFlag(flagPath) {
 
 module.exports = {
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
-  VALID_MODES, safeWriteFlag, readFlag,
+  VALID_MODES, safeWriteFlag, readFlag, readJsonFile,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,
   getActiveOutputStyle, explicitSections, resolveSections,
 };

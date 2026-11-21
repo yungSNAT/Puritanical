@@ -46,4 +46,4 @@ if ($sitem -and -not ($sitem.Attributes -band [IO.FileAttributes]::ReparsePoint)
 }
 
 # One mode, one badge.
-[Console]::Write("$orange[CHISLE]$reset$suffix")
+Write-Host -NoNewline "$orange[CHISLE]$reset$suffix"

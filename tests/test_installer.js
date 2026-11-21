@@ -204,7 +204,8 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   assert.equal(fs.readFileSync(path.join(cfg, '.chisle-active'), 'utf8'), 'on');
   if (process.platform === 'win32') {
     fs.writeFileSync(path.join(cfg, '.chisle-compress-stats.json'), JSON.stringify({ savedChars: 4000 }));
-    const badge = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    const powershell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const badge = execFileSync(powershell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
       path.join(cfg, 'chisle-hooks', 'chisle-statusline.ps1')], {
       encoding: 'utf8', timeout: 10000, env: { ...process.env, CLAUDE_CONFIG_DIR: cfg },
     });

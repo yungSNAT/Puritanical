@@ -8,7 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { VALID_MODES, safeWriteFlag, readFlag, getDefaultMode } = require('../hooks/chisle-config');
+const { VALID_MODES, safeWriteFlag, readFlag, readJsonFile, getDefaultMode } = require('../hooks/chisle-config');
 const { symlinkSkip } = require('./fixtures/symlinks');
 
 // ── VALID_MODES ──────────────────────────────────────────────────────────────
@@ -108,12 +108,12 @@ test('update lookup refreshes stale cache and reuses a fresh result offline', as
   const dir = tmpDir();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const cache = path.join(dir, 'update.json');
-  fs.writeFileSync(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
+  safeWriteFlag(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
     ok: true, json: async () => ({ version: '4.0.0' }),
   }));
   assert.equal(await latestVersion(cache), '4.0.0');
-  assert.equal(JSON.parse(fs.readFileSync(cache, 'utf8')).latest, '4.0.0');
+  assert.equal(readJsonFile(cache).latest, '4.0.0');
   assert.equal(await latestVersion(cache), '4.0.0');
   assert.equal(fetchMock.mock.callCount(), 1);
 });
@@ -122,7 +122,8 @@ test('update lookup bounds the response body and preserves cache on failure', as
   const dir = tmpDir();
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const cache = path.join(dir, 'update.json');
-  fs.writeFileSync(cache, 'old cache');
+  const stale = { checkedAt: 0, latest: '1.0.0' };
+  safeWriteFlag(cache, JSON.stringify(stale));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({ ok: false }));
   assert.equal(await latestVersion(cache), null);
   fetchMock.mock.mockImplementation(async (_url, { signal }) => ({
@@ -136,7 +137,7 @@ test('update lookup bounds the response body and preserves cache on failure', as
     }),
   }));
   assert.equal(await latestVersion(cache), null);
-  assert.equal(fs.readFileSync(cache, 'utf8'), 'old cache');
+  assert.deepEqual(readJsonFile(cache), stale);
 });
 
 test('majorOf parses majors, rejects garbage', () => {
@@ -154,6 +155,8 @@ test('notice fires only on a major jump', () => {
   assert.equal(majorUpdateNotice('2.0.0', '1.9.9'), null);  // downgrade: silent
   assert.equal(majorUpdateNotice(null, '2.0.0'), null);     // unknown install: silent
   assert.equal(majorUpdateNotice('1.0.0', null), null);     // no registry data: silent
+  assert.equal(majorUpdateNotice('1.0.0', '4.0.0 extra text'), null);
+  assert.match(majorUpdateNotice('1.0.0', '4.0.0-rc.1'), /4\.0\.0-rc\.1/);
 });
 
 test('requiring chisle-activate has no side effects', () => {
