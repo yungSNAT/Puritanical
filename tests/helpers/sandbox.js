@@ -1,3 +1,4 @@
+/* global __dirname, module, process, require -- Node.js runtime */
 'use strict';
 
 const fs = require('node:fs');
@@ -29,12 +30,12 @@ function tempRoot(t, prefix) {
 
 function readText(filename) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  return fs.readFileSync(filename, 'utf8');
+  return fs.readFileSync(filename, 'utf8'); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
 function writeText(filename, text, options) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  fs.writeFileSync(filename, text, options);
+  fs.writeFileSync(filename, text, options); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
 function readJson(filename) {
@@ -47,17 +48,17 @@ function writeJson(filename, value) {
 
 function exists(filename) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  return fs.existsSync(filename);
+  return fs.existsSync(filename); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
 function makeDir(dirname, options) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  return fs.mkdirSync(dirname, options);
+  return fs.mkdirSync(dirname, options); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
 function listDir(dirname) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  return fs.readdirSync(dirname);
+  return fs.readdirSync(dirname); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
 function remove(filename, options) {
@@ -79,7 +80,7 @@ function clearModule(absPath) {
 
 function loadModule(absPath) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  return require(absPath);
+  return require(absPath); // eslint-disable-line security/detect-non-literal-require -- Test-only helper; loads modules from the repository checkout.
 }
 
 function loadFresh(absPath) {
@@ -88,13 +89,13 @@ function loadFresh(absPath) {
 }
 
 function saveEnvironment(keys) {
-  return Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  return Object.fromEntries(keys.map(key => [key, process.env[key]])); // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
 }
 
 function restoreEnvironment(saved) {
   for (const [key, value] of Object.entries(saved)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
+    if (value === undefined) delete process.env[key]; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
+    else process.env[key] = value; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
   }
 }
 

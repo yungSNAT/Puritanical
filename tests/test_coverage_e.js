@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process, require -- Node.js runtime */
 'use strict';
 
 const { test } = require('node:test');

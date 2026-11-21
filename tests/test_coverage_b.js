@@ -20,16 +20,16 @@ function setEnv(t, values) {
   const previous = new Map();
   for (const [name, value] of Object.entries(values)) {
     previous.set(name, Object.prototype.hasOwnProperty.call(process.env, name)
-      ? process.env[name]
+      ? process.env[name] // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
       : undefined);
-    if (value === undefined) delete process.env[name];
-    else process.env[name] = String(value);
+    if (value === undefined) delete process.env[name]; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
+    else process.env[name] = String(value); // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
   }
 
   t.after(() => {
     for (const [name, value] of previous) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
+      if (value === undefined) delete process.env[name]; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
+      else process.env[name] = value; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
     }
   });
 }

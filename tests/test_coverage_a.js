@@ -1,3 +1,4 @@
+/* global module, process, require -- Node.js runtime */
 'use strict';
 
 const { test } = require('node:test');
@@ -65,17 +66,17 @@ function withEnv(changes, fn) {
   const previous = new Map();
   for (const [key, value] of Object.entries(changes)) {
     previous.set(key, Object.prototype.hasOwnProperty.call(process.env, key)
-      ? process.env[key]
+      ? process.env[key] // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
       : undefined);
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = String(value);
+    if (value === undefined) delete process.env[key]; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
+    else process.env[key] = String(value); // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
   }
   try {
     return fn();
   } finally {
     for (const [key, value] of previous) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+      if (value === undefined) delete process.env[key]; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
+      else process.env[key] = value; // eslint-disable-line security/detect-object-injection -- Keys come from the test's fixed list of environment variable names.
     }
   }
 }
