@@ -49,10 +49,9 @@ const proc = this.constructor.constructor('return process')();
 proc.on('SIGTERM', () => {});
 this.constructor.constructor('return setInterval')()(() => {}, 1000);`;
 
-// Escapes vm, prints a passing verdict in the format grade-cell.js once used,
-// and exits before the cases run.
-const FORGE = `const proc = this.constructor.constructor('return process')();
-proc.stdout.write(JSON.stringify({ pass: true, why: '' }));
+// Escapes vm, prints its own result and exits before the cases run.
+const forge = (result) => `const proc = this.constructor.constructor('return process')();
+proc.stdout.write(${JSON.stringify(JSON.stringify(result))});
 proc.exit(0);`;
 
 const cell = (code) => ({ result: 'Here it is.\n\n```js\n' + code + '\n```\n', usage: { output_tokens: 1 } });
@@ -67,7 +66,10 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
   const raw = tempRoot(t, 'grade-sandbox-');
   const secret = under(raw, 'host-secret.txt');
   writeText(secret, 'host only');
-  const cells = { 1: [CORRECT, CORRECT], 2: [escape(secret), CORRECT], 3: [HANG, CORRECT], 4: [FORGE, CORRECT] };
+  const cells = {
+    1: [CORRECT, CORRECT], 2: [escape(secret), CORRECT], 3: [HANG, CORRECT],
+    4: [forge({ pass: true, why: '' }), CORRECT], 5: [forge({ got: Array(10).fill('false') }), CORRECT],
+  };
   for (const [seed, [vanilla, chisle]] of Object.entries(cells)) {
     writeJson(under(raw, `code__balanced__vanilla__${seed}.json`), cell(vanilla));
     writeJson(under(raw, `code__balanced__chisle__${seed}.json`), cell(chisle));
@@ -87,10 +89,10 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
   assert.equal(r.status, 0, r.stderr);
   const rows = JSON.parse(r.stdout).rows;
   const row = (arm, seed) => rows.find((x) => x.arm === arm && x.seed === seed);
-  assert.equal(rows.length, 8);
+  assert.equal(rows.length, 10);
 
   for (const arm of ['vanilla', 'chisle']) assert.deepEqual([row(arm, 1).pass, row(arm, 1).why], [true, ''], `${arm} seed 1`);
-  for (const seed of [2, 3, 4]) assert.equal(row('chisle', seed).pass, true);
+  for (const seed of [2, 3, 4, 5]) assert.equal(row('chisle', seed).pass, true);
 
   const seen = JSON.parse(row('vanilla', 2).why.match(/ -> (.*) want true$/)[1]);
   assert.equal(seen.usr, true, 'the escape reached the real fs module');
@@ -98,13 +100,15 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
   assert.match(seen.cases, /^unreadable: /);
   assert.ok(seen.env.every((k) => k === 'PWD'), `environment: ${seen.env.join(', ')}`);
 
-  // grade.js decides the verdict outside the sandbox, so a forged pass fails.
+  // grade.js decides the verdict outside the sandbox: a pass in the old
+  // format fails, and forged outputs are compared like any others.
   assert.equal(row('vanilla', 4).pass, false);
+  assert.deepEqual([row('vanilla', 5).pass, row('vanilla', 5).why], [false, '["(a[b]{c})"] -> false want true']);
 
   // spawnSync reports the deadline's kill as ETIMEDOUT.
   assert.equal(row('vanilla', 3).pass, false);
   assert.match(row('vanilla', 3).why, /^sandbox: (SIGKILL|spawnSync \S+ ETIMEDOUT)$/);
   assert.ok(seconds >= 24, `the hanging answer ended before its deadline (${seconds} s)`);
-  // One 24 s deadline (3 s per case plus 2) and 7 quick cells.
+  // One 24 s deadline (3 s per case plus 2) and 9 quick cells.
   assert.ok(seconds < 60, `grading took ${seconds} s`);
 });

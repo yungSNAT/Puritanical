@@ -19,7 +19,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
-- `benchmarks/quality/grade.js`: a code answer that escaped `vm` could print a passing verdict and exit, and the grader recorded a pass. The sandbox now gets each case's arguments and reports only the outputs; `grade.js` holds the expected values and decides pass or fail outside it. `tests/test_grade_sandbox.js` adds an answer that forges the old verdict, which fails.
+- `benchmarks/quality/grade.js`: a code answer that escaped `vm` could print a passing verdict and exit, and the grader recorded a pass. The sandbox now gets each case's arguments and reports only the outputs; `grade.js` holds the expected values and decides pass or fail outside it. `tests/test_grade_sandbox.js` adds answers that forge the old verdict or wrong outputs; both fail.
 
 ## [3.14.2] - 2026-11-19
 
