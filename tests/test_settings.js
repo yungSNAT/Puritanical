@@ -17,11 +17,11 @@ isolateWorkingDirectory();
 // ── stripJsonComments ────────────────────────────────────────────────────────
 
 test('stripJsonComments removes // and /* */ but spares strings', () => {
-  const src = '{\n  "a": 1, // line\n  /* block */ "b": "http://x", \n}';
+  const src = '{\n  "a": 1, // line\n  /* block */ "b": "https://x", \n}';
   const out = S.stripJsonComments(src);
   const parsed = JSON.parse(out);
   assert.equal(parsed.a, 1);
-  assert.equal(parsed.b, 'http://x'); // // inside string survived
+  assert.equal(parsed.b, 'https://x'); // // inside string survived
 });
 
 test('readSettings parses JSONC with trailing commas', () => {

@@ -14,6 +14,6 @@ check('999@33', applyDiscount(999, 33), 669);
 check('1000@15', applyDiscount(1000, 15), 850);
 
 // The visible suite must still pass as shipped.
-try { execFileSync('node', ['test/run.js'], { stdio: 'pipe' }); } catch (e) { bad++; console.log('FAIL visible suite still red'); }
+try { execFileSync(process.execPath, ['test/run.js'], { stdio: 'pipe' }); } catch (e) { bad++; console.log('FAIL visible suite still red'); }
 
 process.exit(bad ? 1 : 0);

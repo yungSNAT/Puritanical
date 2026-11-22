@@ -93,7 +93,7 @@ function run(cmd, cwd) {
 // the local rtk binary's output for a CORPUS command, which run() then executes in a shell.
 function rtkRewrite(cmd) {
   const input = JSON.stringify({ session_id: 'bench', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: cmd } });
-  const r = spawnSync('rtk', ['hook', 'claude'], { input, encoding: 'utf8' });
+  const r = spawnSync('rtk', ['hook', 'claude'], { input, encoding: 'utf8' }); // NOSONAR: rtk from PATH, as the benchmark measures the user's installed rtk.
   try {
     const out = JSON.parse(r.stdout).hookSpecificOutput;
     return (out && out.updatedInput && out.updatedInput.command) || cmd;
@@ -146,7 +146,7 @@ for (const r of rows) {
 }
 for (const [label, sel] of [['all', () => true], ['succeeded', (r) => !r.failed], ['failed', (r) => r.failed],
   ['rtk rewrites', (r) => r.rtk], ['rtk skips', (r) => !r.rtk], ['tuned', (r) => !r.held], ['held out †', (r) => r.held]]) {
-  const rs = rows.filter(sel);
+  const rs = rows.filter((r) => sel(r));
   if (!rs.length) continue;
   const sum = (a) => rs.reduce((s, r) => s + size(r, a), 0);
   console.log(`| **total, ${label} (${rs.length})** | ${ARMS.map((a) => `**${fmt(sum(a))}** (${pct(sum(a), sum('bare'))})`).join(' | ')} |`);
