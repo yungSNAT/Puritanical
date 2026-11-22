@@ -59,6 +59,10 @@ node benchmarks/replay-compress.js [claude|pi] [session-dir]     # input replay
 - [ ] New measurable behavior gets a benchmark task or replay receipt
 - [ ] `npm test` and `cd tools && cargo test` pass; `npm run check:rules`, `check:chart`, `check:samples` and `check:readme-art` clean
 
+## Releases
+
+Pushing a `v*` tag runs `.github/workflows/publish.yml`, which reruns the Node suite and the generated-file checks on the tagged commit, then creates a GitHub release with generated notes; nothing is published to npm.
+
 ## Hacktoberfest
 
 Chisle welcomes Hacktoberfest contributors. Start from an issue labelled `hacktoberfest`, `good first issue` or `help wanted`, and comment before you start so two people don't build the same thing. One issue per PR.

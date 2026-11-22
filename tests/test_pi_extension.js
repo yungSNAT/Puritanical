@@ -124,7 +124,7 @@ test('never compresses read, edit, or write, even when env-allowlisted', async (
 test('preserves non-text blocks and compresses explicitly allowlisted extension tools', async () => {
   process.env.CHISLE_DEFAULT_MODE = 'on';
   const h = makeHarness({
-    tools: [{ name: 'web_search', sourceInfo: { source: '/tmp/search-extension.js' } }],
+    tools: [{ name: 'web_search', sourceInfo: { source: '/opt/pi/extensions/search-extension.js' } }],
   });
   await start(h);
   const image = { type: 'image', data: 'abc', mimeType: 'image/png' };
