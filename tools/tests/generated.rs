@@ -116,14 +116,14 @@ fn drift_fails_the_check() {
         )
     );
 
-    mutate("assets/readme/ja/race-light.svg");
+    mutate("assets/readme/race-light.svg");
     fs::remove_file(root.join("assets/readme/line.svg")).expect("remove");
     let out = cmd(root, &[], &["readme-art", "--check"]);
     assert_eq!(out.code, 1);
     assert_eq!(out.stdout, "");
     assert_eq!(
         out.stderr,
-        "assets/readme/line.svg is stale. Run: npm run build:readme-art\nassets/readme/ja/race-light.svg is stale. Run: npm run build:readme-art\n"
+        "assets/readme/line.svg is stale. Run: npm run build:readme-art\nassets/readme/race-light.svg is stale. Run: npm run build:readme-art\n"
     );
 }
 

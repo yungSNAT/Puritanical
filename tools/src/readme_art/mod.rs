@@ -17,15 +17,15 @@ use std::path::Path;
 
 mod banner;
 mod coffee;
-mod i18n;
 mod ladder;
 mod race;
+mod strings;
 
 use banner::{banner, stats};
 use coffee::{strip, support};
-use i18n::LANGS;
 use ladder::{commands, install, ladder};
 use race::{filters, race, trim};
+use strings::EN;
 
 const SANS: &str =
     "-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif";
@@ -95,10 +95,8 @@ const THEMES: [(&str, Theme); 2] = [
     ),
 ];
 
-/// Text inside the art, per README language. Terminal commands, CLI output
-/// and code stay English everywhere; only the prose around them is translated.
+/// Prose inside the art; terminal commands, CLI output and code are inline.
 struct Lang {
-    code: &'static str,
     pill: &'static str,
     tag1: &'static str,
     tag2: &'static str,
@@ -139,23 +137,12 @@ struct Lang {
     button: &'static str,
 }
 
-// Rough rendered width: CJK and Hangul glyphs take about 1em; Latin about
-// 0.5em in the sans stack and 0.6em in mono. fit() shrinks a font size until
-// the text fits.
-fn wide(c: char) -> bool {
-    matches!(c, '\u{1100}'..='\u{11ff}' | '\u{2e80}'..='\u{9fff}' | '\u{ac00}'..='\u{d7af}' | '\u{f900}'..='\u{faff}' | '\u{ff00}'..='\u{ffef}')
-}
-
+// Rough rendered width: about 0.5em in the sans stack and 0.6em in mono.
+// fit() shrinks a font size until the text fits.
 fn text_w(s: &str, fs: f64, mono: bool) -> f64 {
     s.chars().fold(0.0, |w, c| {
         w + fs
-            * if wide(c) {
-                1.0
-            } else if mono {
-                ADV
-            } else {
-                0.5
-            }
+            * if mono { ADV } else { 0.5 }
     })
 }
 
@@ -374,21 +361,9 @@ const PANELS: [(&str, Panel); 9] = [
 #[must_use]
 pub fn files() -> Vec<(String, String)> {
     let mut out = vec![("line.svg".to_string(), LINE.to_string())];
-    for l in &LANGS {
-        let dir = if l.code == "en" {
-            String::new()
-        } else {
-            format!("{}/", l.code)
-        };
-        let install: &[(&str, Panel)] = if l.code == "en" {
-            &[("install", install)]
-        } else {
-            &[]
-        };
-        for (name, build) in PANELS.iter().chain(install) {
-            for (theme, t) in &THEMES {
-                out.push((format!("{dir}{name}-{theme}.svg"), build(t, l)));
-            }
+    for (name, build) in PANELS.iter().chain(&[("install", install as Panel)]) {
+        for (theme, t) in &THEMES {
+            out.push((format!("{name}-{theme}.svg"), build(t, &EN)));
         }
     }
     out
@@ -407,14 +382,10 @@ pub fn run(root: &Path, check: bool) -> Out {
         }
     }
     if out.code == 0 {
-        let langs: Vec<&str> = LANGS.iter().map(|l| l.code).collect();
         out.say(if check {
             "README art in sync.".to_string()
         } else {
-            format!(
-                "wrote assets/readme: line, install, and banner, stats, race, trim, filters, ladder, commands, strip, support for {} (dark, light)",
-                langs.join(", ")
-            )
+            "wrote assets/readme: line, banner, stats, race, trim, filters, ladder, commands, strip, support, install (dark, light)".to_string()
         });
     }
     out
