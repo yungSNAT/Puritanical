@@ -549,12 +549,14 @@ const CREDENTIAL_RES = [
   /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
   /[?&]sig=[A-Za-z0-9%+/]{20,}/,
   /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
-  // Any scheme (Bearer, Basic, OAuth, AWS4-HMAC-SHA256, ...) or none, then a
-  // value of 8+ characters with a digit, symbol or inner capital in its first
-  // 64, so prose such as 'Authorization: token required' stays clean. The
-  // bound keeps repeated 'authorization:' runs linear.
-  /(?:[Aa]uthorization|AUTHORIZATION)["']?[ \t]*[:=][ \t]*["']?[\w-]*[ \t]*(?=[^\s"']{0,63}[0-9=+/_.~-]|[^\s"']{1,63}[A-Z])[^\s"']{8,}/,
 ];
+
+// Authorization header: either of its first 2 words (scheme and value, any
+// scheme) is 8+ characters with a digit, symbol or inner capital, so prose
+// such as 'Authorization: token required' stays clean.
+const AUTH_HEADER_RE = /(?:[Aa]uthorization|AUTHORIZATION)["']?[ \t]*[:=]([^\r\n]{0,200})/g;
+const containsAuthHeader = text => Array.from(text.matchAll(AUTH_HEADER_RE)).some(m => m[1].split(/[\s"',;]+/)
+  .filter(Boolean).slice(0, 2).some(word => word.length >= 8 && /[0-9=+/_.~-]|.[A-Z]/.test(word)));
 
 // JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
 // not a regex: '-' is a segment character, so a regex restarts at every
@@ -564,7 +566,7 @@ const containsJwt = text => text.split(/[^\w.-]+/).some(token => token.split('.'
   return at !== -1 && part.length - at >= 13 && i + 2 < parts.length && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10;
 }));
 
-const containsCredential = text => CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text);
+const containsCredential = text => CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text) || containsAuthHeader(text);
 
 function spill(text, toolName, stateDir) {
   if (process.env.CHISLE_COMPRESS_SPILL === '0' || containsCredential(text)) return null;
