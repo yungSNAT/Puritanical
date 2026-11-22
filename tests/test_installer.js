@@ -137,7 +137,7 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
 
   let result = runCLI(['--only', 'pi'], { env });
   assert.match(result.out, /Pi detected/);
-  assert.match(readText(log), /^list\ninstall npm:chisle\n$/);
+  assert.match(readText(log), /^list\ninstall git:github\.com\/yungSNAT\/Puritanical\n$/);
   assert.deepEqual(readJson(settings), { theme: 'dark', packages: ['npm:foreign'] },
     'installer edited Pi settings instead of delegating to Pi');
 
@@ -150,7 +150,7 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
   writeText(list, '');
   writeText(log, '');
   result = runCLI(['--only', 'pi', '--dry-run'], { env });
-  assert.match(result.out, /would run: pi install npm:chisle/);
+  assert.match(result.out, /would run: pi install git:github\.com\/yungSNAT\/Puritanical/);
   assert.equal(readText(log), 'list\n', 'dry-run invoked mutating Pi command');
 
   writeText(log, '');
@@ -231,7 +231,7 @@ test('star prompt: never asked, never written, never calls gh without a terminal
   const { status, out } = runCLI(['--only', 'claude', '--config-dir', cfg], { env });
   assert.equal(status, 0);
   assert.doesNotMatch(out, /\[l\]ater/);
-  assert.match(out, /a star helps others find it: https:\/\/github\.com\/JayPokale\/Chisle/);
+  assert.match(out, /a star helps others find it: https:\/\/github\.com\/yungSNAT\/Puritanical/);
   assert.equal(exists(log), false, 'gh never called');
   assert.equal(exists(under(home, 'xdg', 'chisle', 'config.json')), false, 'nothing saved');
 });
@@ -357,7 +357,7 @@ test('--update refreshes an installed Pi package instead of skipping it', { skip
   const upd = runCLI(['--only', 'pi', '--update'], { env });
   assert.match(upd.out, /Chisle updater/);
   assert.doesNotMatch(upd.out, /already installed/);
-  assert.match(readText('home/pi.log'), /install npm:chisle/, '--update did not reinstall');
+  assert.match(readText('home/pi.log'), /install git:github\.com\/yungSNAT\/Puritanical/, '--update did not reinstall');
 });
 
 test('--update installs nothing new and says why', { skip: process.platform === 'win32' }, () => {
@@ -386,7 +386,7 @@ test('--update is read-only under --dry-run', { skip: process.platform === 'win3
   const env = piUpdateFixture('npm:chisle@3.0.0');
 
   const r = runCLI(['--only', 'pi', '--update', '--dry-run'], { env });
-  assert.match(r.out, /would run: pi install npm:chisle/);
+  assert.match(r.out, /would run: pi install git:github\.com\/yungSNAT\/Puritanical/);
   assert.doesNotMatch(readText('home/pi.log'), /install/, 'dry-run mutated');
 });
 

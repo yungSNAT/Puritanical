@@ -10,7 +10,9 @@ const path = require('path');
 const cp = require('child_process');
 const { getOpencodeDir, getOpencodeStateDir } = require('../../hooks/chisle-config');
 
-const REPO = 'JayPokale/Chisle';
+// This fork. The Claude marketplace, Gemini extension and pi package all come
+// from it, not from the upstream Chisle repository or npm package.
+const REPO = 'yungSNAT/Puritanical';
 const IS_WIN = process.platform === 'win32';
 // Repo root = parent of bin/. Installed package or local clone both work.
 const REPO_ROOT = path.resolve(__dirname, '..', '..');

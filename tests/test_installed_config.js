@@ -117,6 +117,22 @@ test('interactive installation remembers a refusal and asks again after a deferr
   assert.equal(config().starPrompt, 'no');
 });
 
+test('a yes stars and follows this fork through the gh on the PATH', { skip: process.platform === 'win32' }, t => {
+  const install = interactiveInstaller(t);
+  // A stand-in gh on the PATH: it logs each call and answers `api user` with a login.
+  fs.writeFileSync('empty-bin/gh', [
+    '#!/bin/sh',
+    'echo "$*" >> "$HOME/gh.log"',
+    '[ "$2" = user ] && echo someone',
+    'exit 0',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  assert.match(install('cursor', 'y'), /Starred and following/);
+  const calls = fs.readFileSync('gh.log', 'utf8');
+  assert.match(calls, /^api -X PUT user\/starred\/yungSNAT\/Puritanical --silent$/m);
+  assert.match(calls, /^api -X PUT user\/following\/yungSNAT --silent$/m);
+});
+
 test('interactive installation prints manual links offline and preserves unreadable settings', t => {
   const install = interactiveInstaller(t);
   fs.mkdirSync('xdg/chisle', { recursive: true });
