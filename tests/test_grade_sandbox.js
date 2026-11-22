@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global __dirname, process, require -- Node.js runtime */
+/* global process, require -- Node.js runtime */
 'use strict';
 
 // Runs benchmarks/quality/grade.js on hand-written code cells, so the bubblewrap
