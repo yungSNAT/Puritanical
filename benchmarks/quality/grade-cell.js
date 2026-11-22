@@ -2,7 +2,7 @@
 /* global process, require -- Node.js runtime */
 // Runs one model code answer against its hidden cases. grade.js starts this
 // file under bubblewrap (no network, read-only system directories, an empty
-// /tmp, no environment), because vm alone is not a boundary for untrusted code.
+// /tmp, no inherited environment), because vm alone is not a boundary for untrusted code.
 // Reads {item, cleaned} as JSON on stdin and writes {pass, why} as JSON on stdout.
 
 'use strict';

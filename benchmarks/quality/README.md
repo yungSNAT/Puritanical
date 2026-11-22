@@ -16,7 +16,7 @@ node benchmarks/quality/grade.js                            # tables to stdout
 node benchmarks/quality/grade.js --json                     # per-cell rows
 ```
 
-`grade.js` runs each code answer under bubblewrap (`bwrap`; Linux, or WSL on Windows), as the Astra replay does: no network, read-only system directories, an empty `/tmp` and no environment. Without bubblewrap it stops rather than run model-written code.
+`grade.js` runs each code answer under bubblewrap (`bwrap`; Linux, or WSL on Windows), as the Astra replay does: no network, read-only system directories, an empty `/tmp` and no inherited environment. It stops rather than run model-written code when bubblewrap is missing or cannot build the sandbox, and a cell killed at its deadline fails.
 
 Runs are resumable — a cell whose raw JSON exists is skipped, so a re-run only
 fills gaps. Raw model output is committed under `raw-nov/` for audit; point `RAW_DIR` at a fresh directory when the ruleset changes.
