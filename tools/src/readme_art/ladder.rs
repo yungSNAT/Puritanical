@@ -389,7 +389,14 @@ pub(super) fn commands(t: &Theme, l: &Lang) -> String {
 
 /// Row `i`: the prompt and command typed out, then its note.
 fn command_row(t: &Theme, i: usize, (p, c): (&str, &str), note: &str) -> [String; 2] {
-    let (fs, x, y0, lh, pad) = (14.0, 40.0, 84.0, 27.0, 26.0);
+    let (fs, x, y0, lh) = (14.0, 40.0, 84.0, 27.0);
+    // Notes line up two characters after the prompt and the longest command.
+    let longest = COMMANDS
+        .iter()
+        .map(|(_, c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    let pad = (longest + 4) as f64;
     let y = y0 + i as f64 * lh;
     let t0 = 0.5 + i as f64 * 0.85;
     let t1 = t0 + 0.45;
