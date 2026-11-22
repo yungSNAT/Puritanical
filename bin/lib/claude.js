@@ -46,6 +46,11 @@ function pluginCopies(id, listed) {
   return ENV.listsPuritanical('claude', ['plugin', 'list'], listed) ? [{}] : [];
 }
 
+// Windows paths compare without regard to case.
+function samePath(a, b) {
+  return ENV.IS_WIN ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
 // Uninstalls each copy of a plugin this run may change: user scope, and local
 // scope in the current project. Project scope is recorded in a settings file
 // shared with a team, so that copy, and any that fails, is left with the
@@ -55,11 +60,12 @@ function uninstallPlugin(ctx, id, listed) {
   let left = 0;
   for (const { scope, project } of pluginCopies(id, listed)) {
     const args = ['plugin', 'uninstall', id].concat(scope ? ['--scope', scope] : []);
-    const here = !project || path.resolve(project) === process.cwd();
+    const here = !project || samePath(path.resolve(project), process.cwd());
     if (scope !== 'project' && here && ENV.ranOk(ENV.run('claude', args, ctx.opts.dryRun))) { removed++; continue; }
     left++;
-    ctx.warn(`  ${id} is still installed at ${scope || 'user'} scope; remove it with: ` +
-      (here ? '' : `cd ${JSON.stringify(project)} && `) + 'claude ' + args.join(' '));
+    // No shell chaining: `cd x && y` fails in Windows PowerShell 5.1 and cmd needs `cd /d`.
+    ctx.warn(`  ${id} is still installed at ${scope || 'user'} scope; ` +
+      (here ? '' : `in ${project}, `) + 'remove it with: claude ' + args.join(' '));
   }
   return { removed, left };
 }

@@ -229,7 +229,7 @@ test('an old plugin that cannot go keeps its marketplace and names the command t
   });
   const out = s.cli(['--only', 'claude']);
   assert.match(out, /chisle@chisle is still installed at user scope; remove it with: claude plugin uninstall chisle@chisle --scope user/);
-  assert.ok(out.includes(`chisle@chisle is still installed at project scope; remove it with: cd ${JSON.stringify(team)} && claude plugin uninstall chisle@chisle --scope project`));
+  assert.ok(out.includes(`chisle@chisle is still installed at project scope; in ${team}, remove it with: claude plugin uninstall chisle@chisle --scope project`));
   assert.match(out, /kept the chisle marketplace while the old plugin is installed/);
   assert.match(s.log('claude'), /^plugin uninstall chisle@chisle --scope local$/m, 'the local copy in this project stayed');
   assert.doesNotMatch(s.log('claude'), /--scope project|marketplace remove/);
@@ -376,10 +376,11 @@ test('an old project rule goes only while it is a released copy', t => {
   assert.ok(!exists(old));
   assert.equal(readText(bak), edited);
 
-  // A second edited copy never overwrites that backup; it stays where it is.
+  // A second edited copy never overwrites that backup, and never stays loaded: it takes the next free name.
   put(old, 'my own cursor rules\n');
-  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /left .*chisle\.mdc: .*chisle-bak already exists/);
-  assert.equal(readText(old), 'my own cursor rules\n');
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /moved the pre-4\.0\.0 rule .*chisle\.mdc to .*chisle\.mdc\.chisle-bak-2/);
+  assert.ok(!exists(old));
+  assert.equal(readText(bak + '-2'), 'my own cursor rules\n');
   assert.equal(readText(bak), edited);
 });
 
