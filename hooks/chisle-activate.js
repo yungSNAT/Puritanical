@@ -152,7 +152,7 @@ function run(source) {
   }
 
   // 4. Update notice, then emit. CHISLE_UPDATE_CHECK=0 disables.
-  (async () => {
+  void (async () => {
     try {
       if (process.env.CHISLE_UPDATE_CHECK !== '0') {
         const installed = installedVersion();
