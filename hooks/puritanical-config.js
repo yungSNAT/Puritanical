@@ -12,6 +12,24 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
+// Puritanical was formerly Chisle, until 4.0.0. The old name finds what an older
+// install left behind, so an upgrade carries it across instead of orphaning it.
+const NAME = 'puritanical';
+const OLD_NAME = 'chisle'; // formerly Chisle
+
+// A PURITANICAL_* setting wins; the matching CHISLE_* one (formerly Chisle) still applies
+// when the new name is unset. Every hook loads this file first.
+function aliasOldEnv(env) {
+  const oldPrefix = OLD_NAME.toUpperCase() + '_';
+  for (const [key, value] of Object.entries(env)) {
+    if (!key.startsWith(oldPrefix)) continue;
+    const name = NAME.toUpperCase() + '_' + key.slice(oldPrefix.length);
+    if (!Object.hasOwn(env, name)) Object.assign(env, { [name]: value });
+  }
+  return env;
+}
+aliasOldEnv(process.env);
+
 // One mode. The intensity levels are gone: three dials on a tool whose whole
 // argument is "fewer knobs" was the joke writing itself, and the middle setting
 // was the only one ever benchmarked. 'on' or 'off'.
@@ -66,17 +84,70 @@ function getCopilotDir() {
   return process.env.COPILOT_HOME || path.join(os.homedir(), '.copilot');
 }
 
-function getConfigDir() {
+function configDirFor(name) {
   if (process.env.XDG_CONFIG_HOME) {
-    return path.join(process.env.XDG_CONFIG_HOME, 'puritanical');
+    return path.join(process.env.XDG_CONFIG_HOME, name);
   }
   if (process.platform === 'win32') {
     return path.join(
       process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-      'puritanical'
+      name
     );
   }
-  return path.join(os.homedir(), '.config', 'puritanical');
+  return path.join(os.homedir(), '.config', name);
+}
+
+function getConfigDir() { return configDirFor(NAME); }
+function getOldConfigDir() { return configDirFor(OLD_NAME); }
+
+// ── Upgrade from 3.x (formerly Chisle) ───────────────────────────────────────────
+// State entries named after the product, in the Claude, OpenCode and Copilot
+// state folders and in the config folder.
+const STATE_ENTRIES = ['.@-active', '.@-session-turns', '.@-statusline-suffix', '.@-compress-stats.json',
+  '.@-compress-last.json', '.@-trimmed-tools.json', '@-spill', '@-dedup'];
+
+// Renames one entry, link or not, without following it, unless the new name
+// is already taken. True when it moved.
+function moveIfAbsent(from, to) {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- A fixed state name in a state or config folder, inspected without following it.
+    fs.lstatSync(from); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The new name beside it must not exist yet.
+    if (fs.existsSync(to) || isLink(to)) return false; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The state or config folder the entry moves into.
+    fs.mkdirSync(path.dirname(to), { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Renames the entry itself; a link stays a link.
+    fs.renameSync(from, to); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    return true;
+  } catch { return false; }
+}
+
+function isLink(p) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A fixed state name, inspected without following it.
+  try { return fs.lstatSync(p).isSymbolicLink(); } catch { return false; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+}
+
+// What is old has passed away (2 Corinthians 5:17, NET): each old state entry
+// in fromDir takes its new name in dir. Returns the number moved.
+function migrateOldState(dir, fromDir = dir) {
+  let moved = 0;
+  for (const entry of STATE_ENTRIES) {
+    if (moveIfAbsent(path.join(fromDir, entry.replace('@', OLD_NAME)), path.join(dir, entry.replace('@', NAME)))) moved++; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  }
+  return moved;
+}
+
+// Moves config.json and the MCP proxy's state out of the old config folder.
+// Its mcp-proxy/ stays for the installer, which rewires the servers using it;
+// the old folder goes once it is empty.
+function migrateOldConfig() {
+  const oldDir = getOldConfigDir();
+  const dir = getConfigDir();
+  let moved = migrateOldState(dir, oldDir);
+  if (moveIfAbsent(path.join(oldDir, 'config.json'), path.join(dir, 'config.json'))) moved++;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes the old config folder only when it is empty.
+  try { fs.rmdirSync(oldDir); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  return moved;
 }
 
 // Larger settings are treated as unreadable, just like invalid JSON.
@@ -442,6 +513,7 @@ function safeAtomicWrite(p, content, root) {
 }
 
 module.exports = {
+  NAME, OLD_NAME, aliasOldEnv, getOldConfigDir, migrateOldState, migrateOldConfig,
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
   VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readRegularFile, readSettingsText, secureDirectory, safeAtomicWrite,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,

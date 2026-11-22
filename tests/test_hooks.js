@@ -183,7 +183,7 @@ test('update lookup refreshes stale cache and reuses a fresh result offline', as
   const cache = under(dir, 'update.json');
   safeWriteFlag(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
-    ok: true, json: async () => ({ version: '4.0.0' }),
+    ok: true, json: async () => ({ tag_name: 'v4.0.0' }),
   }));
   assert.equal(await latestVersion(cache), '4.0.0');
   assert.equal(readJsonFile(cache).latest, '4.0.0');
@@ -202,7 +202,7 @@ test('update lookup bounds the response body and preserves cache on failure', as
   fetchMock.mock.mockImplementation(async (_url, { signal }) => ({
     ok: true,
     json: () => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => resolve({ version: '99.0.0' }), 3000);
+      const timer = setTimeout(() => resolve({ tag_name: 'v99.0.0' }), 3000);
       signal.addEventListener('abort', () => {
         clearTimeout(timer);
         reject(signal.reason);

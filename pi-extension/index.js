@@ -4,12 +4,15 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getDefaultMode, getSections, filterSections } = require('../hooks/puritanical-config');
+const { getDefaultMode, getSections, filterSections, OLD_NAME, migrateOldConfig } = require('../hooks/puritanical-config');
 const { commandOf, duplicateMarker, limitsFor, transform, unsafeToolName } = require('../hooks/puritanical-compress-output');
 const { requestedMode } = require('../hooks/puritanical-mode');
 
 const RULES_TYPE = 'puritanical-rules';
 const MODE_TYPE = 'puritanical-mode';
+// Entry types sessions recorded before 4.0.0 still count when resumed.
+const RULES_TYPES = [RULES_TYPE, OLD_NAME + '-rules'];
+const MODE_TYPES = [MODE_TYPE, OLD_NAME + '-mode'];
 const SAFE_TOOLS = new Set(['bash', 'powershell', 'grep', 'find', 'ls']);
 const NEVER_COMPRESS = new Set(['read', 'edit', 'write']);
 const DEDUP_MIN = 2048;
@@ -69,9 +72,9 @@ function sessionEntries(ctx, method) {
 
 function hasRulesEntry(entries) {
   return (entries || []).some(entry =>
-    (entry.type === 'custom_message' && entry.customType === RULES_TYPE) ||
+    (entry.type === 'custom_message' && RULES_TYPES.includes(entry.customType)) ||
     (entry.type === 'message' && entry.message && entry.message.role === 'custom' &&
-      entry.message.customType === RULES_TYPE));
+      RULES_TYPES.includes(entry.message.customType)));
 }
 
 function promptHasRules(event) {
@@ -107,6 +110,7 @@ function piToolAllowed(name) {
 }
 
 function puritanicalExtension(pi) {
+  migrateOldConfig(); // a pre-4.0.0 config.json, so the mode below is the user's own
   const rules = loadRules();
   let active = getDefaultMode() !== 'off';
   let rulesInContext = false;
@@ -136,7 +140,7 @@ function puritanicalExtension(pi) {
     dedupBaseline = new Map();
 
     const modeEntry = sessionEntries(ctx, 'getBranch')
-      .filter(entry => entry.type === 'custom' && entry.customType === MODE_TYPE).pop();
+      .filter(entry => entry.type === 'custom' && MODE_TYPES.includes(entry.customType)).pop();
     if (modeEntry && modeEntry.data && ['on', 'off'].includes(modeEntry.data.mode)) {
       active = modeEntry.data.mode === 'on';
     }

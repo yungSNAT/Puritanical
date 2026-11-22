@@ -134,11 +134,12 @@ function guardedPrograms(cwd, claudeDir) {
 
 function hook(input) {
   const payload = JSON.parse(input.replace(/^\uFEFF/, ''));
+  // Loaded before the env checks: it maps old CHISLE_* settings onto PURITANICAL_* (formerly Chisle).
+  const { getClaudeDir, readFlag } = require('./puritanical-config');
   const env = process.env;
   if (process.platform === 'win32' || env.PURITANICAL_COMPRESS === '0' || env.PURITANICAL_COMPRESS_FILTERS === '0' ||
       env.PURITANICAL_COMPRESS_WRAP === '0' || payload.tool_name !== 'Bash') return;
   if (payload.permission_mode !== 'bypassPermissions' && env.PURITANICAL_COMPRESS_WRAP !== '1') return;
-  const { getClaudeDir, readFlag } = require('./puritanical-config');
   const mode = readFlag(path.join(getClaudeDir(), '.puritanical-active'));
   if (!mode || mode === 'off') return;
   const toolInput = payload.tool_input || {};

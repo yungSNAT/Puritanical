@@ -3,7 +3,8 @@
 
 // Shared mode-directive parser. Harness adapters decide how to persist mode.
 function requestedMode(prompt) {
-  const text = String(prompt || '').trim().toLowerCase();
+  // 'stop chisle', 'chisle mode' and /chisle still work (formerly Chisle).
+  const text = String(prompt || '').trim().toLowerCase().replace(/\bchisle\b/g, 'puritanical'); // formerly Chisle
 
   if (/\b(turn off|disable|deactivate|stop|kill|exit)\s+puritanical\b/i.test(text) ||
       /\bpuritanical\s+(?:mode\s+(?:off|stop|disable|deactivate)|off|stop|disable|deactivate)\b/i.test(text) ||

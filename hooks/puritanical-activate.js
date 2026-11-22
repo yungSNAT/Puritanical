@@ -10,7 +10,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, readSettingsText, legacySetting, resolveSections, filterSections } = require('./puritanical-config');
+const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, readSettingsText, legacySetting, resolveSections, filterSections,
+  OLD_NAME, migrateOldState, migrateOldConfig } = require('./puritanical-config');
 
 // ── Update-notice helpers (pure — tested directly) ─────────────────────────
 // Minor/patch releases stay quiet: a nudge per major is signal, more is spam.
@@ -27,7 +28,8 @@ function majorUpdateNotice(installed, latest) {
   if (i == null || l == null || l <= i) return null;
   if (typeof latest !== 'string' || latest.length > 128 || /[^0-9A-Za-z.+-]/.test(latest)) return null;
   return '\n\nPURITANICAL UPDATE AVAILABLE: v' + latest + ' (major; you run v' + installed + '). ' +
-    'Mention this to the user once: update with `claude plugin update puritanical@puritanical` or `npx github:yungSNAT/Puritanical`.';
+    'Mention this to the user once: update with `claude plugin update puritanical@puritanical`, ' +
+    'or rerun the installer with `npx github:yungSNAT/Puritanical --update`.';
 }
 
 function installedVersion() {
@@ -37,15 +39,22 @@ function installedVersion() {
   } catch { return null; } // standalone-hooks install → no manifest → skip
 }
 
-// Registry lookup, cached on disk. Network capped at 1.5s inside the 5s hook budget.
+// The fork's latest GitHub release, cached on disk. Network capped at 1.5s
+// inside the 5s hook budget. The npm name `chisle` is upstream's (formerly Chisle).
+const RELEASES_URL = 'https://api.github.com/repos/yungSNAT/Puritanical/releases/latest';
+
 async function latestVersion(cachePath) {
   const cached = readJsonFile(cachePath, 1024);
   if (cached && Date.now() - cached.checkedAt < UPDATE_CACHE_MS) return cached.latest;
   try {
-    const res = await fetch('https://registry.npmjs.org/puritanical/latest', { signal: AbortSignal.timeout(1500) });
+    const res = await fetch(RELEASES_URL, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'puritanical-update-check' },
+      signal: AbortSignal.timeout(1500),
+    });
     if (!res.ok) return null;
-    const latest = (await res.json()).version;
-    if (typeof latest !== 'string' || latest.length > 128) return null;
+    const tag = (await res.json()).tag_name;
+    if (typeof tag !== 'string' || tag.length > 128) return null;
+    const latest = tag.replace(/^v/, '');
     safeWriteFlag(cachePath, JSON.stringify({ checkedAt: Date.now(), latest }));
     return latest;
   } catch { return null; }
@@ -62,7 +71,10 @@ const FULL_INJECT_SOURCES = new Set(['startup']);
 function statuslineNotice(settingsPath) {
   try {
     const raw = readSettingsText(settingsPath);
-    if (raw === null || JSON.parse(raw.replace(/^\uFEFF/, '')).statusLine) return '';
+    if (raw === null) return '';
+    // A badge still running the pre-4.0.0 statusline script needs setting up again.
+    const line = JSON.parse(raw.replace(/^\uFEFF/, '')).statusLine;
+    if (line && !JSON.stringify(line).includes(OLD_NAME + '-statusline')) return '';
   } catch (error) {
     // A missing file needs setup. Leave unreadable or malformed settings alone.
     if (error.code !== 'ENOENT') return '';
@@ -83,6 +95,10 @@ function run(source) {
   const flagPath = path.join(claudeDir, '.puritanical-active');
   const settingsPath = path.join(claudeDir, 'settings.json');
 
+  // Carry an older install's state and settings across first, so the mode
+  // below comes from the user's own config.
+  migrateOldState(claudeDir);
+  migrateOldConfig();
   const mode = getDefaultMode();
 
   if (mode === 'off') {
