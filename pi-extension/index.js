@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getDefaultMode, getSections, filterSections } = require('../hooks/chisle-config');
-const { commandOf, duplicateMarker, limitsFor, transform } = require('../hooks/chisle-compress-output');
+const { commandOf, duplicateMarker, limitsFor, transform, unsafeToolName } = require('../hooks/chisle-compress-output');
 const { requestedMode } = require('../hooks/chisle-mode');
 
 const RULES_TYPE = 'chisle-rules';
@@ -99,7 +99,7 @@ function appendSystemPrompt(systemPrompt, text) {
 }
 
 function piToolAllowed(name) {
-  if (!name || NEVER_COMPRESS.has(name.toLowerCase())) return false;
+  if (!name || NEVER_COMPRESS.has(name.toLowerCase()) || unsafeToolName(name)) return false;
   if (process.env.CHISLE_COMPRESS_TOOLS) {
     return process.env.CHISLE_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean).includes(name);
   }

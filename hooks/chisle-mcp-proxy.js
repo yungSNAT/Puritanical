@@ -37,13 +37,12 @@ const { getDefaultMode, getConfigDir } = require('./chisle-config');
 
 const IS_WIN = process.platform === 'win32';
 
-// Tool names whose output may feed a later exact-match edit, or is file
-// content the model quotes back. Matched on the raw MCP tool name.
-const UNSAFE_MCP_RE = /read|view|file|edit|write|patch|replace|insert/i;
 const MAX_PENDING_LINE = 16 * 1024 * 1024; // drop observation of absurd lines
 
 function mcpToolAllowed(name) {
-  return typeof name === 'string' && !!name && !UNSAFE_MCP_RE.test(name);
+  // Tool names whose output may feed a later exact-match edit, or is file
+  // content the model quotes back: the hook's shared guard, on the raw name.
+  return typeof name === 'string' && !!name && !core.unsafeToolName(name);
 }
 
 function stateDir() {

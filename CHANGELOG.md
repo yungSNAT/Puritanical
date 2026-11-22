@@ -7,6 +7,11 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+
+- MCP tools that return file or source content (file readers, LSP tools, `get_file_contents`, `search_code`, …) are no longer compressed by the Claude Code and Pi hooks. One name guard now covers those hooks, the MCP proxy, and tools named in `CHISLE_COMPRESS_TOOLS` for Copilot CLI and OpenCode, which can no longer re-enable them.
+- Output containing a credential (PEM private key, JWT, AWS, GCP or Azure key, GitHub token, Authorization header) is no longer written to the spill folder; it is still elided, without the recovery path.
+
 ### Changed
 
 - Licence: Ryan Duguid's code is now under Apache-2.0, with the attribution in `NOTICE`; code from Chisle stays under the MIT License, and earlier versions keep the licence they were released with. Manifests and SPDX lines say `Apache-2.0 AND MIT`.
