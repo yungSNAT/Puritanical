@@ -39,9 +39,10 @@ function gradeSource(item, src) {
   return { pass: true, why: '' };
 }
 
-const chunks = [];
-process.stdin.on('data', (c) => chunks.push(c));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (c) => { input += c; });
 process.stdin.on('end', () => {
-  const { item, src } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  const { item, src } = JSON.parse(input);
   process.stdout.write(JSON.stringify(gradeSource(item, src)));
 });
