@@ -14,10 +14,14 @@
 
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
+const { spawnSync } = require('child_process');
 const { fisher, wilson, fmtP } = require('../stats.js');
 
 const HERE = __dirname;
+const CELL = path.join(HERE, 'grade-cell.js');
+// Node 20 added the permission model the code sandbox needs.
+const PERMISSION = ['--permission', '--experimental-permission'].find((f) => process.allowedNodeEnvironmentFlags.has(f));
+if (!PERMISSION) { console.error('grade.js needs Node 20 or later to sandbox code answers'); process.exit(2); }
 const RAW = process.env.RAW_DIR ? path.resolve(process.env.RAW_DIR) : path.join(HERE, 'raw');
 const ARMS = ['vanilla', 'chisle'];
 const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -74,32 +78,13 @@ function extractBlock(answer) {
 function gradeCode(item, answer) {
   const src = extractBlock(answer);
   if (!src) return { pass: false, why: 'no code block' };
-  // Normalise ESM exports away; the harness calls the function by name.
-  const cleaned = src
-    .replace(/^\s*export\s+default\s+/gm, '')
-    .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, '')
-    .replace(/^\s*module\.exports.*$/gm, '')
-    .replace(/^\s*import\s.*$/gm, '');
-  const ctx = { module: { exports: {} }, exports: {}, console: { log() {} }, require: () => { throw new Error('no deps allowed'); } };
-  vm.createContext(ctx);
-  try {
-    // Runs the model's answer, which is what this grader measures; the context has no require and a 3 s timeout.
-    // nosemgrep: rules_lgpl_javascript_eval_rule-vm-code-injection
-    vm.runInContext(cleaned + `\n;globalThis.__fn = typeof ${item.fn} === 'function' ? ${item.fn} : undefined;`, ctx, { timeout: 3000 });
-  } catch (e) { return { pass: false, why: 'eval: ' + e.message }; }
-  const fn = ctx.__fn;
-  if (typeof fn !== 'function') return { pass: false, why: `no function ${item.fn}` };
-  for (const [args, want] of item.cases) {
-    let got;
-    // Build args inside the context: host-realm objects fail a correct
-    // `Object.getPrototypeOf(x) === Object.prototype` plain-object check.
-    try { got = vm.runInContext(`__fn(...JSON.parse(${JSON.stringify(JSON.stringify(args))}))`, ctx, { timeout: 3000 }); }
-    catch (e) { return { pass: false, why: `threw on ${JSON.stringify(args)}: ${e.message}` }; }
-    if (JSON.stringify(got) !== JSON.stringify(want)) {
-      return { pass: false, why: `${JSON.stringify(args)} -> ${JSON.stringify(got)} want ${JSON.stringify(want)}` };
-    }
-  }
-  return { pass: true, why: '' };
+  // The answer runs in grade-cell.js, a child process under Node's permission
+  // model that may read only that script, with an empty environment (Windows
+  // still adds its default user variables such as PATH and USERNAME).
+  const r = spawnSync(process.execPath, [PERMISSION, `--allow-fs-read=${CELL}`, CELL], {
+    input: JSON.stringify({ item, src }), env: {}, encoding: 'utf8', timeout: 3000 * (item.cases.length + 2),
+  });
+  try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : String(r.stderr).trim().split('\n').pop()) }; }
 }
 
 // --- load + grade ----------------------------------------------------------

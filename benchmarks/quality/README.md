@@ -16,6 +16,8 @@ node benchmarks/quality/grade.js                            # tables to stdout
 node benchmarks/quality/grade.js --json                     # per-cell rows
 ```
 
+`grade.js` runs each code answer in a child process under Node's permission model (Node 20 or later), so an answer cannot read files, start processes or see the environment.
+
 Runs are resumable — a cell whose raw JSON exists is skipped, so a re-run only
 fills gaps. Raw model output is committed under `raw-nov/` for audit; point `RAW_DIR` at a fresh directory when the ruleset changes.
 

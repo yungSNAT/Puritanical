@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+/* global process, require -- Node.js runtime */
+// Runs one model code answer against its hidden cases. grade.js starts this
+// file in a child process under Node's permission model (no file access beyond
+// this script, no child processes or workers, no inherited environment), because
+// vm alone is not a boundary for untrusted code. Reads {item, src} as JSON on
+// stdin and writes {pass, why} as JSON on stdout.
+
+'use strict';
+
+const vm = require('vm');
+
+function gradeSource(item, src) {
+  // Normalise ESM exports away; the harness calls the function by name.
+  const cleaned = src
+    .replace(/^\s*export\s+default\s+/gm, '')
+    .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, '')
+    .replace(/^\s*module\.exports.*$/gm, '')
+    .replace(/^\s*import\s.*$/gm, '');
+  const ctx = { module: { exports: {} }, exports: {}, console: { log() {} }, require: () => { throw new Error('no deps allowed'); } };
+  vm.createContext(ctx);
+  try {
+    // The model's answer is what this grader measures; this process is the boundary.
+    // nosemgrep: rules_lgpl_javascript_eval_rule-vm-code-injection
+    vm.runInContext(cleaned + `\n;globalThis.__fn = typeof ${item.fn} === 'function' ? ${item.fn} : undefined;`, ctx, { timeout: 3000 });
+  } catch (e) { return { pass: false, why: 'eval: ' + e.message }; }
+  const fn = ctx.__fn;
+  if (typeof fn !== 'function') return { pass: false, why: `no function ${item.fn}` };
+  for (const [args, want] of item.cases) {
+    let got;
+    // Build args inside the context: host-realm objects fail a correct
+    // `Object.getPrototypeOf(x) === Object.prototype` plain-object check.
+    try { got = vm.runInContext(`__fn(...JSON.parse(${JSON.stringify(JSON.stringify(args))}))`, ctx, { timeout: 3000 }); }
+    catch (e) { return { pass: false, why: `threw on ${JSON.stringify(args)}: ${e.message}` }; }
+    if (JSON.stringify(got) !== JSON.stringify(want)) {
+      return { pass: false, why: `${JSON.stringify(args)} -> ${JSON.stringify(got)} want ${JSON.stringify(want)}` };
+    }
+  }
+  return { pass: true, why: '' };
+}
+
+const chunks = [];
+process.stdin.on('data', (c) => chunks.push(c));
+process.stdin.on('end', () => {
+  const { item, src } = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  process.stdout.write(JSON.stringify(gradeSource(item, src)));
+});

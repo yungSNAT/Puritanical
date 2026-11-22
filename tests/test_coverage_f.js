@@ -234,6 +234,7 @@ test('pi git sources must name github.com as their host', () => {
     'git:evil.com/x/github.com/JayPokale/Chisle',
     'git:https://evilgithub.com/JayPokale/Chisle',
     'git:https://github.com.evil/JayPokale/Chisle',
+    'git:https://github.com@evil.com/JayPokale/Chisle',
   ]) {
     assert.deepEqual(piSources(lookalike), [], lookalike);
   }
