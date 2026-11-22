@@ -107,9 +107,7 @@ const NEVER_COMPRESS_COPILOT = ['view', 'create', 'edit', 'str_replace', 'insert
 // OpenCode), which cannot override it.
 const UNSAFE_TOOL_NAME_RE = /read|view|file|edit|write|patch|replace|insert|lsp|symbol|definition|declaration|implementation|reference|hover|content|source|blob|search_code/i;
 
-function unsafeToolName(name) {
-  return UNSAFE_TOOL_NAME_RE.test(name);
-}
+const unsafeToolName = name => UNSAFE_TOOL_NAME_RE.test(name);
 
 // Letter/digit boundaries, not \b: `_` is a word char, so \b missed severities
 // inside codes like FATAL_MEMORY_PROBE / APP_ERROR_CODE (#38), and `err!` then
@@ -545,41 +543,28 @@ function pruneSpill(dir) {
 // Azure keys, GitHub tokens and Authorization headers.
 const CREDENTIAL_RES = [
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/,
-  /\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b/,
+  // AWS key IDs; GCP API keys, OAuth tokens and client secrets; GitHub tokens.
+  /\b(?:(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b|AIza[\w-]{35}|ya29\.[\w-]{20,}|GOCSPX-[\w-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{22,})/,
   /aws_secret_access_key["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}/i,
-  /\bAIza[\w-]{35}/,
-  /\bya29\.[\w-]{20,}/,
-  /\bGOCSPX-[\w-]{20,}/,
   /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
   /[?&]sig=[A-Za-z0-9%+/]{20,}/,
   /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
-  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}/,
-  /\bgithub_pat_\w{22,}/,
   // Any scheme (Bearer, Basic, OAuth, AWS4-HMAC-SHA256, ...) or none, then a
   // value of 8+ characters with a digit, symbol or inner capital in its first
   // 64, so prose such as 'Authorization: token required' stays clean. The
   // bound keeps repeated 'authorization:' runs linear.
-  /(?:[Aa]uthorization|AUTHORIZATION)["']?[ \t]*[:=][ \t]*["']?(?:[A-Za-z][\w-]*[ \t]+)?(?=[^\s"']{0,63}[0-9=+/_.~-]|[^\s"']{1,63}[A-Z])[^\s"']{8,}/,
+  /(?:[Aa]uthorization|AUTHORIZATION)["']?[ \t]*[:=][ \t]*["']?[\w-]*[ \t]*(?=[^\s"']{0,63}[0-9=+/_.~-]|[^\s"']{1,63}[A-Z])[^\s"']{8,}/,
 ];
 
 // JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
 // not a regex: '-' is a segment character, so a regex restarts at every
 // 'eyJ' in a long run and rescans it to the end (quadratic).
-function containsJwt(text) {
-  for (const token of text.split(/[^\w.-]+/)) {
-    const parts = token.split('.');
-    for (let i = 0; i + 2 < parts.length; i++) {
-      const first = parts.at(i);
-      const at = first.indexOf('eyJ');
-      if (at !== -1 && first.length - at >= 13 && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10) return true;
-    }
-  }
-  return false;
-}
+const containsJwt = text => text.split(/[^\w.-]+/).some(token => token.split('.').some((part, i, parts) => {
+  const at = part.indexOf('eyJ');
+  return at !== -1 && part.length - at >= 13 && i + 2 < parts.length && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10;
+}));
 
-function containsCredential(text) {
-  return CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text);
-}
+const containsCredential = text => CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text);
 
 function spill(text, toolName, stateDir) {
   if (process.env.CHISLE_COMPRESS_SPILL === '0' || containsCredential(text)) return null;
