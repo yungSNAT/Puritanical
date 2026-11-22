@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! Aggregates `benchmarks/results/raw/*.json` (written by `run-live.sh`) into
 //! a measured comparison table across the four arms.

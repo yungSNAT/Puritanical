@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! Scores `benchmarks/agentic/raw/*.json` into a correctness-first table.
 //!

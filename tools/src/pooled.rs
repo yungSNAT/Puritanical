@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! The pooled scorer behind the README tables: the ratio of summed tokens to
 //! vanilla across every cell in the given seed directories, a 95% bootstrap

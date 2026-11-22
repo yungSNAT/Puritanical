@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 
 use puritanical_tools::{Ctx, js, run};
 use std::io::{ErrorKind, Write};

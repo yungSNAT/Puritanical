@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! Extracts the 2026-11-06 re-run's real answers into `site/src/data/samples.json`
 //! so the website shows a live before/after built from committed transcripts

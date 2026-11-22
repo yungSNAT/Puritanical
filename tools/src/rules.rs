@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! The per-agent rule files, generated from one shared body. Each agent wants
 //! the same instructions in its own location and frontmatter format.

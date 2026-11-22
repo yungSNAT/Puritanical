@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! `assets/benchmark.svg` (dark) and `assets/benchmark-light.svg` from real
 //! measured results: billed output tokens per ruleset as % of the same model

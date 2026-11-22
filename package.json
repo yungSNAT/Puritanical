@@ -27,7 +27,7 @@
     "yagni",
     "minimal"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0 AND MIT",
   "author": {
     "name": "Jay Pokale",
     "url": "https://github.com/JayPokale"

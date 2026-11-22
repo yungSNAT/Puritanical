@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2024"
 rust-version = "1.100"
 description = "Maintainer tooling for Chisle: generated rule copies, charts, site samples, README art and benchmark analysis."
-license = "MIT"
+license = "Apache-2.0 AND MIT"
 repository = "https://github.com/yungSNAT/Puritanical"
 publish = false
 

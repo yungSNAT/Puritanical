@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 #![allow(dead_code, reason = "each test binary uses part of this module")]
 
 use puritanical_tools::{Ctx, Out, run};
