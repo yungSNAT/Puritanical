@@ -168,7 +168,7 @@ It refreshes what is installed and adds nothing new. Plain `npx github:yungSNAT/
 
 ### Upgrading from 3.x
 
-Puritanical was formerly Chisle, and 4.0.0 renames everything it installs. `--update` finds a Chisle install and replaces it: the `chisle@chisle` Claude Code plugin and its marketplace, standalone hooks and the status badge, the Gemini CLI extension, pi sources, skills, the Copilot CLI hook, the OpenCode plugin, fenced rule blocks and unedited project rule files. It moves the `.chisle-*` state (the savings ledger and the `tools trim` record among it) and the `chisle` config folder's settings to the new names, and points MCP servers wrapped by the old proxy at the new one. The Claude Code hook moves the state itself at the next session start. `CHISLE_*` variables, 'stop chisle' and 'chisle mode' keep working; `--uninstall` removes both sets of names.
+Puritanical was formerly Chisle, and 4.0.0 renames everything it installs. `--update` finds a Chisle install and replaces it: the `chisle@chisle` Claude Code plugin and its marketplace (a copy at project scope is left with the command to remove it), standalone hooks and a status line that runs only the old badge, the Gemini CLI extension, pi sources, skills, the Copilot CLI hook, the OpenCode plugin, fenced rule blocks and project rule files identical to a released copy. It moves the `.chisle-*` state (the savings ledger and the `tools trim` record among it) and the `chisle` config folder's settings to the new names, and points MCP servers wrapped by the old proxy at the new one. The Claude Code hook moves the state itself at the next session start. `CHISLE_*` variables, 'stop chisle' and 'chisle mode' keep working; `--uninstall` removes both sets of names.
 
 ### Per agent
 
