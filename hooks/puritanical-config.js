@@ -516,7 +516,7 @@ function safeAtomicWrite(p, content, root) {
 }
 
 module.exports = {
-  NAME, OLD_NAME, aliasOldEnv, getOldConfigDir, migrateOldState, migrateOldConfig, isOldStatusLine,
+  NAME, OLD_NAME, aliasOldEnv, getOldConfigDir, moveIfAbsent, migrateOldState, migrateOldConfig, isOldStatusLine,
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
   VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readRegularFile, readSettingsText, secureDirectory, safeAtomicWrite,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,

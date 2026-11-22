@@ -367,11 +367,20 @@ test('an old project rule goes only while it is a released copy', t => {
   assert.ok(!exists(old));
   assert.ok(exists(under(proj, '.cursor', 'rules', 'puritanical.mdc')));
 
-  // The generated heading stays, but the user added a section: the file stays.
+  // The generated heading stays, but the user added a section: the file moves
+  // aside, where Cursor no longer loads it, and keeps every byte.
   const edited = RELEASED_RULE + '\n## Our team\n\nRun the linter before committing.\n';
+  const bak = old + '.chisle-bak';
   put(old, edited);
-  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /left .*chisle\.mdc: it differs from every released copy/);
-  assert.equal(readText(old), edited);
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /moved the pre-4\.0\.0 rule .*chisle\.mdc to .*chisle\.mdc\.chisle-bak/);
+  assert.ok(!exists(old));
+  assert.equal(readText(bak), edited);
+
+  // A second edited copy never overwrites that backup; it stays where it is.
+  put(old, 'my own cursor rules\n');
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /left .*chisle\.mdc: .*chisle-bak already exists/);
+  assert.equal(readText(old), 'my own cursor rules\n');
+  assert.equal(readText(bak), edited);
 });
 
 test('a second --update changes no file and removes nothing', POSIX, t => {

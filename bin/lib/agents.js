@@ -11,7 +11,7 @@ const ENV = require('./env');
 const FENCE = require('./fence');
 const { piSources } = require('./uninstall');
 const crypto = require('crypto');
-const { NAME, OLD_NAME } = require('../../hooks/puritanical-config');
+const { NAME, OLD_NAME, moveIfAbsent } = require('../../hooks/puritanical-config');
 const OLD_RULES = require('./old-rules');
 
 const COMPRESSOR = ['puritanical-compress-output.js', 'puritanical-command-filters.js', 'puritanical-config.js'];
@@ -260,15 +260,20 @@ function installProjectRule(ctx, prov) {
 
 // The copy of this rule an install before 4.0.0 wrote under the old file name.
 // Removed only while it is byte for byte (line endings aside) a copy some
-// release shipped; any other content may be the user's, so it stays, with a note.
+// release shipped. Any other content may hold the user's additions, so it moves
+// aside to <file>.chisle-bak (formerly Chisle), where the agent no longer loads it beside the new
+// rule; an existing backup is never overwritten.
 function removeOldRule(note, rule) {
   const old = path.join(process.cwd(), rule.replace(NAME, OLD_NAME)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   if (old === path.join(process.cwd(), rule) || !FENCE.exists(old)) return; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   const digest = crypto.createHash('sha256').update(FENCE.readText(old).replace(/\r/g, '')).digest('hex');
+  const bak = old + '.' + OLD_NAME + '-bak';
   if (OLD_RULES.has(digest)) {
     FENCE.removeTree(old);
     note('  removed the pre-4.0.0 rule ' + old + ', an unedited copy');
-  } else note('  left ' + old + ': it differs from every released copy, so move any edits of yours into ' + rule + ' and delete it');
+  } else if (moveIfAbsent(old, bak)) {
+    note('  moved the pre-4.0.0 rule ' + old + ' to ' + bak + ': it differs from every released copy, so your additions are there; copy what you need into ' + rule);
+  } else note('  left ' + old + ': ' + bak + ' already exists; move your additions into ' + rule + ' and delete it');
 }
 
 const INSTALLERS = new Map([
