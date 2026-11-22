@@ -122,8 +122,12 @@ function lineSplitter(onLine) {
   };
 }
 
+// Windows argv quoting in one pass: inside the quotes, n backslashes before a
+// quote become 2n+1 plus the quote, n at the end become 2n, others stay.
 function quoteWin(a) {
-  if (a === '' || /[\s"&|<>^()%!]/.test(a)) return '"' + String(a).replace(/\\(?=\\*"|$)/g, '\\\\').replace(/"/g, '\\"') + '"';
+  if (a === '' || /[\s"&|<>^()%!]/.test(a)) {
+    return '"' + String(a).replace(/(\\*)("|$)/g, (m, bs, q) => bs + bs + (q ? '\\"' : '')) + '"';
+  }
   return a;
 }
 
@@ -209,4 +213,4 @@ function main(argv) {
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { mcpToolAllowed, compressResult, rewriteLine, observeRequest, lineSplitter, exitWhenHostGone };
+module.exports = { mcpToolAllowed, compressResult, rewriteLine, observeRequest, lineSplitter, exitWhenHostGone, quoteWin };

@@ -313,3 +313,47 @@ test('mcp wrap replaces a planted proxy-file link without writing through it', (
     assert.equal(readText(path.join(proxyDir, file)), content, file);
   }
 });
+
+// Windows argv rules (the C runtime's parser): 2n backslashes before a quote
+// give n and a delimiter, 2n+1 give n and a literal quote, others are literal.
+function parseWinArgs(line) {
+  const args = [];
+  let cur = null;
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    let n = 0;
+    while (line[i] === '\\') { n++; i++; }
+    if (line[i] === '"') {
+      cur = (cur || '') + '\\'.repeat(n >> 1);
+      if (n % 2) cur += '"';
+      else quoted = !quoted;
+    } else {
+      if (n) cur = (cur || '') + '\\'.repeat(n);
+      if (i >= line.length) break;
+      if (!quoted && /\s/.test(line[i])) {
+        if (cur !== null) args.push(cur);
+        cur = null;
+      } else cur = (cur || '') + line[i];
+    }
+  }
+  if (cur !== null) args.push(cur);
+  return args;
+}
+
+const TRICKY_ARGS = ['', 'plain', 'two words', 'C:\\Program Files\\', 'end\\\\', 'a\\"b', 'a\\\\"b c', 'say "hi"',
+  '"', '\\', 'x \\\\\\', 'mid\\dle path', '\\\\server\\share x', 'tab\there'];
+
+test('quoteWin round-trips tricky arguments through the Windows argv rules', () => {
+  const { quoteWin } = require(PROXY);
+  assert.equal(quoteWin('a b\\'), '"a b\\\\"');
+  assert.equal(quoteWin('a\\"b'), '"a\\\\\\"b"');
+  assert.deepEqual(parseWinArgs(TRICKY_ARGS.map(quoteWin).join(' ')), TRICKY_ARGS);
+});
+
+test('quoteWin arguments reach a real Windows process intact', { skip: process.platform !== 'win32' }, () => {
+  const { quoteWin } = require(PROXY);
+  const cmd = [process.execPath, '-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', ...TRICKY_ARGS];
+  const r = spawnSync(cmd.map(quoteWin).join(' '), [], { shell: true, encoding: 'utf8', windowsHide: true }); // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), TRICKY_ARGS);
+});
