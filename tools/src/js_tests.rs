@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 use super::*;
 use serde_json::json;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! Significance helpers. Two arms, binary outcome per cell, so the honest test
 //! is Fisher's exact on the 2x2 table: no normal approximation, which matters

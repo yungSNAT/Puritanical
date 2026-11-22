@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! A readable transcript of a side-by-side run: every prompt, then every
 //! arm's full answer with its token counts, straight from the raw cells.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! The committed generated files are the oracle: `--check` passes on the
 //! repository, a fresh write reproduces every byte, and any drift fails.

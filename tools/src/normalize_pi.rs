@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! Converts Pi's raw JSONL event stream to the benchmark cell schema that
 //! `aggregate` reads.

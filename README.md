@@ -86,7 +86,7 @@ Ryan Duguid maintains Puritanical. Jay Pokale wrote the upstream plugin. The ori
 
 ## Licence
 
-The code uses the [MIT licence](LICENSE). The restored banner artwork is © 2026 Ryan Duguid and carries its original [Apache 2.0 licence](.github/assets/LICENSE-banner.txt). Its lettering uses glyphs distributed under SIL OFL 1.1.
+Ryan Duguid's code is under Apache-2.0; see [LICENSE](LICENSE). If you redistribute this work or build on it, keep the attribution in [NOTICE](NOTICE). Code from Chisle, which this repository forks, and the caveman and ponytail portions it carries remain under the MIT License; [NOTICE](NOTICE) holds their notices. Earlier commits keep the licence their LICENSE file named. The restored banner artwork is © 2026 Ryan Duguid and carries its original [Apache 2.0 licence](.github/assets/LICENSE-banner.txt). Its lettering uses glyphs distributed under SIL OFL 1.1.
 
 Scripture quoted by permission. Quotations designated (NET) are from the NET Bible® copyright ©1996, 2019 by Biblical Studies Press, L.L.C. All rights reserved.
 

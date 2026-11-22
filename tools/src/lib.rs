@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! Maintainer tooling for Chisle: the generated files CI checks and the
 //! benchmark analysis. Hooks, host plugins and the agent-launching harnesses

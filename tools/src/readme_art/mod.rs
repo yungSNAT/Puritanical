@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 //! The animated README art in `assets/readme/`: a -dark and a -light SVG per
 //! piece (the README picks one with <picture>). Plain SVG + SMIL, so it
