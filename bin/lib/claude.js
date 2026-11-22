@@ -11,6 +11,7 @@ const path = require('path');
 const SETTINGS = require('./settings');
 const ENV = require('./env');
 const FENCE = require('./fence');
+const { OLD_NAME } = require('../../hooks/puritanical-config');
 
 const HOOK_FILES = ['package.json', 'puritanical-config.js', 'puritanical-activate.js',
   'puritanical-mode.js', 'puritanical-mode-tracker.js', 'puritanical-compress-output.js', 'puritanical-command-filters.js',
@@ -18,16 +19,41 @@ const HOOK_FILES = ['package.json', 'puritanical-config.js', 'puritanical-activa
 
 function settingsPathFor(opts) { return path.join(ENV.claudeDir(opts), 'settings.json'); } // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 
+// Hook commands from this package, under the current or the pre-4.0.0 name.
 function hasPuritanicalHookCommand(settings) {
   const hooks = (settings && settings.hooks) || {};
   const list = v => (Array.isArray(v) ? v : []);
   return Object.values(hooks).some(entries => list(entries).some(entry =>
-    list(entry && entry.hooks).some(h => h && typeof h.command === 'string' && h.command.includes('puritanical-'))));
+    list(entry && entry.hooks).some(h => h && typeof h.command === 'string' &&
+      (h.command.includes('puritanical-') || h.command.includes(OLD_NAME + '-')))));
 }
 
 function claudeInstalled(opts) {
-  if (ENV.hasCmd('claude') && ENV.listsPuritanical('claude', ['plugin', 'list'])) return true;
+  if (ENV.hasCmd('claude') && (ENV.listsPuritanical('claude', ['plugin', 'list']) ||
+      ENV.listsPuritanical('claude', ['plugin', 'list'], ENV.OLD_LISTED))) return true;
   return hasPuritanicalHookCommand(SETTINGS.readSettings(settingsPathFor(opts)));
+}
+
+// An install before 4.0.0 added the plugin under its old name, from a marketplace
+// of that name. Both go, so the two plugins never run side by side.
+function removeOldPlugin(ctx) {
+  if (!ENV.listsPuritanical('claude', ['plugin', 'list'], ENV.OLD_LISTED)) return;
+  ENV.run('claude', ['plugin', 'uninstall', ENV.OLD_PLUGIN], ctx.opts.dryRun);
+  ENV.run('claude', ['plugin', 'marketplace', 'remove', OLD_NAME], ctx.opts.dryRun);
+}
+
+// A statusline running the old badge script, which reads state that has moved.
+function isOldStatusLine(sl) {
+  return !!sl && JSON.stringify(sl).includes(OLD_NAME + '-statusline');
+}
+
+// Hook entries and the hooks folder a standalone install before 4.0.0 wired.
+// Returns the number of settings entries removed.
+function dropOldStandalone(ctx, settings) {
+  const removed = SETTINGS.removeHooks(settings, OLD_NAME + '-');
+  const dir = path.join(ENV.claudeDir(ctx.opts), OLD_NAME + '-hooks'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  if (FENCE.exists(dir) && !ctx.opts.dryRun) FENCE.removeTree(dir);
+  return removed;
 }
 
 // Returns true when the plugin is installed (already, or by this run).
@@ -56,7 +82,10 @@ function dropStandaloneHooks(ctx) {
   note('  hooks: plugin manifest handles SessionStart + UserPromptSubmit + PreToolUse + PostToolUse');
   const settingsPath = settingsPathFor(opts);
   const settings = SETTINGS.readSettings(settingsPath);
-  if (!settings || SETTINGS.removeHooks(settings, 'puritanical-') === 0) return;
+  if (!settings) return;
+  const oldLine = isOldStatusLine(settings.statusLine);
+  if (oldLine) delete settings.statusLine;
+  if (SETTINGS.removeHooks(settings, 'puritanical-') + dropOldStandalone(ctx, settings) === 0 && !oldLine) return;
   if (!opts.dryRun) {
     SETTINGS.validateHookFields(settings);
     SETTINGS.writeSettings(settingsPath, settings);
@@ -69,7 +98,10 @@ function installClaude(ctx) {
   results.detected++;
   say('→ Claude Code detected');
   let pluginOK = false;
-  if (ENV.hasCmd('claude')) pluginOK = installPlugin(ctx);
+  if (ENV.hasCmd('claude')) {
+    removeOldPlugin(ctx);
+    pluginOK = installPlugin(ctx);
+  }
   else note('  claude CLI not on PATH, wiring standalone hooks in settings.json');
 
   if (pluginOK) dropStandaloneHooks(ctx);
@@ -120,7 +152,7 @@ function statusLineCommand(hooksDst) {
 }
 
 function configureStatusLine(settings, hooksDst) {
-  if (!settings.statusLine) {
+  if (!settings.statusLine || isOldStatusLine(settings.statusLine)) {
     settings.statusLine = { type: 'command', command: statusLineCommand(hooksDst) };
     process.stdout.write('  statusline badge configured.\n');
     return;
@@ -148,6 +180,7 @@ function installClaudeHooks(ctx) {
   const settings = SETTINGS.readSettings(settingsPath);
   if (settings === null) { warn('  settings.json unparseable; not touching it.'); return 'settings.json unparseable'; }
   backupSettings(settingsPath);
+  dropOldStandalone(ctx, settings);
   wireHooks(settings, hooksDst);
   configureStatusLine(settings, hooksDst);
   SETTINGS.validateHookFields(settings);

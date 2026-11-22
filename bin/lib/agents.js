@@ -10,6 +10,7 @@ const path = require('path');
 const ENV = require('./env');
 const FENCE = require('./fence');
 const { piSources } = require('./uninstall');
+const { NAME, OLD_NAME } = require('../../hooks/puritanical-config');
 
 const COMPRESSOR = ['puritanical-compress-output.js', 'puritanical-command-filters.js', 'puritanical-config.js'];
 const COMMONJS_PACKAGE = '{ "type": "commonjs" }\n';
@@ -22,7 +23,12 @@ function installPi(ctx) {
   const { say, note, opts, results } = ctx;
   results.detected++;
   say('→ Pi detected');
-  if (!opts.force && piSources(ENV.capture('pi', ['list']).stdout).length) {
+  // Sources from before the fork took the name (npm:chisle, upstream git) go
+  // first, so the old package never loads beside this one.
+  const sources = piSources(ENV.capture('pi', ['list']).stdout);
+  const ours = s => s.toLowerCase().includes(ENV.REPO.toLowerCase());
+  for (const old of sources.filter(s => !ours(s))) ENV.run('pi', ['remove', old], opts.dryRun);
+  if (!opts.force && sources.some(ours)) {
     note('  puritanical package already installed (use --force)');
     results.skipped.push(['pi', 'already installed']); blankLine(); return;
   }
@@ -37,6 +43,9 @@ function installGemini(ctx) {
   const { say, note, opts, results } = ctx;
   results.detected++;
   say('→ Gemini CLI detected');
+  if (ENV.listsPuritanical('gemini', ['extensions', 'list'], ENV.OLD_LISTED)) {
+    ENV.run('gemini', ['extensions', 'uninstall', OLD_NAME], opts.dryRun);
+  }
   if (!opts.force && ENV.listsPuritanical('gemini', ['extensions', 'list'])) {
     note('  puritanical extension already installed (use --force)');
     results.skipped.push(['gemini', 'already installed']); blankLine(); return;
@@ -115,8 +124,11 @@ function installOpencode(ctx) {
 
   try {
     const st = FENCE.writeFencedRuleset(target, opts, note);
-    const stale = major >= 2 ? ['puritanical.js', 'puritanical-hooks'] : ['puritanical'];
+    // The other OpenCode layout's plugin, and any pre-4.0.0 one, would run twice.
+    const stale = (major >= 2 ? ['puritanical.js', 'puritanical-hooks'] : ['puritanical'])
+      .concat([OLD_NAME + '.js', OLD_NAME + '-hooks', OLD_NAME]);
     for (const rel of stale) FENCE.removeTree(path.join(root, 'plugins', rel));
+    FENCE.pruneSkills(skillsDst, false, FENCE.oldSkillNames());
     const n = FENCE.copySkills(skillsDst, opts);
     process.stdout.write('  installed: ' + n + ' skill file(s) to ' + skillsDst + '\n');
     const p = copyOpencodePlugin(root, major);
@@ -175,6 +187,8 @@ function installCopilotCli(ctx) {
 
   try {
     const st = FENCE.writeFencedRuleset(rules, opts, note);
+    // A pre-4.0.0 hook would compress every result a second time.
+    for (const old of [path.join('hooks', OLD_NAME + '.json'), OLD_NAME + '-hooks']) FENCE.removeTree(path.join(root, old));
     copyCompressor(hooksDir);
     const hookExisted = FENCE.exists(hookFile);
     if (!hookExisted || opts.force) {
@@ -207,6 +221,7 @@ function installHermes(ctx) {
   }
 
   try {
+    FENCE.pruneSkills(skillsDst, false, FENCE.oldSkillNames());
     const n = FENCE.copySkills(skillsDst, opts);
     process.stdout.write('  installed: ' + n + ' skill file(s) to ' + skillsDst + '\n');
     results.installed.push('hermes');
@@ -227,6 +242,7 @@ function installProjectRule(ctx, prov) {
 
   if (opts.dryRun) { note(`  would write ${dst} (project-scoped)`); results.installed.push(prov.id); blankLine(); return; }
 
+  removeOldRule(note, prov.rule);
   if (FENCE.exists(dst) && !opts.force) {
     note(`  ${prov.rule} already in this project (--force to overwrite)`);
     results.skipped.push([prov.id, 'already in project']); blankLine(); return;
@@ -238,6 +254,18 @@ function installProjectRule(ctx, prov) {
     results.installed.push(prov.id);
   } catch (e) { results.failed.push([prov.id, failure(e, 'copy failed')]); }
   blankLine();
+}
+
+// The copy of this rule an install before 4.0.0 wrote under the old file name.
+// Removed only while it still carries the generated heading; an edited file
+// stays, with a note.
+function removeOldRule(note, rule) {
+  const old = path.join(process.cwd(), rule.replace(NAME, OLD_NAME)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  if (old === path.join(process.cwd(), rule) || !FENCE.exists(old)) return; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  if (/^# chisle$/im.test(FENCE.readText(old))) { // formerly Chisle
+    FENCE.removeTree(old);
+    note('  removed the pre-4.0.0 rule ' + old);
+  } else note('  left ' + old + ': it no longer matches the generated rule');
 }
 
 const INSTALLERS = new Map([

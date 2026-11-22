@@ -10,15 +10,25 @@
 const fs = require('fs');
 const path = require('path');
 const { REPO_ROOT } = require('./env');
+const { NAME, OLD_NAME } = require('../../hooks/puritanical-config');
 
 const FENCE_BEGIN = '<!-- puritanical-begin -->';
 const FENCE_END = '<!-- puritanical-end -->';
+// The markers an install before 4.0.0 wrote. Their block is replaced, never
+// duplicated, and uninstall removes it too.
+const OLD_MARKERS = ['<!-- ' + OLD_NAME + '-begin -->', '<!-- ' + OLD_NAME + '-end -->'];
 
-// Begin and end offsets of the first puritanical block; e is -1 when the block is
-// missing or has no end marker.
+// The first block, current markers first: b and e are the offsets of its
+// begin and end markers (e is -1 when the end marker is missing), end is the
+// offset just past the end marker, and old marks a block with the old markers.
 function fenceSpan(txt) {
-  const b = txt.indexOf(FENCE_BEGIN);
-  return { b, e: b === -1 ? -1 : txt.indexOf(FENCE_END, b) };
+  for (const [begin, endMarker] of [[FENCE_BEGIN, FENCE_END], OLD_MARKERS]) {
+    const b = txt.indexOf(begin);
+    if (b === -1) continue;
+    const e = txt.indexOf(endMarker, b);
+    return { b, e, end: e === -1 ? -1 : e + endMarker.length, old: begin !== FENCE_BEGIN };
+  }
+  return { b: -1, e: -1, end: -1, old: false };
 }
 
 function readText(file) {
@@ -58,16 +68,16 @@ function writeFencedRuleset(target, opts, note) {
   mkdirp(path.dirname(target));
   let existing = '';
   try { existing = readText(target); } catch {}
-  if (existing.indexOf(FENCE_BEGIN) === -1) {
+  const { b, e, end, old } = fenceSpan(existing);
+  if (b === -1) {
     writeText(target, existing + separator(existing) + block);
     process.stdout.write('  installed: ' + target + '\n');
     return 'installed';
   }
-  if (!opts.force) {
+  if (!opts.force && !old) {
     note('  ' + target + ' already contains puritanical ruleset (--force to refresh)');
     return 'skipped';
   }
-  const { b, e } = fenceSpan(existing);
   // A begin marker with no end marker means the file was hand-edited or a
   // write was cut short. Everything after the begin marker is then user
   // content of unknown extent, so refuse rather than guess: rewriting would
@@ -77,11 +87,11 @@ function writeFencedRuleset(target, opts, note) {
     note('  remove the stray marker by hand, then re-run');
     return 'skipped';
   }
-  let tail = existing.slice(e + FENCE_END.length);
+  let tail = existing.slice(end);
   if (tail.charAt(0) === '\n') tail = tail.slice(1);
   writeText(target, existing.slice(0, b) + block + tail);
-  process.stdout.write('  refreshed ruleset in ' + target + '\n');
-  return 'refreshed';
+  process.stdout.write('  ' + (old ? 'replaced the pre-4.0.0 ruleset' : 'refreshed ruleset') + ' in ' + target + '\n');
+  return old ? 'installed' : 'refreshed';
 }
 
 function separator(existing) {
@@ -91,9 +101,9 @@ function separator(existing) {
 
 // Text with the puritanical block cut out, or null when there is no complete block.
 function withoutFence(txt) {
-  const { b, e } = fenceSpan(txt);
+  const { b, e, end } = fenceSpan(txt);
   if (e === -1) return null;
-  const tail = txt.slice(e + FENCE_END.length).replace(/^\n/, '');
+  const tail = txt.slice(end).replace(/^\n/, '');
   return (txt.slice(0, b) + tail).replace(/\n{3,}/g, '\n\n');
 }
 
@@ -138,20 +148,26 @@ function copySkills(dstRoot, opts) {
   return written;
 }
 
-// Puritanical-owned skill dirs present under dstRoot.
-function presentSkills(dstRoot) {
-  return ownedSkillNames().filter(name => exists(path.join(dstRoot, name))); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+// The same skills under the names an install before 4.0.0 used.
+function oldSkillNames() {
+  return ownedSkillNames().map(name => name.replace(NAME, OLD_NAME));
 }
 
-// Removes only the skill dirs Puritanical owns; foreign skills stay put. Returns
-// the count removed (or that would be removed on a dry run).
-function pruneSkills(dstRoot, dryRun) {
-  const present = presentSkills(dstRoot);
+// Puritanical-owned skill dirs present under dstRoot, by either name.
+function presentSkills(dstRoot, names) {
+  return names.filter(name => exists(path.join(dstRoot, name))); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+}
+
+// Removes only the skill dirs Puritanical owns (by default under both names);
+// foreign skills stay put. Returns the count removed (or that would be
+// removed on a dry run).
+function pruneSkills(dstRoot, dryRun, names = ownedSkillNames().concat(oldSkillNames())) {
+  const present = presentSkills(dstRoot, names);
   if (!dryRun) for (const name of present) removeTree(path.join(dstRoot, name)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   return present.length;
 }
 
 module.exports = {
   FENCE_BEGIN, FENCE_END, fenceSpan, readText, writeText, exists, mkdirp, removeTree,
-  copyFile, writeFencedRuleset, withoutFence, copySkills, pruneSkills,
+  copyFile, writeFencedRuleset, withoutFence, copySkills, pruneSkills, oldSkillNames,
 };

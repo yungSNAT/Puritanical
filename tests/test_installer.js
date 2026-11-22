@@ -141,7 +141,7 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
   assert.deepEqual(readJson(settings), { theme: 'dark', packages: ['npm:foreign'] },
     'installer edited Pi settings instead of delegating to Pi');
 
-  writeText(list, 'User packages:\n  npm:chisle@3.0.0\n');
+  writeText(list, 'User packages:\n  git:github.com/yungSNAT/Puritanical\n');
   writeText(log, '');
   result = runCLI(['--only', 'pi'], { env });
   assert.match(result.out, /already installed/);
@@ -346,7 +346,7 @@ function piUpdateFixture(installed) {
 }
 
 test('--update refreshes an installed Pi package instead of skipping it', { skip: process.platform === 'win32' }, () => {
-  const env = piUpdateFixture('npm:chisle@3.0.0');
+  const env = piUpdateFixture('git:github.com/yungSNAT/Puritanical');
 
   // plain install: sees it, leaves it alone
   const plain = runCLI(['--only', 'pi'], { env });

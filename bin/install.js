@@ -38,6 +38,7 @@ const CLAUDE = require('./lib/claude');
 const { INSTALLERS, installProjectRule } = require('./lib/agents');
 const { uninstall, piSources } = require('./lib/uninstall');
 const { readStats, askStar } = require('./lib/star');
+const CONFIG = require('../hooks/puritanical-config');
 
 const { die, expandHome } = ENV;
 
@@ -157,26 +158,39 @@ function providerDetected(provider) {
 // `npx github:yungSNAT/Puritanical` and useless for an upgrade: the run reports success and changes
 // nothing. --update pairs this check with --force so a refresh touches exactly
 // the agents that already have it.
+// An install from before 4.0.0 counts too, under its old names, so --update
+// upgrades it.
 function hasFence(file) {
-  try { return FENCE.exists(file) && FENCE.readText(file).includes(FENCE.FENCE_BEGIN); } catch { return false; }
+  try { return FENCE.exists(file) && FENCE.fenceSpan(FENCE.readText(file)).b !== -1; } catch { return false; }
 }
+
+const OLD = CONFIG.OLD_NAME;
+const hasEither = (dir, rel) => [rel, rel.replace(CONFIG.NAME, OLD)].some(r => FENCE.exists(path.join(dir, r))); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 
 const INSTALLED = new Map([
   ['claude', opts => CLAUDE.claudeInstalled(opts)],
   ['pi', () => ENV.hasCmd('pi') && piSources(ENV.capture('pi', ['list']).stdout).length > 0],
-  ['gemini', () => ENV.hasCmd('gemini') && ENV.listsPuritanical('gemini', ['extensions', 'list'])],
+  ['gemini', () => ENV.hasCmd('gemini') && (ENV.listsPuritanical('gemini', ['extensions', 'list'])
+    || ENV.listsPuritanical('gemini', ['extensions', 'list'], ENV.OLD_LISTED))],
   ['codex', () => hasFence(path.join(ENV.homeDir(), '.codex', 'AGENTS.md'))],
   ['opencode', () => hasFence(path.join(ENV.opencodeDir(), 'AGENTS.md'))
-    || FENCE.exists(path.join(ENV.opencodeDir(), 'skills', 'puritanical', 'SKILL.md'))],
-  ['hermes', () => FENCE.exists(path.join(ENV.homeDir(), '.hermes', 'skills', 'puritanical', 'SKILL.md'))],
-  ['copilot-cli', () => FENCE.exists(path.join(ENV.copilotDir(), 'hooks', 'puritanical.json'))],
+    || hasEither(ENV.opencodeDir(), path.join('skills', 'puritanical', 'SKILL.md'))],
+  ['hermes', () => hasEither(ENV.homeDir(), path.join('.hermes', 'skills', 'puritanical', 'SKILL.md'))],
+  ['copilot-cli', () => hasEither(ENV.copilotDir(), path.join('hooks', 'puritanical.json'))],
 ]);
 
 function installedFor(prov, opts) {
   try {
     if (INSTALLED.has(prov.id)) return INSTALLED.get(prov.id)(opts);
-    return !!prov.rule && FENCE.exists(path.join(process.cwd(), prov.rule)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
+    return !!prov.rule && hasEither(process.cwd(), prov.rule);
   } catch { return false; }
+}
+
+// Moves what an install before 4.0.0 left under the old names: state in the
+// Claude, OpenCode and Copilot folders, and the config folder's settings.
+function migrateOld(opts) {
+  for (const dir of [ENV.claudeDir(opts), ENV.opencodeStateDir(), ENV.copilotDir()]) CONFIG.migrateOldState(dir);
+  CONFIG.migrateOldConfig();
 }
 
 // ── help / banner ───────────────────────────────────────────────────────────
@@ -273,6 +287,7 @@ function runTools() {
   const args = process.argv.slice(3);
   const i = args.indexOf('--config-dir');
   const dir = i >= 0 ? expandHome(args.splice(i, 2)[1] || '') : ENV.claudeDir({});
+  if (dir) CONFIG.migrateOldState(dir); // `tools restore` reads the trim record, which may still have its old name
   try { return TOOLS.main(args, dir); } catch (e) { return die('error: ' + e.message); }
 }
 
@@ -340,6 +355,7 @@ function main() {
 
   if (opts.help) return printHelp(c);
   if (opts.list) return printList(c);
+  if (!opts.dryRun) migrateOld(opts);
   if (opts.stats) return printStats(c, opts);
 
   const results = { detected: 0, installed: [], skipped: [], failed: [] };

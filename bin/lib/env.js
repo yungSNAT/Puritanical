@@ -88,11 +88,16 @@ function ranOk(r) {
 function capture(cmd, args) {
   try { return spawnX(cmd, args, { encoding: 'utf8' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
 }
-// True when `<cmd> <args>` exits 0 and prints "puritanical" (plugin/extension lists).
-function listsPuritanical(cmd, args) {
+// True when `<cmd> <args>` exits 0 and its output matches pattern, by default
+// "puritanical" (plugin/extension lists).
+function listsPuritanical(cmd, args, pattern = /puritanical/i) {
   const r = capture(cmd, args);
-  return r.status === 0 && /puritanical/i.test(r.stdout || '');
+  return r.status === 0 && pattern.test(r.stdout || '');
 }
+
+// The Claude plugin and Gemini extension as installs before 4.0.0 named them.
+const OLD_PLUGIN = 'chisle@chisle'; // formerly Chisle
+const OLD_LISTED = /\bchisle\b/i; // formerly Chisle
 
 function claudeDir(opts) {
   if (opts.configDir) return opts.configDir;
@@ -116,7 +121,7 @@ function opencodeMajor() {
 }
 
 module.exports = {
-  REPO, IS_WIN, REPO_ROOT, die, expandHome, hasCmd, isDir, isFile, quoteWin,
+  REPO, IS_WIN, REPO_ROOT, OLD_PLUGIN, OLD_LISTED, die, expandHome, hasCmd, isDir, isFile, quoteWin,
   run, ranOk, capture, listsPuritanical, claudeDir, homeDir, opencodeDir, copilotDir,
   opencodeStateDir, opencodeMajor,
 };

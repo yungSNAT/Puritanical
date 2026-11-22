@@ -11,6 +11,12 @@ const MCP = require('./mcp');
 const TOOLS = require('./tools');
 const ENV = require('./env');
 const FENCE = require('./fence');
+const { NAME, OLD_NAME } = require('../../hooks/puritanical-config');
+
+// Entry names under both the current name and the one installs before 4.0.0 used.
+function bothNames(names) {
+  return names.concat(names.map(name => name.replace(NAME, OLD_NAME)));
+}
 
 // Removes each existing fixed entry under root; returns the count.
 function removeEntries(ctx, root, names, remove = FENCE.removeTree) {
@@ -31,13 +37,19 @@ function unlinkQuietly(p) {
 }
 
 function uninstallClaudePlugin(ctx) {
-  if (!ENV.hasCmd('claude') || ctx.opts.dryRun || !ENV.listsPuritanical('claude', ['plugin', 'list'])) return 0;
-  ENV.run('claude', ['plugin', 'uninstall', 'puritanical@puritanical'], ctx.opts.dryRun);
-  return 1;
+  if (!ENV.hasCmd('claude') || ctx.opts.dryRun) return 0;
+  let n = 0;
+  for (const [id, listed] of [['puritanical@puritanical', undefined], [ENV.OLD_PLUGIN, ENV.OLD_LISTED]]) {
+    if (!ENV.listsPuritanical('claude', ['plugin', 'list'], listed)) continue;
+    ENV.run('claude', ['plugin', 'uninstall', id], false);
+    n++;
+  }
+  return n;
 }
 
 function isPuritanicalStatusLine(sl) {
-  return !!sl && typeof sl.command === 'string' && sl.command.includes('puritanical-statusline');
+  return !!sl && typeof sl.command === 'string' &&
+    (sl.command.includes('puritanical-statusline') || sl.command.includes(OLD_NAME + '-statusline'));
 }
 
 // Standalone hooks + statusline in settings.json.
@@ -45,7 +57,7 @@ function uninstallClaudeSettings(ctx, cfg) {
   const settingsPath = path.join(cfg, 'settings.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   const settings = SETTINGS.readSettings(settingsPath);
   if (!settings) return 0;
-  const removed = SETTINGS.removeHooks(settings, 'puritanical-');
+  const removed = SETTINGS.removeHooks(settings, 'puritanical-') + SETTINGS.removeHooks(settings, OLD_NAME + '-');
   const slRemoved = isPuritanicalStatusLine(settings.statusLine);
   if (slRemoved) delete settings.statusLine;
   if (removed === 0 && !slRemoved) return 0;
@@ -69,9 +81,9 @@ function uninstallClaude(ctx) {
   return uninstallClaudePlugin(ctx)
     + uninstallClaudeSettings(ctx, cfg)
     + uninstallClaudeTools(ctx, cfg)
-    + removeEntries(ctx, cfg, ['puritanical-hooks', 'puritanical-spill'])
-    + removeEntries(ctx, cfg, ['.puritanical-active', '.puritanical-session-turns', '.puritanical-statusline-suffix',
-      '.puritanical-compress-stats.json', '.puritanical-compress-last.json', '.puritanical-update-check.json'], unlinkQuietly);
+    + removeEntries(ctx, cfg, bothNames(['puritanical-hooks', 'puritanical-spill']))
+    + removeEntries(ctx, cfg, bothNames(['.puritanical-active', '.puritanical-session-turns', '.puritanical-statusline-suffix',
+      '.puritanical-compress-stats.json', '.puritanical-compress-last.json', '.puritanical-update-check.json']), unlinkQuietly);
 }
 
 function uninstallPi(ctx) {
@@ -89,12 +101,12 @@ function uninstallCodex(ctx) {
   const codexMd = path.join(ENV.homeDir(), '.codex', 'AGENTS.md');
   if (!FENCE.exists(codexMd)) return 0;
   const txt = FENCE.readText(codexMd);
-  const { b, e } = FENCE.fenceSpan(txt);
+  const { b, e, end: after } = FENCE.fenceSpan(txt);
   if (b === -1) return 0;
   let stripped = txt;
   if (e !== -1) {
     const start = b > 0 && txt.charAt(b - 1) === '\n' ? b - 1 : b;
-    let end = e + FENCE.FENCE_END.length;
+    let end = after;
     if (txt.charAt(end) === '\n') end++;
     stripped = txt.slice(0, start) + '\n' + txt.slice(end);
   }
@@ -132,9 +144,9 @@ function uninstallOpencode(ctx) {
   const root = ENV.opencodeDir();
   return removeFencedBlock(ctx, path.join(root, 'AGENTS.md'), { warnUnclosed: true, trimEnd: false })
     + uninstallSkills(ctx, path.join(root, 'skills'))
-    + removeEntries(ctx, path.join(root, 'plugins'), ['puritanical.js', 'puritanical-hooks', 'puritanical'])
+    + removeEntries(ctx, path.join(root, 'plugins'), bothNames(['puritanical.js', 'puritanical-hooks', 'puritanical']))
     + removeEntries(ctx, ENV.opencodeStateDir(),
-      ['puritanical-spill', 'puritanical-dedup', '.puritanical-compress-stats.json', '.puritanical-compress-last.json']);
+      bothNames(['puritanical-spill', 'puritanical-dedup', '.puritanical-compress-stats.json', '.puritanical-compress-last.json']));
 }
 
 function uninstallHermes(ctx) {
@@ -144,8 +156,8 @@ function uninstallHermes(ctx) {
 function uninstallCopilotCli(ctx) {
   const root = ENV.copilotDir();
   return removeFencedBlock(ctx, path.join(root, 'copilot-instructions.md'), { warnUnclosed: false, trimEnd: true })
-    + removeEntries(ctx, root, [path.join('hooks', 'puritanical.json'), 'puritanical-hooks', 'puritanical-spill', 'puritanical-dedup',
-      '.puritanical-compress-stats.json']);
+    + removeEntries(ctx, root, bothNames([path.join('hooks', 'puritanical.json'), 'puritanical-hooks', 'puritanical-spill',
+      'puritanical-dedup', '.puritanical-compress-stats.json']));
 }
 
 // MCP servers routed through the proxy by `npx github:yungSNAT/Puritanical mcp wrap`: restore
@@ -154,8 +166,9 @@ function uninstallMcp(ctx) {
   let n = 0;
   const r = MCP.run(['unwrap'].concat(ctx.opts.dryRun ? ['--dry-run'] : []), () => {});
   if (r.changed) { ctx.note('  restored ' + r.changed + ' MCP server command(s) wrapped by `puritanical mcp wrap`'); n++; }
-  const pd = MCP.proxyDir();
-  if (FENCE.exists(pd)) { if (!ctx.opts.dryRun) FENCE.removeTree(pd); ctx.note('  removed ' + pd); n++; }
+  for (const pd of [MCP.proxyDir(), MCP.oldProxyDir()]) {
+    if (FENCE.exists(pd)) { if (!ctx.opts.dryRun) FENCE.removeTree(pd); ctx.note('  removed ' + pd); n++; }
+  }
   return n;
 }
 
