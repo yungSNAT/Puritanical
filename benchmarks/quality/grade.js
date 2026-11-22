@@ -18,10 +18,15 @@ const { spawnSync } = require('child_process');
 const { fisher, wilson, fmtP } = require('../stats.js');
 
 const HERE = __dirname;
-const CELL = path.join(HERE, 'grade-cell.js');
-// Node 20 added the permission model the code sandbox needs.
-const PERMISSION = ['--permission', '--experimental-permission'].find((f) => process.allowedNodeEnvironmentFlags.has(f));
-if (!PERMISSION) { console.error('grade.js needs Node 20 or later to sandbox code answers'); process.exit(2); }
+// Code answers run in grade-cell.js under bubblewrap, as the Astra replay's
+// answers do: no network, read-only system directories, an empty /tmp and no
+// environment. Node's own permission model is not a boundary against hostile
+// code, so there is no fallback without bubblewrap.
+const SANDBOX = ['--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--clearenv'];
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- one of the 4 fixed system directories.
+for (const dir of ['/usr', '/bin', '/lib', '/lib64']) if (fs.existsSync(dir)) SANDBOX.push('--ro-bind', dir, dir); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+SANDBOX.push('--dev', '/dev', '--proc', '/proc', '--size', '67108864', '--tmpfs', '/tmp', '--chdir', '/tmp', '--dir', '/bench',
+  '--ro-bind', process.execPath, process.execPath, '--ro-bind', path.join(HERE, 'grade-cell.js'), '/bench/grade-cell.js');
 const RAW = process.env.RAW_DIR ? path.resolve(process.env.RAW_DIR) : path.join(HERE, 'raw');
 const ARMS = ['vanilla', 'chisle'];
 const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -84,12 +89,14 @@ function gradeCode(item, answer) {
     .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, '')
     .replace(/^\s*module\.exports.*$/gm, '')
     .replace(/^\s*import\s.*$/gm, '');
-  // The answer runs in grade-cell.js, a child process under Node's permission
-  // model that may read only that script, with an empty environment (Windows
-  // still adds its default user variables such as PATH and USERNAME).
-  const r = spawnSync(process.execPath, [PERMISSION, `--allow-fs-read=${CELL}`, CELL], {
-    input: JSON.stringify({ item, cleaned }), env: {}, encoding: 'utf8', timeout: 3000 * (item.cases.length + 2),
+  // SIGKILL, because an answer can catch SIGTERM; --die-with-parent then ends it.
+  const r = spawnSync('bwrap', [...SANDBOX, process.execPath, '/bench/grade-cell.js'], {
+    input: JSON.stringify({ item, cleaned }), encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
   });
+  if (r.error && r.error.code === 'ENOENT') {
+    console.error('grade.js runs model-written code only under bubblewrap (bwrap): use Linux, or WSL on Windows');
+    process.exit(2);
+  }
   try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : String(r.stderr).trim().split('\n').pop()) }; }
 }
 

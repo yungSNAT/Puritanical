@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /* global process, require -- Node.js runtime */
 // Runs one model code answer against its hidden cases. grade.js starts this
-// file in a child process under Node's permission model (no file access beyond
-// this script, no child processes or workers, no inherited environment), because
-// vm alone is not a boundary for untrusted code. Reads {item, cleaned} as JSON on
-// stdin and writes {pass, why} as JSON on stdout.
+// file under bubblewrap (no network, read-only system directories, an empty
+// /tmp, no environment), because vm alone is not a boundary for untrusted code.
+// Reads {item, cleaned} as JSON on stdin and writes {pass, why} as JSON on stdout.
 
 'use strict';
 
@@ -14,7 +13,7 @@ function gradeSource(item, cleaned) {
   const ctx = { module: { exports: {} }, exports: {}, console: { log() {} }, require: () => { throw new Error('no deps allowed'); } };
   vm.createContext(ctx);
   try {
-    // Running the model's answer is this file's job; the permission-restricted process is the boundary.
+    // Running the model's answer is this file's job; the bubblewrap sandbox is the boundary.
     // nosemgrep: rules_lgpl_javascript_eval_rule-vm-code-injection
     vm.runInContext(cleaned + `\n;globalThis.__fn = typeof ${item.fn} === 'function' ? ${item.fn} : undefined;`, ctx, { timeout: 3000 }); // NOSONAR
   } catch (e) { return { pass: false, why: 'eval: ' + e.message }; }
