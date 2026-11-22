@@ -78,11 +78,17 @@ function extractBlock(answer) {
 function gradeCode(item, answer) {
   const src = extractBlock(answer);
   if (!src) return { pass: false, why: 'no code block' };
+  // Normalise ESM exports away; the harness calls the function by name.
+  const cleaned = src
+    .replace(/^\s*export\s+default\s+/gm, '')
+    .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, '')
+    .replace(/^\s*module\.exports.*$/gm, '')
+    .replace(/^\s*import\s.*$/gm, '');
   // The answer runs in grade-cell.js, a child process under Node's permission
   // model that may read only that script, with an empty environment (Windows
   // still adds its default user variables such as PATH and USERNAME).
   const r = spawnSync(process.execPath, [PERMISSION, `--allow-fs-read=${CELL}`, CELL], {
-    input: JSON.stringify({ item, src }), env: {}, encoding: 'utf8', timeout: 3000 * (item.cases.length + 2),
+    input: JSON.stringify({ item, cleaned }), env: {}, encoding: 'utf8', timeout: 3000 * (item.cases.length + 2),
   });
   try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : String(r.stderr).trim().split('\n').pop()) }; }
 }
