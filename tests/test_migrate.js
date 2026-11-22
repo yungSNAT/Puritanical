@@ -340,7 +340,7 @@ test('OpenCode, Hermes and Copilot CLI drop old skills, plugins and hooks', t =>
   makeDir(s.dir('copilot', 'chisle-hooks'));
 
   const out = s.cli(['--only', 'opencode', '--only', 'hermes', '--only', 'copilot-cli', '--update']);
-  for (const agent of ['OpenCode', 'Hermes Agent', 'Copilot CLI']) assert.match(out, new RegExp(agent + ' detected'));
+  for (const agent of ['OpenCode', 'Hermes Agent', 'Copilot CLI']) assert.ok(out.includes(agent + ' detected'), agent);
   assert.ok(!exists(under(oc, 'skills', 'chisle')) && exists(under(oc, 'skills', 'puritanical', 'SKILL.md')));
   assert.ok(exists(under(oc, 'skills', 'mine', 'SKILL.md')), 'a skill that is not ours went');
   assert.ok(!exists(under(oc, 'plugins', 'chisle.js')) && !exists(under(oc, 'plugins', 'chisle-hooks')));
@@ -393,7 +393,7 @@ test('a second --update changes no file and removes nothing', POSIX, t => {
   const run = () => s.cli(['--update'], { cwd: s.dir('project') });
   const first = run();
   for (const agent of ['Claude Code', 'Gemini CLI', 'Pi', 'Codex', 'OpenCode', 'Hermes Agent', 'Cursor']) {
-    assert.match(first, new RegExp('→ ' + agent + ' detected'), agent);
+    assert.ok(first.includes('→ ' + agent + ' detected'), agent);
   }
   const before = snapshot(s.dir());
   const logged = ['claude', 'gemini', 'pi'].map(name => s.log(name).length);

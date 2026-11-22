@@ -85,16 +85,10 @@ function getCopilotDir() {
 }
 
 function configDirFor(name) {
-  if (process.env.XDG_CONFIG_HOME) {
-    return path.join(process.env.XDG_CONFIG_HOME, name);
-  }
-  if (process.platform === 'win32') {
-    return path.join(
-      process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-      name
-    );
-  }
-  return path.join(os.homedir(), '.config', name);
+  const base = process.env.XDG_CONFIG_HOME || (process.platform === 'win32'
+    ? process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+    : path.join(os.homedir(), '.config'));
+  return path.join(base, name); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- name is NAME or OLD_NAME
 }
 
 function getConfigDir() { return configDirFor(NAME); }
@@ -144,7 +138,7 @@ function migrateOldConfig() {
   const oldDir = getOldConfigDir();
   const dir = getConfigDir();
   let moved = migrateOldState(dir, oldDir);
-  if (moveIfAbsent(path.join(oldDir, 'config.json'), path.join(dir, 'config.json'))) moved++;
+  if (moveIfAbsent(path.join(oldDir, 'config.json'), path.join(dir, 'config.json'))) moved++; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes the old config folder only when it is empty.
   try { fs.rmdirSync(oldDir); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   return moved;

@@ -15,7 +15,8 @@ function requestedMode(prompt) {
 
   const slash = /^\/puritanical(?::puritanical)?\b(?:\s+(\S+))?/.exec(text);
   if (slash) return OFF_ARGS.has(slash[1]) ? 'off' : 'on';
-  const order = text.replace(/[.!]+$/, '').replace(/^please\s+/, '');
+  let order = text.replace(/^please\s+/, '');
+  while (order.endsWith('.') || order.endsWith('!')) order = order.slice(0, -1);
   const named = /^puritanical(\s+mode)?(?:\s+(on|off))?$/.exec(order);
   if (named && (named[1] || named[2])) return named[2] === 'off' ? 'off' : 'on';
   if (/^(?:activate|enable|turn on|start)\s+puritanical(?:\s+mode)?$/.test(order)) return 'on';
@@ -26,7 +27,8 @@ function requestedMode(prompt) {
 // Chisle's phrases work as they always did: that name is no everyday word (formerly Chisle).
 function legacyMode(text) {
   if (/\b(?:turn off|disable|deactivate|stop|kill|exit)\s+chisle\b|\bchisle\s+(?:mode\s+(?:off|stop|disable|deactivate)|off|stop|disable|deactivate)\b/.test(text)) return 'off'; // formerly Chisle
-  if (/^\/chisle(?::chisle)?\b|\b(?:activate|enable|turn on|start|use)\b.*\bchisle\b|\bchisle\b.*\b(?:mode|activate|enable|on)\b|\bchislif(?:y|ier)\b/.test(text)) return 'on'; // formerly Chisle
+  if (/^\/chisle(?::chisle)?\b/.test(text)) return 'on'; // formerly Chisle
+  if (/\b(?:activate|enable|turn on|start|use)\b.*\bchisle\b|\bchisle\b.*\b(?:mode|activate|enable|on)\b|\bchislif(?:y|ier)\b/.test(text)) return 'on'; // formerly Chisle
   return null;
 }
 

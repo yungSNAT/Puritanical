@@ -93,7 +93,7 @@ function noteOldStatusLine(note, sl, settingsPath) {
 // Returns the number of settings entries removed.
 function dropOldStandalone(ctx, settings) {
   const removed = SETTINGS.removeHooks(settings, OLD_NAME + '-');
-  const dir = path.join(ENV.claudeDir(ctx.opts), OLD_NAME + '-hooks'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const dir = path.join(ENV.claudeDir(ctx.opts), OLD_NAME + '-hooks'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
   if (FENCE.exists(dir) && !ctx.opts.dryRun) FENCE.removeTree(dir);
   return removed;
 }
