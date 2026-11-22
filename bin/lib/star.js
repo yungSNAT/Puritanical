@@ -63,7 +63,7 @@ function starHeadline(opts, c) {
   const stats = readStats(claudeDir(opts));
   const tokens = stats ? Math.floor(stats.savedChars / 4) : 0;
   if (tokens < 1000) return `${c.orange('★')} Chisle is free and open source. A star helps other developers find it.`;
-  const short = tokens >= 1e6 ? `${(tokens / 1e6).toFixed(1)}M` : `${Math.round(tokens / 1000)}k`;
+  const short = tokens >= 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : `${Math.round(tokens / 1000)}k`;
   return `${c.orange('★')} Chisle has kept ~${short} tokens of tool output out of your context so far.`;
 }
 

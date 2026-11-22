@@ -824,3 +824,12 @@ test('installed plugin still compresses when the config dir is type:module', asy
     remove(home, { recursive: true, force: true });
   }
 });
+
+test('plugin hooks leave output alone when reading it throws', async () => {
+  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const hooks = await plugin({});
+  const broken = { get output() { throw new Error('unreadable output'); } };
+  await hooks['tool.execute.after']({ tool: 'bash', sessionID: 's', callID: 'c', args: {} }, broken);
+  const messages = [{ get parts() { throw new Error('unreadable parts'); } }];
+  await hooks['experimental.chat.messages.transform']({}, { messages });
+});
