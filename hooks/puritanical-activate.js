@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getDefaultMode, getClaudeDir, safeWriteFlag, readJsonFile, readSettingsText, legacySetting, resolveSections, filterSections,
-  OLD_NAME, migrateOldState, migrateOldConfig } = require('./puritanical-config');
+  isOldStatusLine, migrateOldState, migrateOldConfig } = require('./puritanical-config');
 
 // ── Update-notice helpers (pure — tested directly) ─────────────────────────
 // Minor/patch releases stay quiet: a nudge per major is signal, more is spam.
@@ -74,7 +74,7 @@ function statuslineNotice(settingsPath) {
     if (raw === null) return '';
     // A badge still running the pre-4.0.0 statusline script needs setting up again.
     const line = JSON.parse(raw.replace(/^\uFEFF/, '')).statusLine;
-    if (line && !JSON.stringify(line).includes(OLD_NAME + '-statusline')) return '';
+    if (line && !isOldStatusLine(line)) return '';
   } catch (error) {
     // A missing file needs setup. Leave unreadable or malformed settings alone.
     if (error.code !== 'ENOENT') return '';

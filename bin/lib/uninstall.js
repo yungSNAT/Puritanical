@@ -11,6 +11,7 @@ const MCP = require('./mcp');
 const TOOLS = require('./tools');
 const ENV = require('./env');
 const FENCE = require('./fence');
+const CLAUDE = require('./claude');
 const { NAME, OLD_NAME } = require('../../hooks/puritanical-config');
 
 // Entry names under both the current name and the one installs before 4.0.0 used.
@@ -36,13 +37,14 @@ function unlinkQuietly(p) {
   try { fs.unlinkSync(p); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 }
 
+// The plugin under both names, then each marketplace once nothing from it is
+// left installed.
 function uninstallClaudePlugin(ctx) {
   if (!ENV.hasCmd('claude') || ctx.opts.dryRun) return 0;
   let n = 0;
-  for (const [id, listed] of [['puritanical@puritanical', undefined], [ENV.OLD_PLUGIN, ENV.OLD_LISTED]]) {
-    if (!ENV.listsPuritanical('claude', ['plugin', 'list'], listed)) continue;
-    ENV.run('claude', ['plugin', 'uninstall', id], false);
-    n++;
+  for (const [id, listed] of [['puritanical@puritanical', /puritanical/i], [ENV.OLD_PLUGIN, ENV.OLD_LISTED]]) {
+    const { removed, left } = CLAUDE.uninstallPlugin(ctx, id, listed);
+    n += removed + (left ? 0 : CLAUDE.removeMarketplace(ctx, id.split('@')[1]));
   }
   return n;
 }
@@ -100,7 +102,7 @@ function uninstallPi(ctx) {
 function uninstallCodex(ctx) {
   const codexMd = path.join(ENV.homeDir(), '.codex', 'AGENTS.md');
   if (!FENCE.exists(codexMd)) return 0;
-  const txt = FENCE.readText(codexMd);
+  const txt = FENCE.withoutOldFence(FENCE.readText(codexMd));
   const { b, e, end: after } = FENCE.fenceSpan(txt);
   if (b === -1) return 0;
   let stripped = txt;
@@ -119,7 +121,7 @@ function uninstallCodex(ctx) {
 // trailing blank run to one newline (Copilot CLI).
 function removeFencedBlock(ctx, file, { warnUnclosed, trimEnd }) {
   if (!FENCE.exists(file)) return 0;
-  const txt = FENCE.readText(file);
+  const txt = FENCE.withoutOldFence(FENCE.readText(file));
   const { b, e } = FENCE.fenceSpan(txt);
   if (b === -1) return 0;
   if (e === -1) {

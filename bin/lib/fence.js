@@ -31,6 +31,16 @@ function fenceSpan(txt) {
   return { b: -1, e: -1, end: -1, old: false };
 }
 
+// Drops a complete block with the old markers from a file that also holds a
+// current block, so the old rules never load beside the new ones.
+function withoutOldFence(txt) {
+  if (!txt.includes(FENCE_BEGIN)) return txt;
+  const b = txt.indexOf(OLD_MARKERS[0]);
+  const e = b === -1 ? -1 : txt.indexOf(OLD_MARKERS[1], b);
+  if (e === -1) return txt;
+  return txt.slice(0, b) + txt.slice(e + OLD_MARKERS[1].length).replace(/^\n/, '');
+}
+
 function readText(file) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Agent instruction files under the user's home or agent config root.
   return fs.readFileSync(file, 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -66,8 +76,9 @@ function writeFencedRuleset(target, opts, note) {
   const raw = readText(path.join(REPO_ROOT, 'AGENTS.md'));
   const block = FENCE_BEGIN + '\n' + raw.trimEnd() + '\n' + FENCE_END + '\n';
   mkdirp(path.dirname(target));
-  let existing = '';
-  try { existing = readText(target); } catch {}
+  let found = '';
+  try { found = readText(target); } catch {}
+  const existing = withoutOldFence(found);
   const { b, e, end, old } = fenceSpan(existing);
   if (b === -1) {
     writeText(target, existing + separator(existing) + block);
@@ -75,6 +86,10 @@ function writeFencedRuleset(target, opts, note) {
     return 'installed';
   }
   if (!opts.force && !old) {
+    if (existing !== found) {
+      writeText(target, existing);
+      process.stdout.write('  removed the pre-4.0.0 ruleset from ' + target + '\n');
+    }
     note('  ' + target + ' already contains puritanical ruleset (--force to refresh)');
     return 'skipped';
   }
@@ -169,5 +184,5 @@ function pruneSkills(dstRoot, dryRun, names = ownedSkillNames().concat(oldSkillN
 
 module.exports = {
   FENCE_BEGIN, FENCE_END, fenceSpan, readText, writeText, exists, mkdirp, removeTree,
-  copyFile, writeFencedRuleset, withoutFence, copySkills, pruneSkills, oldSkillNames,
+  copyFile, writeFencedRuleset, withoutFence, withoutOldFence, copySkills, pruneSkills, oldSkillNames,
 };

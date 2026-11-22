@@ -11,7 +11,7 @@ const path = require('path');
 const SETTINGS = require('./settings');
 const ENV = require('./env');
 const FENCE = require('./fence');
-const { OLD_NAME } = require('../../hooks/puritanical-config');
+const { OLD_NAME, isOldStatusLine } = require('../../hooks/puritanical-config');
 
 const HOOK_FILES = ['package.json', 'puritanical-config.js', 'puritanical-activate.js',
   'puritanical-mode.js', 'puritanical-mode-tracker.js', 'puritanical-compress-output.js', 'puritanical-command-filters.js',
@@ -34,17 +34,59 @@ function claudeInstalled(opts) {
   return hasPuritanicalHookCommand(SETTINGS.readSettings(settingsPathFor(opts)));
 }
 
-// An install before 4.0.0 added the plugin under its old name, from a marketplace
-// of that name. Both go, so the two plugins never run side by side.
-function removeOldPlugin(ctx) {
-  if (!ENV.listsPuritanical('claude', ['plugin', 'list'], ENV.OLD_LISTED)) return;
-  ENV.run('claude', ['plugin', 'uninstall', ENV.OLD_PLUGIN], ctx.opts.dryRun);
-  ENV.run('claude', ['plugin', 'marketplace', 'remove', OLD_NAME], ctx.opts.dryRun);
+// Installed copies of a plugin as { scope, project }, from `claude plugin list
+// --json`. A CLI without --json falls back to the text list: one copy, at the
+// default scope.
+function pluginCopies(id, listed) {
+  const r = ENV.capture('claude', ['plugin', 'list', '--json']);
+  try {
+    const list = JSON.parse(r.status === 0 ? r.stdout : '');
+    if (Array.isArray(list)) return list.filter(p => p && p.id === id).map(p => ({ scope: p.scope, project: p.projectPath }));
+  } catch {}
+  return ENV.listsPuritanical('claude', ['plugin', 'list'], listed) ? [{}] : [];
 }
 
-// A statusline running the old badge script, which reads state that has moved.
-function isOldStatusLine(sl) {
-  return !!sl && JSON.stringify(sl).includes(OLD_NAME + '-statusline');
+// Uninstalls each copy of a plugin this run may change: user scope, and local
+// scope in the current project. Project scope is recorded in a settings file
+// shared with a team, so that copy, and any that fails, is left with the
+// command to run. Returns the counts removed and left.
+function uninstallPlugin(ctx, id, listed) {
+  let removed = 0;
+  let left = 0;
+  for (const { scope, project } of pluginCopies(id, listed)) {
+    const args = ['plugin', 'uninstall', id].concat(scope ? ['--scope', scope] : []);
+    const here = !project || path.resolve(project) === process.cwd();
+    if (scope !== 'project' && here && ENV.ranOk(ENV.run('claude', args, ctx.opts.dryRun))) { removed++; continue; }
+    left++;
+    ctx.warn(`  ${id} is still installed at ${scope || 'user'} scope; remove it with: ` +
+      (here ? '' : `cd ${JSON.stringify(project)} && `) + 'claude ' + args.join(' '));
+  }
+  return { removed, left };
+}
+
+// Removes a configured marketplace; returns 1 when it went.
+function removeMarketplace(ctx, name) {
+  const r = ENV.capture('claude', ['plugin', 'marketplace', 'list', '--json']);
+  let names = [];
+  try { names = JSON.parse(r.stdout).map(m => m && m.name); } catch {}
+  if (!names.includes(name)) return 0;
+  return ENV.ranOk(ENV.run('claude', ['plugin', 'marketplace', 'remove', name], ctx.opts.dryRun)) ? 1 : 0;
+}
+
+// An install before 4.0.0 added the plugin under its old name, from a marketplace
+// of that name. Both go, so the two plugins never run side by side; the
+// marketplace stays while any copy of the old plugin does.
+function removeOldPlugin(ctx) {
+  if (uninstallPlugin(ctx, ENV.OLD_PLUGIN, ENV.OLD_LISTED).left) ctx.warn(`  kept the ${OLD_NAME} marketplace while the old plugin is installed`);
+  else removeMarketplace(ctx, OLD_NAME);
+}
+
+// A status line that runs the old badge script among other commands stays
+// as the user wrote it; this says what to change.
+function noteOldStatusLine(note, sl, settingsPath) {
+  if (sl && !isOldStatusLine(sl) && JSON.stringify(sl).includes(OLD_NAME + '-statusline')) {
+    note(`  left your status line in ${settingsPath}: it runs the pre-4.0.0 ${OLD_NAME}-statusline script; point it at puritanical-statusline`);
+  }
 }
 
 // Hook entries and the hooks folder a standalone install before 4.0.0 wired.
@@ -83,10 +125,12 @@ function dropStandaloneHooks(ctx) {
   const settingsPath = settingsPathFor(opts);
   const settings = SETTINGS.readSettings(settingsPath);
   if (!settings) return;
+  noteOldStatusLine(note, settings.statusLine, settingsPath);
   const oldLine = isOldStatusLine(settings.statusLine);
   if (oldLine) delete settings.statusLine;
   if (SETTINGS.removeHooks(settings, 'puritanical-') + dropOldStandalone(ctx, settings) === 0 && !oldLine) return;
   if (!opts.dryRun) {
+    backupSettings(settingsPath);
     SETTINGS.validateHookFields(settings);
     SETTINGS.writeSettings(settingsPath, settings);
   }
@@ -180,6 +224,7 @@ function installClaudeHooks(ctx) {
   const settings = SETTINGS.readSettings(settingsPath);
   if (settings === null) { warn('  settings.json unparseable; not touching it.'); return 'settings.json unparseable'; }
   backupSettings(settingsPath);
+  noteOldStatusLine(note, settings.statusLine, settingsPath);
   dropOldStandalone(ctx, settings);
   wireHooks(settings, hooksDst);
   configureStatusLine(settings, hooksDst);
@@ -189,4 +234,4 @@ function installClaudeHooks(ctx) {
   return 'ok';
 }
 
-module.exports = { installClaude, claudeInstalled };
+module.exports = { installClaude, claudeInstalled, uninstallPlugin, removeMarketplace };
