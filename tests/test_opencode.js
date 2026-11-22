@@ -689,7 +689,7 @@ test('tool.execute.after preserves bounded Chisle output but bounds source marke
 test('OpenCode-native tool_output truncation remains recoverable before the hook', async () => {
   const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
   const hooks = await plugin({});
-  const nativePath = path.join(os.tmpdir(), 'opencode', 'tool_original');
+  const nativePath = '/opt/opencode/tool_original';
   const native = `${bigOutput(300)}\n\n...250000 bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${nativePath}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`;
   const output = { output: native };
   await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'ordered', callID: 'ordered-1' }, output);
