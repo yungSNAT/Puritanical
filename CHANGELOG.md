@@ -5,7 +5,14 @@
 All notable changes to Puritanical (formerly Chisle) are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [4.0.0] - Unreleased
+
+### Changed: Chisle is now Puritanical
+
+- Every name the package installs changes. The Claude Code plugin is `puritanical@puritanical`; the skills and commands are `puritanical`, `puritanical-audit`, `puritanical-help` and `puritanical-review` (`/puritanical`, `/puritanical off`); hooks, state files (`.puritanical-*`), the config folder (`puritanical/`), rule files, the fenced-block markers (`<!-- puritanical-begin -->`), environment variables (`PURITANICAL_*`) and hook output (`PURITANICAL ACTIVE`) follow, as do the package and command name, `puritanical`. Nothing is published to npm, where `chisle` is upstream's name: install from this repository with `npx github:yungSNAT/Puritanical`.
+- Upgrading: `--update` replaces a Chisle install. It removes the `chisle@chisle` plugin and its marketplace, the old Gemini CLI extension and pi sources, standalone hooks and an old status badge, old skills, the old Copilot CLI hook and OpenCode plugin, and project rule files that still match the generated copy; it replaces the old fenced block rather than adding a second one; it moves the `.chisle-*` state (the savings ledger and the `tools trim` record among it) and the `chisle` config folder's settings to the new names; and it points MCP servers wrapped by the old proxy at the new one. The Claude Code hook and the pi extension move state and settings themselves at the next session.
+- `CHISLE_*` variables still apply when the matching `PURITANICAL_*` one is unset; 'stop chisle', 'chisle mode' and `/chisle` still switch the mode. `--uninstall` removes both sets of names.
+- The update notice checks this fork's GitHub releases instead of npm, and points at `claude plugin update puritanical@puritanical` or `npx github:yungSNAT/Puritanical --update`.
 
 ### Security
 

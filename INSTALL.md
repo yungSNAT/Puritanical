@@ -164,10 +164,11 @@ One command covers every agent that already has Puritanical:
 npx github:yungSNAT/Puritanical --update
 ```
 
-It refreshes what is installed and adds nothing new. Two details it exists to handle:
+It refreshes what is installed and adds nothing new. Plain `npx github:yungSNAT/Puritanical` does not upgrade: every install path skips what is already present, so an upgrade run reports success and changes nothing.
 
-- **Plain `npx github:yungSNAT/Puritanical` does not upgrade.** Every install path skips what is already present, so an upgrade run reports success and changes nothing.
-- **`@latest` matters.** `npx` can serve a cached copy of the package from a previous run; the pin is what guarantees you get the new one.
+### Upgrading from 3.x
+
+Puritanical was formerly Chisle, and 4.0.0 renames everything it installs. `--update` finds a Chisle install and replaces it: the `chisle@chisle` Claude Code plugin and its marketplace, standalone hooks and the status badge, the Gemini CLI extension, pi sources, skills, the Copilot CLI hook, the OpenCode plugin, fenced rule blocks and unedited project rule files. It moves the `.chisle-*` state (the savings ledger and the `tools trim` record among it) and the `chisle` config folder's settings to the new names, and points MCP servers wrapped by the old proxy at the new one. The Claude Code hook moves the state itself at the next session start. `CHISLE_*` variables, 'stop chisle' and 'chisle mode' keep working; `--uninstall` removes both sets of names.
 
 ### Per agent
 
@@ -193,7 +194,8 @@ The last six keep their rule file inside the repo, because that is how those age
 
 Preview any update without touching disk by adding `--dry-run`.
 
-Puritanical's Claude hook checks npm at session start and mentions major releases once (cached three days). `PURITANICAL_UPDATE_CHECK=0` disables that check.
+Puritanical's Claude hook checks this fork's GitHub releases at session start and mentions major releases once (cached three days). `PURITANICAL_UPDATE_CHECK=0` disables that check.
+
 
 From 2.x to 3.x, replace legacy `lite` / `full` / `ultra` config with `on` / `off`, or remove it.
 

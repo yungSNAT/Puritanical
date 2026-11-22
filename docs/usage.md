@@ -8,10 +8,9 @@ The details the [README](../README.md) leaves out.
 npx github:yungSNAT/Puritanical --update
 ```
 
-That refreshes every agent that already has Puritanical and installs it into none that don't. Two details it exists to handle:
+That refreshes every agent that already has Puritanical and installs it into none that don't. Plain `npx github:yungSNAT/Puritanical` does not upgrade: every install path skips what is already present, so an upgrade run reports success and changes nothing. `--update` pairs the refresh with that check.
 
-- **Plain `npx github:yungSNAT/Puritanical` does not upgrade.** Every install path skips what is already present, so an upgrade run reports success and changes nothing. `--update` pairs the refresh with that check.
-- **`@latest` matters.** `npx github:yungSNAT/Puritanical` can serve a cached copy of the package from a previous run, so the pin is what guarantees you get the new one.
+Puritanical was formerly Chisle. From a Chisle install, `--update` moves the old state and settings to the new names and replaces the old plugin, extension, hooks, skills and rule blocks; [INSTALL.md](../INSTALL.md#upgrading-from-3x) lists what it covers.
 
 Update one agent at a time with `--only`:
 
@@ -35,7 +34,8 @@ npx github:yungSNAT/Puritanical --update --only cursor
 
 Not sure what you are running? `npx github:yungSNAT/Puritanical --list` prints the agents it detects, and `claude plugin list` shows the installed plugin and its version.
 
-Puritanical checks npm on session start and mentions it once when a **major** version is out (cached 3 days, `PURITANICAL_UPDATE_CHECK=0` to silence). Minor and patch releases stay quiet on purpose.
+Puritanical checks this fork's GitHub releases on session start and mentions it once when a **major** version is out
+ (cached 3 days, `PURITANICAL_UPDATE_CHECK=0` to silence). Minor and patch releases stay quiet on purpose.
 
 Upgrading to 3.0.0 from 2.x needs nothing: a `lite`/`full`/`ultra` value in `PURITANICAL_DEFAULT_MODE` or `config.json` is no longer meaningful, falls through to the default, and Puritanical stays active. It says so once so the setting is not ignored silently. Replace it with `on`/`off` or delete it.
 
