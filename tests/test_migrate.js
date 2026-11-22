@@ -9,13 +9,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const {
   exists, linkStat, listDir, makeDir, makeLink, makeTempDir, readJson, readText, remove, under, writeText,
 } = require('./helpers/sandbox');
 
 const CLI = under(__dirname, '..', 'bin', 'install.js');
 const ACTIVATE = under(__dirname, '..', 'hooks', 'puritanical-activate.js');
+const FAKE_CLI = under(__dirname, 'fixtures', 'fake-cli.js');
+const RELEASED_RULE = readText(under(__dirname, 'fixtures', 'chisle-rule.mdc')); // .cursor/rules/chisle.mdc in 3.14.2
 const CONFIG = require('../hooks/puritanical-config');
 const { requestedMode } = require('../hooks/puritanical-mode');
 const { latestVersion, majorUpdateNotice } = require('../hooks/puritanical-activate');
@@ -54,19 +56,16 @@ function sandbox(t) {
     PURITANICAL_UPDATE_CHECK: '0', PURITANICAL_DEFAULT_MODE: undefined,
   };
   for (const key of Object.keys(env)) if (key.startsWith('CHISLE_')) delete env[key];
-  // A stand-in CLI: logs its arguments, and prints `list` output from <name>.list.
-  const fake = (name, listed) => {
-    put(dir('bin', name), '#!/bin/sh\n' +
-      `echo "$*" >> "${dir(name + '.log')}"\n` +
-      `case "$*" in *list*) /bin/cat "${dir(name + '.list')}";; esac\nexit 0\n`, { mode: 0o755 });
-    put(dir(name + '.list'), listed);
+  // A stand-in claude, gemini or pi CLI (tests/fixtures/fake-cli.js) with the given state.
+  const fake = (name, state) => {
+    put(dir('bin', name), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_CLI}" ${name} "${root}" "$@"\n`, { mode: 0o755 });
+    putJson(dir(name + '.state.json'), state);
   };
   const cli = (args, extra = {}) => {
-    try {
-      return execFileSync(process.execPath, [CLI, ...args, '--no-color'], {
-        cwd: extra.cwd || root, env: { ...env, ...extra.env }, encoding: 'utf8', timeout: 20000,
-      });
-    } catch (e) { return (e.stdout || '') + (e.stderr || ''); }
+    const r = spawnSync(process.execPath, [CLI, ...args, '--no-color'], {
+      cwd: extra.cwd || root, env: { ...env, ...extra.env }, encoding: 'utf8', timeout: 20000,
+    });
+    return r.stdout + r.stderr;
   };
   const hook = (extra = {}) => execFileSync(process.execPath, [ACTIVATE], {
     env: { ...env, ...extra }, input: '{"source":"startup"}', encoding: 'utf8', timeout: 10000,
@@ -134,8 +133,20 @@ test("'stop chisle', 'chisle mode' and /chisle still switch the mode", () => {
   assert.equal(requestedMode('chisle mode off'), 'off');
   assert.equal(requestedMode('chisle mode'), 'on');
   assert.equal(requestedMode('/chisle'), 'on');
-  assert.equal(requestedMode('stop puritanical'), 'off');
+  assert.equal(requestedMode('chislify this'), 'on');
   assert.equal(requestedMode('chisled oak'), null);
+});
+
+test('the new name switches the mode only in a whole instruction', () => {
+  for (const [prompt, mode] of [['/puritanical', 'on'], ['/puritanical off', 'off'], ['puritanical mode', 'on'],
+    ['Puritanical mode off.', 'off'], ['puritanical off', 'off'], ['please activate puritanical', 'on'],
+    ['stop puritanical', 'off'], ['disable puritanical mode', 'off']]) {
+    assert.equal(requestedMode(prompt), mode, prompt);
+  }
+  for (const prompt of ['use a less puritanical tone in the README', 'Puritanical attitudes on alcohol',
+    'this rule feels puritanical, focus on the tests', 'stop puritanical nonsense in the docs', 'puritanical']) {
+    assert.equal(requestedMode(prompt), null, prompt);
+  }
 });
 
 // ── Claude Code hook ────────────────────────────────────────────────────────
@@ -189,22 +200,49 @@ const OLD_SETTINGS = {
 
 test('the plugin path replaces chisle@chisle and drops old standalone wiring', POSIX, t => {
   const s = sandbox(t);
-  s.fake('claude', 'chisle@chisle  3.14.2\n');
+  s.fake('claude', { plugins: [{ id: 'chisle@chisle' }], marketplaces: ['chisle'] });
   putJson(s.dir('claude', 'settings.json'), OLD_SETTINGS);
   makeDir(s.dir('claude', 'chisle-hooks'));
 
   const dry = s.cli(['--only', 'claude', '--dry-run']);
-  assert.match(dry, /would run: claude plugin uninstall chisle@chisle/);
+  assert.match(dry, /would run: claude plugin uninstall chisle@chisle --scope user/);
   assert.match(dry, /would run: claude plugin marketplace remove chisle/);
   assert.doesNotMatch(s.log('claude'), /uninstall|remove/, 'a dry run removed the old plugin');
   assert.deepEqual(readJson(s.dir('claude', 'settings.json')), OLD_SETTINGS, 'a dry run changed settings');
 
   assert.match(s.cli(['--only', 'claude', '--update']), /Puritanical updater[\s\S]*Claude Code detected/);
   const calls = s.log('claude');
-  assert.match(calls, /^plugin uninstall chisle@chisle\nplugin marketplace remove chisle$/m);
+  assert.match(calls, /^plugin uninstall chisle@chisle --scope user\n[\s\S]*^plugin marketplace remove chisle$/m);
   assert.match(calls, /^plugin install puritanical@puritanical$/m);
   assert.deepEqual(readJson(s.dir('claude', 'settings.json')), { hooks: { Stop: MINE } });
+  assert.deepEqual(readJson(s.dir('claude', 'settings.json.bak')), OLD_SETTINGS, 'no backup of the settings it changed');
   assert.ok(!exists(s.dir('claude', 'chisle-hooks')));
+});
+
+test('an old plugin that cannot go keeps its marketplace and names the command to run', POSIX, t => {
+  const s = sandbox(t);
+  const team = s.dir('team');
+  s.fake('claude', {
+    plugins: [{ id: 'chisle@chisle' }, { id: 'chisle@chisle', scope: 'local', projectPath: s.dir() },
+      { id: 'chisle@chisle', scope: 'project', projectPath: team }],
+    marketplaces: ['chisle'], fail: ['user'],
+  });
+  const out = s.cli(['--only', 'claude']);
+  assert.match(out, /chisle@chisle is still installed at user scope; remove it with: claude plugin uninstall chisle@chisle --scope user/);
+  assert.ok(out.includes(`chisle@chisle is still installed at project scope; remove it with: cd ${JSON.stringify(team)} && claude plugin uninstall chisle@chisle --scope project`));
+  assert.match(out, /kept the chisle marketplace while the old plugin is installed/);
+  assert.match(s.log('claude'), /^plugin uninstall chisle@chisle --scope local$/m, 'the local copy in this project stayed');
+  assert.doesNotMatch(s.log('claude'), /--scope project|marketplace remove/);
+});
+
+test('a status line that runs the old script among other commands stays, with a note', POSIX, t => {
+  const s = sandbox(t);
+  s.fake('claude', { plugins: [{ id: 'puritanical@puritanical' }] });
+  const mixed = { type: 'command', command: 'bash "/c/chisle-hooks/chisle-statusline.sh"; git branch --show-current' };
+  putJson(s.dir('claude', 'settings.json'), { statusLine: mixed });
+  assert.match(s.cli(['--only', 'claude', '--update']), /left your status line in .*settings\.json: it runs the pre-4\.0\.0 chisle-statusline script/);
+  assert.deepEqual(readJson(s.dir('claude', 'settings.json')), { statusLine: mixed });
+  assert.equal(s.hook().includes('STATUSLINE SETUP NEEDED'), false, 'a status line of the user\'s own was called unconfigured');
 });
 
 test('standalone wiring replaces old hook entries and an old status badge', POSIX, t => {
@@ -226,12 +264,12 @@ test('standalone wiring replaces old hook entries and an old status badge', POSI
 
 test('uninstall removes the old plugin, state and settings with the new', POSIX, t => {
   const s = sandbox(t);
-  s.fake('claude', 'puritanical@puritanical\nchisle@chisle\n');
+  s.fake('claude', { plugins: [{ id: 'puritanical@puritanical' }, { id: 'chisle@chisle' }], marketplaces: ['puritanical', 'chisle', 'other'] });
   putJson(s.dir('claude', 'settings.json'), OLD_SETTINGS);
   for (const f of ['.chisle-active', '.puritanical-active', '.chisle-update-check.json']) put(s.dir('claude', f), 'on');
   makeDir(s.dir('claude', 'chisle-spill'));
   assert.match(s.cli(['--uninstall', '--only', 'claude']), /Uninstalled/);
-  assert.match(s.log('claude'), /^plugin uninstall puritanical@puritanical\nplugin list\nplugin uninstall chisle@chisle$/m);
+  assert.deepEqual(readJson(s.dir('claude.state.json')), { plugins: [], marketplaces: ['other'], extensions: [], packages: [], fail: [] });
   assert.deepEqual(readJson(s.dir('claude', 'settings.json')), { hooks: { Stop: MINE } });
   assert.deepEqual(listDir(s.dir('claude')).filter(f => !f.startsWith('settings.json')), []);
 });
@@ -249,8 +287,8 @@ test('tools restore finds a trim record under its old name', t => {
 
 test('Gemini CLI and pi lose their old sources before the new ones go in', POSIX, t => {
   const s = sandbox(t);
-  s.fake('gemini', 'chisle (3.14.2)\n');
-  s.fake('pi', 'User packages:\n  npm:chisle@3.14.2\n  git:github.com/yungSNAT/Puritanical\n');
+  s.fake('gemini', { extensions: ['chisle'] });
+  s.fake('pi', { packages: ['npm:chisle@3.14.2', 'git:github.com/yungSNAT/Puritanical'] });
   const out = s.cli(['--only', 'gemini', '--only', 'pi', '--update']);
   assert.match(out, /Gemini CLI detected/, 'an old Gemini extension did not count as installed');
   assert.match(s.log('gemini'), /^extensions uninstall chisle\nextensions install https:\/\/github\.com\/yungSNAT\/Puritanical$/m);
@@ -274,6 +312,18 @@ test('a fenced block with the old markers is replaced, not duplicated', t => {
   put(file, 'mine\n<!-- chisle-begin -->\nold\n<!-- chisle-end -->\n');
   s.cli(['--uninstall', '--only', 'codex']);
   assert.equal(readText(file), 'mine\n');
+});
+
+test('a file holding both blocks keeps only the current one', t => {
+  const s = sandbox(t);
+  const file = s.dir('copilot', 'copilot-instructions.md');
+  const both = 'mine\n<!-- puritanical-begin -->\nnew\n<!-- puritanical-end -->\n<!-- chisle-begin -->\nold\n<!-- chisle-end -->\nalso mine\n';
+  put(file, both);
+  assert.match(s.cli(['--only', 'copilot-cli']), /removed the pre-4\.0\.0 ruleset/);
+  assert.equal(readText(file), 'mine\n<!-- puritanical-begin -->\nnew\n<!-- puritanical-end -->\nalso mine\n');
+  put(file, both);
+  s.cli(['--uninstall', '--only', 'copilot-cli']);
+  assert.equal(readText(file), 'mine\nalso mine\n');
 });
 
 test('OpenCode, Hermes and Copilot CLI drop old skills, plugins and hooks', t => {
@@ -308,19 +358,62 @@ test('OpenCode, Hermes and Copilot CLI drop old skills, plugins and hooks', t =>
   assert.ok(!exists(s.dir('copilot', '.chisle-compress-stats.json')) && !exists(s.dir('copilot', '.puritanical-compress-stats.json')));
 });
 
-test('an old project rule goes while it is the generated copy, and stays once edited', t => {
+test('an old project rule goes only while it is a released copy', t => {
   const s = sandbox(t);
   const proj = s.dir('project');
   const old = under(proj, '.cursor', 'rules', 'chisle.mdc');
-  put(old, '---\nalwaysApply: true\n---\n\n# Chisle\n\nrules\n');
-  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /removed the pre-4\.0\.0 rule/);
+  put(old, RELEASED_RULE.replace(/\r?\n/g, '\r\n'));
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /removed the pre-4\.0\.0 rule .*chisle\.mdc, an unedited copy/);
   assert.ok(!exists(old));
   assert.ok(exists(under(proj, '.cursor', 'rules', 'puritanical.mdc')));
 
-  put(old, 'my own cursor rules\n');
-  assert.match(s.cli(['--only', 'cursor', '--force'], { cwd: proj }), /left .*chisle\.mdc/);
-  assert.ok(exists(old));
+  // The generated heading stays, but the user added a section: the file stays.
+  const edited = RELEASED_RULE + '\n## Our team\n\nRun the linter before committing.\n';
+  put(old, edited);
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /left .*chisle\.mdc: it differs from every released copy/);
+  assert.equal(readText(old), edited);
 });
+
+test('a second --update changes no file and removes nothing', POSIX, t => {
+  const s = sandbox(t);
+  s.fake('claude', { plugins: [{ id: 'chisle@chisle' }], marketplaces: ['chisle'] });
+  s.fake('gemini', { extensions: ['chisle'] });
+  s.fake('pi', { packages: ['npm:chisle@3.14.2'] });
+  putJson(s.dir('claude', 'settings.json'), OLD_SETTINGS);
+  put(s.dir('claude', '.chisle-compress-stats.json'), '{}');
+  put(s.dir('home', '.codex', 'AGENTS.md'), '# mine\n<!-- chisle-begin -->\nold\n<!-- chisle-end -->\n');
+  put(s.dir('opencode', 'skills', 'chisle', 'SKILL.md'), 'old');
+  put(s.dir('home', '.hermes', 'skills', 'chisle', 'SKILL.md'), 'old');
+  put(s.dir('copilot', 'hooks', 'chisle.json'), '{}');
+  put(s.dir('project', '.cursor', 'rules', 'chisle.mdc'), RELEASED_RULE);
+  const oldProxy = s.dir('xdg', 'chisle', 'mcp-proxy', 'chisle-mcp-proxy.js');
+  put(oldProxy, '');
+  putJson(s.dir('home', '.cursor', 'mcp.json'), { mcpServers: { files: { command: 'node', args: [oldProxy, '--', 'files-server'] } } });
+
+  const run = () => s.cli(['--update'], { cwd: s.dir('project') });
+  const first = run();
+  for (const agent of ['Claude Code', 'Gemini CLI', 'Pi', 'Codex', 'OpenCode', 'Hermes Agent', 'Cursor']) {
+    assert.match(first, new RegExp('→ ' + agent + ' detected'), agent);
+  }
+  const before = snapshot(s.dir());
+  const logged = ['claude', 'gemini', 'pi'].map(name => s.log(name).length);
+  run();
+  assert.deepEqual(snapshot(s.dir()), before, 'the second run changed a file');
+  const second = ['claude', 'gemini', 'pi'].map((name, i) => s.log(name).slice(logged[i])).join('');
+  assert.doesNotMatch(second, /uninstall|remove/, 'the second run removed something');
+});
+
+// Every file under root except the stand-in CLIs' logs and state, by content.
+function snapshot(root, rel = '') {
+  const files = {};
+  for (const entry of listDir(under(root, rel))) {
+    const name = rel ? rel + '/' + entry : entry;
+    if (name === 'bin' || /\.(?:log|state\.json)$/.test(name)) continue;
+    if (linkStat(under(root, name)).isDirectory()) Object.assign(files, snapshot(root, name));
+    else files[name] = readText(under(root, name));
+  }
+  return files;
+}
 
 test('MCP servers wrapped by the old proxy move to the new one; uninstall unwraps both', POSIX, t => {
   const s = sandbox(t);
