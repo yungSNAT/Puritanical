@@ -22,6 +22,9 @@ const HERE = __dirname;
 // answers do: no network, read-only system directories, an empty /tmp and no
 // environment. Node's own permission model is not a boundary against hostile
 // code, so there is no fallback without bubblewrap.
+// A fixed path, not a PATH lookup, so a planted bwrap cannot stand in for it.
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- one of 2 fixed install paths.
+const BWRAP = ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].find((p) => fs.existsSync(p)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 const SANDBOX = ['--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--clearenv'];
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- one of the 4 fixed system directories.
 for (const dir of ['/usr', '/bin', '/lib', '/lib64']) if (fs.existsSync(dir)) SANDBOX.push('--ro-bind', dir, dir); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -89,14 +92,14 @@ function gradeCode(item, answer) {
     .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, '')
     .replace(/^\s*module\.exports.*$/gm, '')
     .replace(/^\s*import\s.*$/gm, '');
-  // SIGKILL, because an answer can catch SIGTERM; --die-with-parent then ends it.
-  const r = spawnSync('bwrap', [...SANDBOX, process.execPath, '/bench/grade-cell.js'], {
-    input: JSON.stringify({ item, cleaned }), encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
-  });
-  if (r.error && r.error.code === 'ENOENT') {
+  if (!BWRAP) {
     console.error('grade.js runs model-written code only under bubblewrap (bwrap): use Linux, or WSL on Windows');
     process.exit(2);
   }
+  // SIGKILL, because an answer can catch SIGTERM; --die-with-parent then ends it.
+  const r = spawnSync(BWRAP, [...SANDBOX, process.execPath, '/bench/grade-cell.js'], {
+    input: JSON.stringify({ item, cleaned }), encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
+  });
   try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : String(r.stderr).trim().split('\n').pop()) }; }
 }
 
