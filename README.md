@@ -78,7 +78,7 @@ The generators and benchmark analysis are a Rust crate in [tools/](tools/); `cd 
 
 ### Project checks
 
-The test suite runs on Node.js 18, 20 and 22, and the [Rust workflow](.github/workflows/rust.yml) checks the tools crate on Linux and Windows. The [coverage workflow](.github/workflows/coverage.yml) sends the Node 22 line coverage report to Codecov, beside the Rust crate's. CodeQL scans JavaScript, TypeScript, Python and GitHub Actions. OSV-Scanner checks dependency lockfiles for published advisories. The Codacy badge shows the hosted project grade. The [Codacy CLI workflow](https://github.com/yungSNAT/Puritanical/actions/workflows/codacy.yml) also publishes a downloadable report for each run. OpenSSF Scorecard assesses repository practices. The release badge reads the GitHub release feed.
+The test suite runs on Node.js 18, 20 and 22, and the [Rust workflow](.github/workflows/rust.yml) checks the tools crate on Linux and Windows. The [test workflow](.github/workflows/test.yml) holds the Node 22 run to 100% line coverage and sends its report to Codecov, beside the Rust crate's, and runs the quality grader's code answers inside its bubblewrap sandbox. CodeQL scans JavaScript, TypeScript, Python and GitHub Actions. OSV-Scanner checks dependency lockfiles for published advisories. The Codacy badge shows the hosted project grade. The [Codacy CLI workflow](https://github.com/yungSNAT/Puritanical/actions/workflows/codacy.yml) also publishes a downloadable report for each run. OpenSSF Scorecard assesses repository practices. The release badge reads the GitHub release feed.
 
 ## Credits
 

@@ -61,7 +61,7 @@ fn a_fresh_write_reproduces_every_committed_byte() {
         assert!(ok(&cmd(tmp.path(), &[], &[c])).starts_with("wrote "), "{c}");
     }
     let files = outputs();
-    assert_eq!(files.len(), 104);
+    assert_eq!(files.len(), 32);
     for rel in &files {
         let want = fs::read(repo().join(rel)).expect("committed file");
         assert!(
@@ -116,14 +116,14 @@ fn drift_fails_the_check() {
         )
     );
 
-    mutate("assets/readme/ja/race-light.svg");
+    mutate("assets/readme/race-light.svg");
     fs::remove_file(root.join("assets/readme/line.svg")).expect("remove");
     let out = cmd(root, &[], &["readme-art", "--check"]);
     assert_eq!(out.code, 1);
     assert_eq!(out.stdout, "");
     assert_eq!(
         out.stderr,
-        "assets/readme/line.svg is stale. Run: npm run build:readme-art\nassets/readme/ja/race-light.svg is stale. Run: npm run build:readme-art\n"
+        "assets/readme/line.svg is stale. Run: npm run build:readme-art\nassets/readme/race-light.svg is stale. Run: npm run build:readme-art\n"
     );
 }
 
