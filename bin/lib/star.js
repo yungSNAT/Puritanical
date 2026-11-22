@@ -28,8 +28,9 @@ function readStats(dir) {
 // the Chisle config, after which it is never asked again. Nothing touches GitHub without a
 // "y"; on yes the user's own `gh` login does the starring, Chisle never sees
 // a token. Without `gh` (or if it fails) it prints the links instead.
-const REPO_URL = 'https://github.com/JayPokale/Chisle';
-const OWNER = 'JayPokale';
+const OWNER = 'yungSNAT';
+const REPO = `${OWNER}/Puritanical`;
+const REPO_URL = `https://github.com/${REPO}`;
 const FOLLOW_URL = `https://github.com/${OWNER}`;
 
 function starPromptState() {
@@ -84,7 +85,7 @@ function starAndFollow({ say, note, c }) {
   // The user's own gh, found on their PATH by design (Sonar S4036).
   const gh = (...args) => cp.spawnSync('gh', args, { encoding: 'utf8', timeout: 15000 }); // NOSONAR
   const hasGh = hasCmd('gh');
-  const starred = hasGh && gh('api', '-X', 'PUT', `user/starred/${OWNER}/Chisle`, '--silent').status === 0;
+  const starred = hasGh && gh('api', '-X', 'PUT', `user/starred/${REPO}`, '--silent').status === 0;
   const me = hasGh ? (gh('api', 'user', '--jq', '.login').stdout || '').trim() : '';
   const self = me.toLowerCase() === OWNER.toLowerCase();
   const followed = !self && hasGh && gh('api', '-X', 'PUT', `user/following/${OWNER}`, '--silent').status === 0;
@@ -106,7 +107,7 @@ async function askStar(ctx) {
   }
   say('');
   say(starHeadline(opts, c));
-  note(`  Yes stars ${REPO_URL.replace('https://', '')} and follows @JayPokale, using your gh login.`);
+  note(`  Yes stars ${REPO_URL.replace('https://', '')} and follows @${OWNER}, using your gh login.`);
   const a = await ask(c);
   const yes = a === 'y' || a === 'yes';
   if (!yes && a !== 'n' && a !== 'no') {

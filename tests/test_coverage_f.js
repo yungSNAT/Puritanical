@@ -129,6 +129,7 @@ test('pi sources ignore text after the source and refuse unsafe characters', () 
   const output = [
     'npm:chisle@3.0.0 (user)',
     '  git:https://github.com/JayPokale/Chisle@v1.2.0   (project)',
+    'git:github.com/yungSNAT/Puritanical@v2 (user)',
     'npm:chisle',
     'npm:chisle@1;calc (user)',
     'npm:other@1.0.0 (user)',
@@ -136,6 +137,7 @@ test('pi sources ignore text after the source and refuse unsafe characters', () 
   assert.deepEqual(piSources(output), [
     'npm:chisle',
     'git:https://github.com/JayPokale/Chisle',
+    'git:github.com/yungSNAT/Puritanical',
     'npm:chisle',
   ]);
 });
@@ -238,6 +240,7 @@ test('pi git sources must name github.com as their host', () => {
     'git:https://github.com.evil/JayPokale/Chisle',
     'git:https://github.com@evil.com/JayPokale/Chisle',
     'git:git@github.com:evil/JayPokale/Chisle',
+    'git:https://github.com/yungSNAT/Puritanical-evil',
   ]) {
     assert.deepEqual(piSources(lookalike), [], lookalike);
   }

@@ -26,7 +26,7 @@ function installPi(ctx) {
     note('  chisle package already installed (use --force)');
     results.skipped.push(['pi', 'already installed']); blankLine(); return;
   }
-  const r = ENV.run('pi', ['install', 'npm:chisle'], opts.dryRun);
+  const r = ENV.run('pi', ['install', `git:github.com/${ENV.REPO}`], opts.dryRun);
   if (ENV.ranOk(r)) results.installed.push('pi');
   else results.failed.push(['pi', 'pi package install failed']);
   blankLine();

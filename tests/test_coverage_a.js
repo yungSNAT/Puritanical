@@ -197,7 +197,7 @@ test('failed Claude plugin installation warns and falls back to working standalo
   assert.match(result.out, /plugin install failed, falling back to standalone hooks/);
   assert.match(result.out, /installed:\s+claude-hooks/);
   const calls = readText(log);
-  assert.match(calls, /plugin marketplace add JayPokale\/Chisle/);
+  assert.match(calls, /plugin marketplace add yungSNAT\/Puritanical/);
   assert.match(calls, /plugin install chisle@chisle/);
 
   const settings = readJson(under(cfg, 'settings.json'));

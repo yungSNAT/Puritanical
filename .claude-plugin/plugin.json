@@ -6,8 +6,8 @@
     "name": "Jay Pokale",
     "url": "https://github.com/JayPokale"
   },
-  "homepage": "https://chisle.jaypokale.me",
-  "repository": "https://github.com/JayPokale/Chisle",
+  "homepage": "https://github.com/yungSNAT/Puritanical#readme",
+  "repository": "https://github.com/yungSNAT/Puritanical",
   "license": "Apache-2.0 AND MIT",
   "hooks": {
     "SessionStart": [
