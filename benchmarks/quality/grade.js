@@ -130,8 +130,9 @@ function verdict(item, out) {
   const got = Array.isArray(out?.got) ? out.got : [];
   for (const [i, [args, want]] of item.cases.entries()) {
     const a = JSON.stringify(args);
-    if (i >= got.length) return { pass: false, why: typeof out?.threw === 'string' ? `threw on ${a}: ${out.threw}` : `sandbox: no output for ${a}` };
-    if (got[i] !== JSON.stringify(want)) return { pass: false, why: `${a} -> ${got[i]} want ${JSON.stringify(want)}` };
+    const g = got.at(i); // undefined only past the end: JSON has no undefined
+    if (g === undefined) return { pass: false, why: typeof out?.threw === 'string' ? `threw on ${a}: ${out.threw}` : `sandbox: no output for ${a}` };
+    if (g !== JSON.stringify(want)) return { pass: false, why: `${a} -> ${g} want ${JSON.stringify(want)}` };
   }
   return { pass: true, why: '' };
 }
