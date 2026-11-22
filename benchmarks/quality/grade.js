@@ -111,12 +111,29 @@ function gradeCode(item, answer) {
     .replace(/^\s*import\s.*$/gm, '');
   checkSandbox();
   // SIGKILL, because an answer can catch SIGTERM; --die-with-parent then ends it.
+  // The sandbox gets the arguments only: the expected values stay here, so an
+  // answer that escapes vm and writes its own stdout can claim outputs, never a pass.
   const r = spawnSync(BWRAP, [...SANDBOX, process.execPath, '/bench/grade-cell.js'], {
-    input: JSON.stringify({ item, cleaned }), encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
+    input: JSON.stringify({ fn: item.fn, args: item.cases.map(([args]) => args), cleaned }),
+    encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
   });
-  // A killed answer fails, even if it printed a passing result before it hung.
+  // A killed answer fails, even if it printed outputs before it hung.
   if (r.error || r.signal) return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : r.signal) };
-  try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + String(r.stderr).trim().split('\n').pop() }; }
+  let out;
+  try { out = JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + String(r.stderr).trim().split('\n').pop() }; }
+  return verdict(item, out);
+}
+
+// Compares the sandbox's reported outputs with the expected values, case by case.
+function verdict(item, out) {
+  if (typeof out?.why === 'string') return { pass: false, why: out.why };
+  const got = Array.isArray(out?.got) ? out.got : [];
+  for (const [i, [args, want]] of item.cases.entries()) {
+    const a = JSON.stringify(args);
+    if (i >= got.length) return { pass: false, why: typeof out?.threw === 'string' ? `threw on ${a}: ${out.threw}` : `sandbox: no output for ${a}` };
+    if (got[i] !== JSON.stringify(want)) return { pass: false, why: `${a} -> ${got[i]} want ${JSON.stringify(want)}` };
+  }
+  return { pass: true, why: '' };
 }
 
 // --- load + grade ----------------------------------------------------------

@@ -12,6 +12,7 @@ const { spawnSync } = require('node:child_process');
 const { exists, repoPath, tempRoot, under, writeJson, writeText } = require('./helpers/sandbox');
 
 const GRADE = repoPath('benchmarks', 'quality', 'grade.js');
+const CASES = repoPath('benchmarks', 'quality', 'code.json');
 const REQUIRED = process.env.GRADE_SANDBOX_REQUIRED === '1';
 const BWRAP = ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].find(exists);
 
@@ -32,13 +33,13 @@ const CORRECT = `function isBalanced(s) {
 }`;
 
 // Escapes vm through the host-realm context object and reports what the host
-// process can see: a file outside the sandbox, the environment, and /usr as a
-// control that proves the escape reached the real fs module.
+// process can see: a file outside the sandbox, the expected values, the
+// environment, and /usr as a control that proves the escape reached the real fs module.
 const escape = (secret) => `const proc = this.constructor.constructor('return process')();
 const fs = proc.mainModule.require('fs');
 function look(file) { try { return fs.readFileSync(file, 'utf8'); } catch (e) { return 'unreadable: ' + e.code; } }
 function isBalanced(s) {
-  return { secret: look(${JSON.stringify(secret)}), repo: look(${JSON.stringify(GRADE)}).slice(0, 20), env: Object.keys(proc.env), usr: fs.existsSync('/usr/bin') };
+  return { secret: look(${JSON.stringify(secret)}), cases: look(${JSON.stringify(CASES)}).slice(0, 20), env: Object.keys(proc.env), usr: fs.existsSync('/usr/bin') };
 }`;
 
 // Correct answers, then a process that outlives them: it ignores SIGTERM and
@@ -47,6 +48,12 @@ const HANG = `${CORRECT}
 const proc = this.constructor.constructor('return process')();
 proc.on('SIGTERM', () => {});
 this.constructor.constructor('return setInterval')()(() => {}, 1000);`;
+
+// Escapes vm, prints a passing verdict in the format grade-cell.js once used,
+// and exits before the cases run.
+const FORGE = `const proc = this.constructor.constructor('return process')();
+proc.stdout.write(JSON.stringify({ pass: true, why: '' }));
+proc.exit(0);`;
 
 const cell = (code) => ({ result: 'Here it is.\n\n```js\n' + code + '\n```\n', usage: { output_tokens: 1 } });
 
@@ -60,7 +67,7 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
   const raw = tempRoot(t, 'grade-sandbox-');
   const secret = under(raw, 'host-secret.txt');
   writeText(secret, 'host only');
-  const cells = { 1: [CORRECT, CORRECT], 2: [escape(secret), CORRECT], 3: [HANG, CORRECT] };
+  const cells = { 1: [CORRECT, CORRECT], 2: [escape(secret), CORRECT], 3: [HANG, CORRECT], 4: [FORGE, CORRECT] };
   for (const [seed, [vanilla, chisle]] of Object.entries(cells)) {
     writeJson(under(raw, `code__balanced__vanilla__${seed}.json`), cell(vanilla));
     writeJson(under(raw, `code__balanced__chisle__${seed}.json`), cell(chisle));
@@ -80,21 +87,24 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
   assert.equal(r.status, 0, r.stderr);
   const rows = JSON.parse(r.stdout).rows;
   const row = (arm, seed) => rows.find((x) => x.arm === arm && x.seed === seed);
-  assert.equal(rows.length, 6);
+  assert.equal(rows.length, 8);
 
   for (const arm of ['vanilla', 'chisle']) assert.deepEqual([row(arm, 1).pass, row(arm, 1).why], [true, ''], `${arm} seed 1`);
-  for (const seed of [2, 3]) assert.equal(row('chisle', seed).pass, true);
+  for (const seed of [2, 3, 4]) assert.equal(row('chisle', seed).pass, true);
 
   const seen = JSON.parse(row('vanilla', 2).why.match(/ -> (.*) want true$/)[1]);
   assert.equal(seen.usr, true, 'the escape reached the real fs module');
   assert.match(seen.secret, /^unreadable: /);
-  assert.match(seen.repo, /^unreadable: /);
+  assert.match(seen.cases, /^unreadable: /);
   assert.ok(seen.env.every((k) => k === 'PWD'), `environment: ${seen.env.join(', ')}`);
+
+  // grade.js decides the verdict outside the sandbox, so a forged pass fails.
+  assert.equal(row('vanilla', 4).pass, false);
 
   // spawnSync reports the deadline's kill as ETIMEDOUT.
   assert.equal(row('vanilla', 3).pass, false);
   assert.match(row('vanilla', 3).why, /^sandbox: (SIGKILL|spawnSync \S+ ETIMEDOUT)$/);
   assert.ok(seconds >= 24, `the hanging answer ended before its deadline (${seconds} s)`);
-  // One 24 s deadline (3 s per case plus 2) and 5 quick cells.
+  // One 24 s deadline (3 s per case plus 2) and 7 quick cells.
   assert.ok(seconds < 60, `grading took ${seconds} s`);
 });
