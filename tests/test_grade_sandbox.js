@@ -91,7 +91,10 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
   assert.match(seen.repo, /^unreadable: /);
   assert.ok(seen.env.every((k) => k === 'PWD'), `environment: ${seen.env.join(', ')}`);
 
-  assert.deepEqual([row('vanilla', 3).pass, row('vanilla', 3).why], [false, 'sandbox: SIGKILL']);
+  // spawnSync reports the deadline's kill as ETIMEDOUT.
+  assert.equal(row('vanilla', 3).pass, false);
+  assert.match(row('vanilla', 3).why, /^sandbox: (SIGKILL|spawnSync \S+ ETIMEDOUT)$/);
+  assert.ok(seconds >= 24, `the hanging answer ended before its deadline (${seconds} s)`);
   // One 24 s deadline (3 s per case plus 2) and 5 quick cells.
   assert.ok(seconds < 60, `grading took ${seconds} s`);
 });
