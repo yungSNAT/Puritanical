@@ -17,6 +17,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - Upstream leftovers: the Spanish, Korean, Simplified Chinese and Japanese READMEs with their README art and its generator, `TODO.md`, and `docs/releasing.md`, which described npm publishing this fork does not do. CONTRIBUTING.md now says how a release happens.
 
+### Fixed
+
+- `benchmarks/quality/grade.js`: a code answer that escaped `vm` could print a passing verdict and exit, and the grader recorded a pass. The sandbox now gets each case's arguments and reports only the outputs; `grade.js` holds the expected values and decides pass or fail outside it. `tests/test_grade_sandbox.js` adds answers that forge the old verdict or wrong outputs; both fail.
+
 ## [3.14.2] - 2026-11-19
 
 Patch: the star prompt reports star and follow separately, and the site shows each agent's logo.
