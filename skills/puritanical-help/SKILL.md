@@ -21,7 +21,7 @@ description: >
 | `/puritanical-review` | Review the current diff for over-engineering |
 | `stop puritanical` / `normal mode` | Deactivate |
 
-Natural language works: "activate puritanical", "puritanical mode", "puritanify this".
+A whole instruction also works: "puritanical mode", "activate puritanical", "stop puritanical".
 
 ## The code ladder
 

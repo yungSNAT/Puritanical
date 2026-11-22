@@ -38,7 +38,7 @@ function runTracker(prompt, { preActive, defaultMode = 'on' } = {}) {
 test('shared parser only deactivates when off-verb targets Puritanical', () => {
   assert.equal(requestedMode('stop puritanical'), 'off');
   assert.equal(requestedMode('normal mode'), 'off');
-  assert.equal(requestedMode('use puritanical to turn off the logger'), 'on');
+  assert.equal(requestedMode('use puritanical to turn off the logger'), null);
   assert.equal(requestedMode('puritanical please stop the server'), null);
 });
 
