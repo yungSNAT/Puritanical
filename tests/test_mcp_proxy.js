@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
-const { linkStat, readText } = require('./helpers/sandbox');
+const { absolutePath, linkStat, makeDir, makeLink, readText, writeText } = require('./helpers/sandbox');
 
 const ROOT = path.join(__dirname, '..');
 const PROXY = path.join(ROOT, 'hooks', 'chisle-mcp-proxy.js');
@@ -297,15 +297,15 @@ test('mcp wrap covers Antigravity mcp_config.json and VS Code Copilot mcp.json (
 test('mcp wrap replaces a planted proxy-file link without writing through it', () => {
   const { env } = isolated();
   const proxyDir = path.join('config', 'chisle', 'mcp-proxy');
-  fs.mkdirSync(proxyDir, { recursive: true });
-  fs.writeFileSync('sentinel.txt', 'do not touch\n');
-  fs.symlinkSync(path.resolve('sentinel.txt'), path.join(proxyDir, 'chisle-mcp-proxy.js'));
-  fs.symlinkSync(path.resolve('sentinel.txt'), path.join(proxyDir, 'package.json'));
+  makeDir(proxyDir, { recursive: true });
+  writeText('sentinel.txt', 'do not touch\n');
+  makeLink(absolutePath('sentinel.txt'), path.join(proxyDir, 'chisle-mcp-proxy.js'));
+  makeLink(absolutePath('sentinel.txt'), path.join(proxyDir, 'package.json'));
 
   assert.equal(cli(['mcp', 'wrap'], env).status, 0);
-  assert.equal(fs.readFileSync('sentinel.txt', 'utf8'), 'do not touch\n');
+  assert.equal(readText('sentinel.txt'), 'do not touch\n');
   for (const [file, content] of [
-    ['chisle-mcp-proxy.js', fs.readFileSync(PROXY, 'utf8')],
+    ['chisle-mcp-proxy.js', readText(PROXY)],
     ['package.json', '{ "type": "commonjs" }\n'],
   ]) {
     const st = linkStat(path.join(proxyDir, file));

@@ -178,7 +178,7 @@ const limitHit = (rec) => !rec.out_tokens
 // The hidden test lands only now, after the agent is finished.
 function runHiddenTest(c, repo, rec) {
   const hidden = path.join(repo, '__hidden_test.js'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
-  fs.copyFileSync(path.join(FIX, c.fx, 'test.js'), hidden); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  fs.copyFileSync(path.join(FIX, c.fx, 'test.js'), hidden); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
   try {
     execFileSync('node', ['__hidden_test.js'], { cwd: repo, timeout: 20000, stdio: 'pipe' });
     rec.pass = true; rec.test_output = '';

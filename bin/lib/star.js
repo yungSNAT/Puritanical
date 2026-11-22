@@ -63,7 +63,7 @@ function starHeadline(opts, c) {
   const stats = readStats(claudeDir(opts));
   const tokens = stats ? Math.floor(stats.savedChars / 4) : 0;
   if (tokens < 1000) return `${c.orange('★')} Chisle is free and open source. A star helps other developers find it.`;
-  const short = tokens >= 1e6 ? `${(tokens / 1e6).toFixed(1)}M` : `${Math.round(tokens / 1e3)}k`;
+  const short = tokens >= 1e6 ? `${(tokens / 1e6).toFixed(1)}M` : `${Math.round(tokens / 1000)}k`;
   return `${c.orange('★')} Chisle has kept ~${short} tokens of tool output out of your context so far.`;
 }
 
@@ -81,7 +81,8 @@ async function ask(c) {
 // login has the repo scope (star works) but not user:follow, and nobody can
 // follow themselves. Report each one honestly, with a link for what failed.
 function starAndFollow({ say, note, c }) {
-  const gh = (...args) => cp.spawnSync('gh', args, { encoding: 'utf8', timeout: 15000 });
+  // The user's own gh, found on their PATH by design (Sonar S4036).
+  const gh = (...args) => cp.spawnSync('gh', args, { encoding: 'utf8', timeout: 15000 }); // NOSONAR
   const hasGh = hasCmd('gh');
   const starred = hasGh && gh('api', '-X', 'PUT', `user/starred/${OWNER}/Chisle`, '--silent').status === 0;
   const me = hasGh ? (gh('api', 'user', '--jq', '.login').stdout || '').trim() : '';

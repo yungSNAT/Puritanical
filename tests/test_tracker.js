@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
-const { makeDir, writeText } = require('./helpers/sandbox');
+const { absolutePath, makeDir, makeLink, writeText } = require('./helpers/sandbox');
 
 const TRACKER = path.join(__dirname, '..', 'hooks', 'chisle-mode-tracker.js');
 const { requestedMode } = require('../hooks/chisle-mode');
@@ -163,8 +163,7 @@ test('reinforcement: malformed sections value falls back to enabled, no throw', 
 // Claude Code keeps transcripts under <config dir>/projects/<project>/.
 const TRANSCRIPT = path.join('projects', 'p', 'session.jsonl');
 
-function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptPath } = {}) {
-  const dir = process.cwd();
+function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptPath, configDir = process.cwd() } = {}) {
   fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
   const entry = {
     type: 'assistant',
@@ -174,8 +173,8 @@ function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptP
   makeDir(path.dirname(file), { recursive: true });
   writeText(file, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
   const out = execFileSync(process.execPath, [TRACKER], {
-    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(transcriptPath || file) }),
-    env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on' },
+    input: JSON.stringify({ prompt: 'next task', transcript_path: absolutePath(transcriptPath || file) }),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CHISLE_DEFAULT_MODE: 'on' },
     encoding: 'utf8',
     timeout: 5000,
   });
@@ -192,8 +191,8 @@ test('resume nudge: big context after an expired cache warns the user', () => {
 
 test('resume nudge: silent when the transcript has no assistant usage', () => {
   fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
-  fs.mkdirSync(path.dirname(TRANSCRIPT), { recursive: true });
-  fs.writeFileSync(TRANSCRIPT, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
+  makeDir(path.dirname(TRANSCRIPT), { recursive: true });
+  writeText(TRANSCRIPT, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
   const out = JSON.parse(execFileSync(process.execPath, [TRACKER], {
     input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(TRANSCRIPT) }),
     env: { ...process.env, CLAUDE_CONFIG_DIR: process.cwd(), CHISLE_DEFAULT_MODE: 'on' },
@@ -215,10 +214,10 @@ test('resume nudge: ignores a transcript outside the Claude projects folder', ()
 
 test('resume nudge: ignores a linked transcript or a linked projects subfolder', () => {
   const outside = path.join('outside', 'session.jsonl');
-  fs.mkdirSync(path.join('projects', 'p'), { recursive: true });
+  makeDir(path.join('projects', 'p'), { recursive: true });
   fs.mkdirSync('outside');
-  fs.symlinkSync(path.resolve(outside), path.join('projects', 'p', 'linked.jsonl'));
-  fs.symlinkSync(path.resolve('outside'), path.join('projects', 'linked'), 'dir');
+  makeLink(absolutePath(outside), path.join('projects', 'p', 'linked.jsonl'));
+  makeLink(absolutePath('outside'), path.join('projects', 'linked'), 'dir');
   for (const link of [path.join('projects', 'p', 'linked.jsonl'), path.join('projects', 'linked', 'session.jsonl')]) {
     const out = runWithTranscript(180, 480000, { file: outside, transcriptPath: link });
     assert.equal(out.systemMessage, undefined, link);
@@ -226,6 +225,16 @@ test('resume nudge: ignores a linked transcript or a linked projects subfolder',
   }
   // The same transcript inside the tree still warns.
   assert.match(runWithTranscript(180, 480000).systemMessage, /3 h idle/);
+});
+
+test('resume nudge: warns for a transcript under a linked Claude config folder', () => {
+  // A stow-managed ~/.claude is itself a link; its transcripts still count.
+  makeDir('real-config');
+  makeLink(absolutePath('real-config'), 'linked-config', 'dir');
+  writeText(path.join('linked-config', '.chisle-active'), 'on', { mode: 0o600 });
+  const file = path.join('linked-config', 'projects', 'p', 'session.jsonl');
+  const out = runWithTranscript(180, 480000, { file, configDir: absolutePath('linked-config') });
+  assert.match(out.systemMessage, /3 h idle/);
 });
 
 test('resume nudge: silent while the cache is warm or the context is small', () => {

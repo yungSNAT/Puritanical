@@ -115,6 +115,9 @@ test('Windows command quoting quotes empty and spaced arguments while preserving
   assert.equal(windowsEnv.quoteWin(''), '""');
   assert.equal(windowsEnv.quoteWin('two words'), '"two words"');
   assert.equal(windowsEnv.quoteWin('a"b'), '"a\\"b"');
+  // Every trailing backslash is doubled, so the closing quote stays a quote.
+  assert.equal(windowsEnv.quoteWin('a b\\\\'), '"a b\\\\\\\\"');
+  assert.equal(windowsEnv.quoteWin('a\\\\"b'), '"a\\\\\\\\\\"b"');
   assert.equal(windowsEnv.quoteWin('plain'), 'plain');
 
   const nonWindowsEnv = loadEnvFor('linux');

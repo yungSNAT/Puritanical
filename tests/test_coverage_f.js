@@ -210,3 +210,17 @@ test('update refuses an MCP proxy folder that is a link', (t) => {
   assert.match(result.out, /MCP proxy refresh failed: unsafe MCP proxy folder/);
   assert.deepEqual(listDir(elsewhere), []);
 });
+
+test('mcp reads a config named by --file and refuses an unknown option', (t) => {
+  const home = tempRoot(t, 'chisle-cov-f-mcpfile-');
+  const config = under(home, 'servers.json');
+  writeJson(config, { mcpServers: { local: { command: 'node', args: ['server.js'] } } });
+
+  const status = runCLI(['mcp', 'status', '--file', config], home);
+  assert.equal(status.status, 0, status.out);
+  assert.match(status.out, /custom: 0\/1 stdio server\(s\) wrapped/);
+
+  const bogus = runCLI(['mcp', 'status', '--bogus'], home);
+  assert.equal(bogus.status, 2, bogus.out);
+  assert.match(bogus.out, /unknown option: --bogus/);
+});

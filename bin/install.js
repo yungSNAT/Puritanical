@@ -175,7 +175,7 @@ const INSTALLED = new Map([
 function installedFor(prov, opts) {
   try {
     if (INSTALLED.has(prov.id)) return INSTALLED.get(prov.id)(opts);
-    return !!prov.rule && FENCE.exists(path.join(process.cwd(), prov.rule)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    return !!prov.rule && FENCE.exists(path.join(process.cwd(), prov.rule)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
   } catch { return false; }
 }
 

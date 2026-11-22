@@ -35,7 +35,8 @@ function onPath(cmd) {
 
 function hasCmd(cmd) {
   try {
-    if (IS_WIN) return cp.spawnSync('where', [cmd], { stdio: 'ignore' }).status === 0;
+    // Detection asks where.exe to search the user's PATH by design (Sonar S4036).
+    if (IS_WIN) return cp.spawnSync('where', [cmd], { stdio: 'ignore' }).status === 0; // NOSONAR
     return onPath(cmd);
   } catch { return false; }
 }
@@ -47,10 +48,19 @@ function statOf(p) {
 function isDir(p) { const st = statOf(p); return !!st && st.isDirectory(); }
 function isFile(p) { const st = statOf(p); return !!st && st.isFile(); }
 
+// Windows command-line quoting: backslashes before a quote or the closing
+// quote are doubled, and each quote gets one more backslash.
 function quoteWin(a) {
   if (!IS_WIN) return a;
-  if (a === '' || /[\s"]/.test(a)) return '"' + String(a).replace(/\\(?=\\*"|$)/g, '\\\\').replace(/"/g, '\\"') + '"';
-  return a;
+  if (a !== '' && !/[\s"]/.test(a)) return a;
+  let out = '"';
+  let slashes = 0;
+  for (const ch of String(a)) {
+    if (ch === '\\') { slashes++; continue; }
+    out += ch === '"' ? '\\'.repeat(slashes * 2 + 1) + ch : '\\'.repeat(slashes) + ch;
+    slashes = 0;
+  }
+  return out + '\\'.repeat(slashes * 2) + '"';
 }
 function spawnX(cmd, args, o) {
   // .cmd shims (npm-installed agent CLIs) need cmd.exe on Windows. The command

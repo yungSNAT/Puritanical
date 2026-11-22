@@ -76,7 +76,7 @@ function account(name, text, lastHash, allowDedup, failed, command) {
   if (allowDedup && process.env.CHISLE_COMPRESS_DEDUP !== '0' && size >= 2048) {
     const hash = crypto.createHash('sha256').update(text).digest('hex');
     // eslint-disable-next-line security/detect-possible-timing-attacks, security-node/detect-possible-timing-attacks -- Compares digests of tool output for deduplication; nothing secret.
-    if (lastHash.get(name) === hash) {
+    if (lastHash.get(name) === hash) { // nosemgrep: rules_lgpl_javascript_crypto_rule-node-timing-attack
       const marker = duplicateMarker(name, text);
       totals.dedup++;
       totals.dedupChars += size - marker.length;

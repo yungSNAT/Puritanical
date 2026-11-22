@@ -61,6 +61,11 @@ function linkStat(filename) {
   return fs.lstatSync(filename); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
+function makeLink(target, linkPath, type) {
+  // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
+  fs.symlinkSync(target, linkPath, type); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
+}
+
 function makeDir(dirname, options) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
   return fs.mkdirSync(dirname, options); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
@@ -138,6 +143,7 @@ module.exports = {
   writeJson,
   exists,
   linkStat,
+  makeLink,
   makeDir,
   listDir,
   remove,

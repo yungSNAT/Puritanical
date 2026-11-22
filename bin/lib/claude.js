@@ -89,7 +89,7 @@ function copyHookFiles(hooksDst) {
     if (FENCE.exists(s)) FENCE.copyFile(s, path.join(hooksDst, f)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   }
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- The statusline script just copied into the Claude config directory.
-  try { fs.chmodSync(path.join(hooksDst, 'chisle-statusline.sh'), 0o755); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  try { fs.chmodSync(path.join(hooksDst, 'chisle-statusline.sh'), 0o700); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 function backupSettings(settingsPath) {

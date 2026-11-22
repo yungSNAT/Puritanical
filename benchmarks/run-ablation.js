@@ -63,7 +63,7 @@ for (let s = 1; s <= Number(seeds); s++) for (const [suite, tasks] of Object.ent
   const [task, , prompt] = line.split('\t');
   for (const arm of arms) cells.push({ dir: path.join(out, `${suite}-s${s}`), task, prompt, arm });
 }
-const file = (c, ext) => path.join(c.dir, `${c.task}__${c.arm.name}.${ext}`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+const file = (c, ext) => path.join(c.dir, `${c.task}__${c.arm.name}.${ext}`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file under the output directory named on the command line.
 const todo = cells.filter((c) => !fs.existsSync(file(c, 'json'))); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 console.log(`${MODEL} | ${todo.length}/${cells.length} cells | parallel ${par}`);
@@ -84,11 +84,12 @@ function parseStream(stdout) {
 const unrecorded = (result, text) => !result || !result.usage || !result.usage.output_tokens || result.is_error
   || (text.length < 300 && /limit reached|hit your .{0,20}limit|usage limit|session limit|rate_limit_error/i.test(text));
 
+// c is a benchmark cell, not an HTTP request: the timer below calls run(), never eval.
 function retry(c, text, err, resolve) {
-  c.tries = (c.tries || 0) + 1;
+  c.tries = (c.tries || 0) + 1; // nosemgrep: rules_lgpl_javascript_eval_rule-eval-nodejs
   console.log(`  ${path.basename(c.dir)}/${c.task}/${c.arm.name} not recorded (try ${c.tries}): ${(text || (err && err.message) || '').slice(0, 120)}`);
   if (c.tries >= 6) { limited = true; resolve(); return; }
-  setTimeout(() => run(c).then(resolve), 60000 * c.tries);
+  setTimeout(() => run(c).then(resolve), 60000 * c.tries); // nosemgrep: rules_lgpl_javascript_eval_rule-eval-nodejs
 }
 
 const run = (c) => new Promise((resolve) => {
