@@ -62,7 +62,7 @@ function runCell(c) {
   return new Promise((resolve) => {
     const args = ['-p', c.prompt, '--model', MODEL, '--output-format', 'json'];
     if (c.arm === 'chisle') args.push('--append-system-prompt-file', path.join(ISO, 'chisle.txt'));
-    execFile('claude', args, {
+    execFile('claude', args, { // NOSONAR: claude from PATH, as the benchmark measures the user's installed CLI.
       cwd: os.tmpdir(),
       timeout: 180000,
       maxBuffer: 32 * 1024 * 1024,
@@ -92,7 +92,7 @@ function runCell(c) {
   });
 }
 
-(async () => {
+void (async () => {
   const queue = todo.slice();
   const workers = Array.from({ length: PAR }, async () => {
     while (queue.length && !limited) await runCell(queue.shift());

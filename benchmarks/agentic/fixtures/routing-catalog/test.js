@@ -42,5 +42,5 @@ check('invalid lane validation', quoteShipment({ origin: 'BOS', destination: 'BO
 check('invalid service validation', quoteShipment({ origin: 'BOS', destination: 'JFK', service: 'same-day', weightKg: 1 }).error, 'INVALID_SERVICE');
 check('invalid value validation', quoteShipment({ origin: 'BOS', destination: 'JFK', service: 'ground', weightKg: 1, declaredValueCents: -1 }).error, 'INVALID_VALUE');
 
-try { execFileSync('node', ['test/run.js'], { stdio: 'pipe' }); } catch (e) { bad++; console.log('FAIL visible suite still red'); }
+try { execFileSync(process.execPath, ['test/run.js'], { stdio: 'pipe' }); } catch (e) { bad++; console.log('FAIL visible suite still red'); }
 process.exit(bad ? 1 : 0);

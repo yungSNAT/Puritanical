@@ -184,7 +184,7 @@ function printAccuracy(rows, agg, dropped) {
   if (dropped) console.log(`_${dropped} cell(s) excluded: no counterpart in the other arm._\n`);
   console.log('| suite | arm | n | correct | accuracy | format-clean | mean output tokens | mean answer chars |');
   console.log('|-------|-----|--:|--------:|---------:|-------------:|-------------------:|------------------:|');
-  const segs = [...new Set(rows.map((r) => `${r.suite} ${r.tier}`))].sort().concat('all');
+  const segs = [...new Set(rows.map((r) => `${r.suite} ${r.tier}`))].sort((a, b) => (a < b ? -1 : Number(a > b))).concat('all');
   for (const seg of segs) {
     for (const arm of ARMS) {
       const a = agg.get(seg + '|' + arm);
@@ -240,7 +240,7 @@ function printFailures(rows) {
   else {
     console.log('| arm | suite | item | seed | why |');
     console.log('|-----|-------|------|-----:|-----|');
-    for (const f of fails) console.log(`| ${f.arm} | ${f.suite} | ${f.id} | ${f.seed} | ${f.why.replace(/\|/g, '\\|').slice(0, 110)} |`);
+    for (const f of fails) console.log(`| ${f.arm} | ${f.suite} | ${f.id} | ${f.seed} | ${f.why.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').slice(0, 110)} |`);
   }
 }
 
