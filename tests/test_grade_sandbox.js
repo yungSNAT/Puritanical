@@ -66,9 +66,9 @@ test('grade.js runs code answers inside the bubblewrap sandbox', { timeout: 1200
     writeJson(under(raw, `code__balanced__chisle__${seed}.json`), cell(chisle));
   }
 
-  // Without NODE_V8_COVERAGE, so grade.js stays out of the coverage report.
-  const env = { ...process.env, RAW_DIR: raw };
-  delete env.NODE_V8_COVERAGE;
+  // An empty NODE_V8_COVERAGE keeps grade.js out of the coverage report;
+  // child_process restores the variable when env merely omits it.
+  const env = { ...process.env, RAW_DIR: raw, NODE_V8_COVERAGE: '' };
   const started = Date.now();
   const r = spawnSync(process.execPath, [GRADE, '--json'], { env, encoding: 'utf8', timeout: 90000 });
   const seconds = (Date.now() - started) / 1000;
