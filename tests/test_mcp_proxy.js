@@ -16,6 +16,7 @@ const ROOT = path.join(__dirname, '..');
 const PROXY = path.join(ROOT, 'hooks', 'chisle-mcp-proxy.js');
 const SERVER = path.join(__dirname, 'fixtures', 'fake-mcp-server.js');
 const CLI = path.join(ROOT, 'bin', 'install.js');
+const { quoteWin } = require('../hooks/chisle-mcp-proxy');
 
 const rpc = (id, method, params) => JSON.stringify({ jsonrpc: '2.0', id, method, params });
 isolateWorkingDirectory();
@@ -322,18 +323,18 @@ function parseWinArgs(line) {
   let quoted = false;
   for (let i = 0; i < line.length; i++) {
     let n = 0;
-    while (line[i] === '\\') { n++; i++; }
-    if (line[i] === '"') {
+    while (line.charAt(i) === '\\') { n++; i++; }
+    if (line.charAt(i) === '"') {
       cur = (cur || '') + '\\'.repeat(n >> 1);
       if (n % 2) cur += '"';
       else quoted = !quoted;
     } else {
       if (n) cur = (cur || '') + '\\'.repeat(n);
       if (i >= line.length) break;
-      if (!quoted && /\s/.test(line[i])) {
+      if (!quoted && /\s/.test(line.charAt(i))) {
         if (cur !== null) args.push(cur);
         cur = null;
-      } else cur = (cur || '') + line[i];
+      } else cur = (cur || '') + line.charAt(i);
     }
   }
   if (cur !== null) args.push(cur);
@@ -344,16 +345,14 @@ const TRICKY_ARGS = ['', 'plain', 'two words', 'C:\\Program Files\\', 'end\\\\',
   '"', '\\', 'x \\\\\\', 'mid\\dle path', '\\\\server\\share x', 'tab\there'];
 
 test('quoteWin round-trips tricky arguments through the Windows argv rules', () => {
-  const { quoteWin } = require(PROXY);
   assert.equal(quoteWin('a b\\'), '"a b\\\\"');
   assert.equal(quoteWin('a\\"b'), '"a\\\\\\"b"');
-  assert.deepEqual(parseWinArgs(TRICKY_ARGS.map(quoteWin).join(' ')), TRICKY_ARGS);
+  assert.deepEqual(parseWinArgs(TRICKY_ARGS.map(a => quoteWin(a)).join(' ')), TRICKY_ARGS);
 });
 
 test('quoteWin arguments reach a real Windows process intact', { skip: process.platform !== 'win32' }, () => {
-  const { quoteWin } = require(PROXY);
   const cmd = [process.execPath, '-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', ...TRICKY_ARGS];
-  const r = spawnSync(cmd.map(quoteWin).join(' '), [], { shell: true, encoding: 'utf8', windowsHide: true }); // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
+  const r = spawnSync(cmd.map(a => quoteWin(a)).join(' '), [], { shell: true, encoding: 'utf8', windowsHide: true }); // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), TRICKY_ARGS);
 });

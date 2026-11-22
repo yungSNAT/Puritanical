@@ -125,10 +125,15 @@ function lineSplitter(onLine) {
 // Windows argv quoting in one pass: inside the quotes, n backslashes before a
 // quote become 2n+1 plus the quote, n at the end become 2n, others stay.
 function quoteWin(a) {
-  if (a === '' || /[\s"&|<>^()%!]/.test(a)) {
-    return '"' + String(a).replace(/(\\*)("|$)/g, (m, bs, q) => bs + bs + (q ? '\\"' : '')) + '"';
+  if (a !== '' && !/[\s"&|<>^()%!]/.test(a)) return a;
+  let out = '"';
+  let run = 0;
+  for (const ch of String(a)) {
+    if (ch === '\\') { run++; continue; }
+    out += '\\'.repeat(ch === '"' ? 2 * run + 1 : run) + ch;
+    run = 0;
   }
-  return a;
+  return out + '\\'.repeat(2 * run) + '"';
 }
 
 // Stream error handlers. Writes to a server that has exited fail with EPIPE;
