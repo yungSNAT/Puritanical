@@ -143,9 +143,10 @@ Covers `~/.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`,
 - Opt-in, never part of plain `npx chisle`. Files with comments are reported and
   left alone; the first write keeps `<file>.chisle-bak`.
 - Only stdio servers are wrapped; `url`/HTTP servers are untouched.
-- Tools whose names suggest file content, source, LSP results or edits
-  (`read_file`, `get_file_contents`, `search_code`, `find_symbol`, `edit_file`,
-  …) are never compressed. Claude Code's and Pi's `mcp__*` tools follow the same rule.
+- Tools whose names suggest file content, source, LSP-style queries or edits
+  (`read_file`, `get_file_contents`, `search_code`, `find_symbol`, `hover`,
+  `edit_file`, …) are never compressed. The check is by name only. Claude
+  Code's and Pi's `mcp__*` tools follow the same rule.
 - Output containing a credential (private key, JWT, cloud key, GitHub token,
   Authorization header) is still compressed but never written to a spill file.
 - Claude Code is never wrapped: its own hook already compresses `mcp__*` output.

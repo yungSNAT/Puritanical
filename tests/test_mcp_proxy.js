@@ -348,6 +348,13 @@ test('quoteWin round-trips tricky arguments through the Windows argv rules', () 
   assert.equal(quoteWin('a b\\'), '"a b\\\\"');
   assert.equal(quoteWin('a\\"b'), '"a\\\\\\"b"');
   assert.deepEqual(parseWinArgs(TRICKY_ARGS.map(a => quoteWin(a)).join(' ')), TRICKY_ARGS);
+  // Even and odd backslash runs before a quote, mid-argument and at the end.
+  const runs = [];
+  for (let n = 0; n <= 5; n++) {
+    const bs = '\\'.repeat(n);
+    runs.push(`a ${bs}"b`, `a ${bs}`, `${bs}"`, `x${bs}y z`);
+  }
+  assert.deepEqual(parseWinArgs(runs.map(a => quoteWin(a)).join(' ')), runs);
 });
 
 test('quoteWin arguments reach a real Windows process intact', { skip: process.platform !== 'win32' }, () => {

@@ -435,20 +435,25 @@ const CREDENTIALS = {
   'JSON Authorization header': '{"authorization": "' + 'Basic ' + 'dXNlcjpwYXNz"}',
   'OAuth 1.0 Authorization header': 'Authorization: ' + 'OAuth oauth_consumer_key="k", oauth_signature="s"',
   'bare Authorization token': 'authorization=' + 'Zx9'.repeat(8),
+  'hyphen-prefixed JWT': 'session-' + 'ey' + 'JhbGciOiJIUzI1NiJ9.' + 'ey' + 'JzdWIiOiIxMjM0NTY3ODkwIn0.' + 'S'.repeat(43),
+  'hyphen-prefixed GCP client secret': 'client-GOC' + 'SPX-' + 'x'.repeat(28),
 };
 
 test('containsCredential detects each credential pattern', () => {
   for (const [name, secret] of Object.entries(CREDENTIALS)) {
     assert.equal(containsCredential(`noise before ${secret} noise after`), true, name);
   }
-  for (const clean of ['line 1 ok', 'Authorization: required', 'Authorization: required for all endpoints', 'eyJ short', 'ghp_ short', 'see the private key docs']) {
+  for (const clean of ['line 1 ok', 'Authorization: required', 'Authorization: required for all endpoints',
+    'Authorization: token required', 'authorization: Bearer required', 'eyJ short', 'eyJabc.def.ghi',
+    'ghp_ short', 'see the private key docs']) {
     assert.equal(containsCredential(clean), false, clean);
   }
 });
 
 // '-' is a \b boundary, so a \b-anchored JWT pattern took over 100 s on this.
 test('containsCredential stays linear on adversarial runs', () => {
-  for (const unit of ['eyJ-', 'GOCSPX-', 'ya29.', 'github_pat_', 'abc1Q~']) {
+  for (const unit of ['eyJ-', '-eyJabcdefghijkl', 'eyJabcdefghijk.x', 'GOCSPX-', 'ya29.', 'github_pat_', 'abc1Q~',
+    'authorization:', 'Authorization: token ', 'authorization:abcdefgh']) {
     const started = Date.now();
     containsCredential(unit.repeat(50000));
     assert.ok(Date.now() - started < 5000, `${unit} took ${Date.now() - started} ms`);
@@ -471,7 +476,7 @@ test('output carrying a credential is elided but never spilled', () => {
 
 test('clean output that only mentions credentials still spills', () => {
   withSpillDir((dir) => {
-    const text = bigOutput(500) + '\nAuthorization: required\nprivate key rotation docs';
+    const text = bigOutput(500) + '\nAuthorization: required\nAuthorization: token required\nprivate key rotation docs';
     const out = transform(text, FULL, 'Bash');
     const m = out.match(/Full output: (\S+)/);
     assert.ok(m, 'clean output lost its spill');

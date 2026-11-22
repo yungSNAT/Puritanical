@@ -545,24 +545,40 @@ function pruneSpill(dir) {
 // Azure keys, GitHub tokens and Authorization headers.
 const CREDENTIAL_RES = [
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/,
-  // Not \b: '-' would let every 'eyJ' in one long run start a scan (quadratic).
-  /(?<![\w-])eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/,
   /\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b/,
   /aws_secret_access_key["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}/i,
   /\bAIza[\w-]{35}/,
   /\bya29\.[\w-]{20,}/,
-  /(?<![\w-])GOCSPX-[\w-]{20,}/,
+  /\bGOCSPX-[\w-]{20,}/,
   /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
   /[?&]sig=[A-Za-z0-9%+/]{20,}/,
   /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}/,
   /\bgithub_pat_\w{22,}/,
-  // Any scheme (Bearer, Basic, OAuth, AWS4-HMAC-SHA256, ...) or a bare token.
-  /authorization["']?[ \t]*[:=][ \t]*["']?(?:[A-Za-z][\w-]*[ \t]+[^\s"']{8,}|[^\s"']{16,})/i,
+  // Any scheme (Bearer, Basic, OAuth, AWS4-HMAC-SHA256, ...) or none, then a
+  // value of 8+ characters with a digit, symbol or inner capital in its first
+  // 64, so prose such as 'Authorization: token required' stays clean. The
+  // bound keeps repeated 'authorization:' runs linear.
+  /(?:[Aa]uthorization|AUTHORIZATION)["']?[ \t]*[:=][ \t]*["']?(?:[A-Za-z][\w-]*[ \t]+)?(?=[^\s"']{0,63}[0-9=+/_.~-]|[^\s"']{1,63}[A-Z])[^\s"']{8,}/,
 ];
 
+// JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
+// not a regex: '-' is a segment character, so a regex restarts at every
+// 'eyJ' in a long run and rescans it to the end (quadratic).
+function containsJwt(text) {
+  for (const token of text.split(/[^\w.-]+/)) {
+    const parts = token.split('.');
+    for (let i = 0; i + 2 < parts.length; i++) {
+      const first = parts.at(i);
+      const at = first.indexOf('eyJ');
+      if (at !== -1 && first.length - at >= 13 && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10) return true;
+    }
+  }
+  return false;
+}
+
 function containsCredential(text) {
-  return CREDENTIAL_RES.some(re => re.test(text));
+  return CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text);
 }
 
 function spill(text, toolName, stateDir) {

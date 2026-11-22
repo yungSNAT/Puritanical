@@ -9,7 +9,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 
-- MCP tools that return file or source content (file readers, LSP tools, `get_file_contents`, `search_code`, …) are no longer compressed by the Claude Code and Pi hooks. One name guard now covers those hooks, the MCP proxy, and tools named in `CHISLE_COMPRESS_TOOLS` for Copilot CLI and OpenCode, which can no longer re-enable them.
+- MCP tools whose names mark them as file or source readers (`read_file`, `get_file_contents`, `search_code`, and LSP-style hover, definition, reference and symbol tools) are no longer compressed by the Claude Code and Pi hooks. The check is by name, so a tool named otherwise is not covered. One name guard now covers those hooks, the MCP proxy, and tools named in `CHISLE_COMPRESS_TOOLS` for Copilot CLI and OpenCode, which can no longer re-enable them.
 - Output containing a credential (PEM private key, JWT, AWS, GCP or Azure key, GitHub token, Authorization header) is no longer written to the spill folder; it is still elided, without the recovery path.
 
 ### Changed
