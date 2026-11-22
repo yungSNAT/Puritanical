@@ -11,7 +11,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - Licence: Ryan Duguid's code is now under Apache-2.0, with the attribution in `NOTICE`; code from Chisle stays under the MIT License, and earlier versions keep the licence they were released with. Manifests and SPDX lines say `Apache-2.0 AND MIT`.
 - The generators and benchmark analysis are a Rust crate, `tools/` (`puritanical-tools`): rule copies, charts, site samples and README art, each with `--check`, plus `aggregate`, `pooled`, `answers`, `normalize-pi` and `agentic-score`. Their output matches the JavaScript they replace byte for byte; the npm scripts keep their names, and `check:readme-art` is new. CI checks the crate on Linux and Windows and adds its line coverage to Codecov. `pooled` seeds its bootstrap, so a rerun prints the same interval. `benchmarks/quality/grade.js` stays in JavaScript because it runs the models' code.
-- CI runs the Node suite once on Node 22, with the 100% line-coverage floor, instead of again in a separate coverage workflow. A new job runs `benchmarks/quality/grade.js` on test answers under bubblewrap: a correct answer passes, an answer that escapes `vm` cannot read host files or environment, and one that ignores SIGTERM fails at its deadline.
+- CI runs the Node suite once on Node 22, with the 100% line-coverage floor, instead of again in a separate coverage workflow. That run installs bubblewrap and requires `tests/test_grade_sandbox.js`, which runs `benchmarks/quality/grade.js` on test answers under bubblewrap: a correct answer passes, an answer that escapes `vm` cannot read host files or environment, and one that ignores SIGTERM fails at its deadline.
 
 ### Removed
 

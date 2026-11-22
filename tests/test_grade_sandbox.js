@@ -4,7 +4,7 @@
 
 // Runs benchmarks/quality/grade.js on hand-written code cells, so the bubblewrap
 // sandbox it grades model answers in is exercised end to end. Linux only; the
-// sandbox job sets GRADE_SANDBOX_REQUIRED=1 so a missing or broken bwrap fails.
+// Node 22 CI leg sets GRADE_SANDBOX_REQUIRED=1 so a missing or broken bwrap fails.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
