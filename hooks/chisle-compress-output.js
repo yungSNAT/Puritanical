@@ -105,7 +105,7 @@ const NEVER_COMPRESS_COPILOT = ['view', 'create', 'edit', 'str_replace', 'insert
 // compressing. One guard for every path: the Claude/Pi hook's mcp__ tools, the
 // stdio MCP proxy, and names allowlisted by CHISLE_COMPRESS_TOOLS (Copilot,
 // OpenCode), which cannot override it.
-const UNSAFE_TOOL_NAME_RE = /read|view|file|edit|write|patch|replace|insert|lsp|symbol|definition|content|source|blob|search_code/i;
+const UNSAFE_TOOL_NAME_RE = /read|view|file|edit|write|patch|replace|insert|lsp|symbol|definition|declaration|implementation|reference|hover|content|source|blob|search_code/i;
 
 function unsafeToolName(name) {
   return UNSAFE_TOOL_NAME_RE.test(name);
@@ -545,18 +545,20 @@ function pruneSpill(dir) {
 // Azure keys, GitHub tokens and Authorization headers.
 const CREDENTIAL_RES = [
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/,
-  /\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/,
+  // Not \b: '-' would let every 'eyJ' in one long run start a scan (quadratic).
+  /(?<![\w-])eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/,
   /\b(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b/,
   /aws_secret_access_key["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}/i,
   /\bAIza[\w-]{35}/,
   /\bya29\.[\w-]{20,}/,
-  /\bGOCSPX-[\w-]{20,}/,
+  /(?<![\w-])GOCSPX-[\w-]{20,}/,
   /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
   /[?&]sig=[A-Za-z0-9%+/]{20,}/,
   /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}/,
   /\bgithub_pat_\w{22,}/,
-  /authorization["']?[ \t]*[:=][ \t]*["']?(?:bearer|basic|token|digest)[ \t]+[^\s"']{8,}/i,
+  // Any scheme (Bearer, Basic, OAuth, AWS4-HMAC-SHA256, ...) or a bare token.
+  /authorization["']?[ \t]*[:=][ \t]*["']?(?:[A-Za-z][\w-]*[ \t]+[^\s"']{8,}|[^\s"']{16,})/i,
 ];
 
 function containsCredential(text) {

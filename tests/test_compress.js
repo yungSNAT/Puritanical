@@ -232,7 +232,8 @@ test('Bash, Agent, mcp__ tools are compressible', () => {
 const UNSAFE_MCP = [
   'mcp__tokensave__tokensave_read', 'mcp__filesystem__read_text_file', 'mcp__github__get_file_contents',
   'mcp__github__search_code', 'mcp__ide__lsp_hover', 'mcp__serena__find_symbol', 'mcp__lsp__goto_definition',
-  'mcp__gitlab__get_blob', 'mcp__repo__view_source', 'mcp__x__apply_patch',
+  'mcp__gitlab__get_blob', 'mcp__repo__view_source', 'mcp__x__apply_patch', 'mcp__ide__hover',
+  'mcp__ide__find_references', 'mcp__lsp__goto_implementation', 'mcp__lsp__goto_declaration',
 ];
 
 test('MCP file, source and LSP tools are never compressed (Claude/Pi)', () => {
@@ -247,7 +248,8 @@ test('unsafeToolName is the one guard the proxy, Pi, Copilot and OpenCode share'
   const { mcpToolAllowed } = require('../hooks/chisle-mcp-proxy');
   const { piToolAllowed } = require('../pi-extension/index.js');
   const { copilotToolAllowed, opencodeToolAllowed } = require('../hooks/chisle-compress-output');
-  for (const t of ['get_file_contents', 'search_code', 'lsp_references', 'find_symbol', 'read_resource']) {
+  for (const t of ['get_file_contents', 'search_code', 'lsp_references', 'find_symbol', 'read_resource', 'hover',
+    'find_references', 'goto_implementation']) {
     assert.equal(unsafeToolName(t), true, t);
     assert.equal(mcpToolAllowed(t), false, `proxy: ${t}`);
   }
@@ -431,14 +433,25 @@ const CREDENTIALS = {
   'GitHub fine-grained token': 'github' + '_pat_' + '11ABC'.repeat(6),
   'Authorization header': 'Authorization: ' + 'Bearer ' + 'tok.en-' + 'z'.repeat(20),
   'JSON Authorization header': '{"authorization": "' + 'Basic ' + 'dXNlcjpwYXNz"}',
+  'OAuth 1.0 Authorization header': 'Authorization: ' + 'OAuth oauth_consumer_key="k", oauth_signature="s"',
+  'bare Authorization token': 'authorization=' + 'Zx9'.repeat(8),
 };
 
 test('containsCredential detects each credential pattern', () => {
   for (const [name, secret] of Object.entries(CREDENTIALS)) {
     assert.equal(containsCredential(`noise before ${secret} noise after`), true, name);
   }
-  for (const clean of ['line 1 ok', 'Authorization: required', 'eyJ short', 'ghp_ short', 'see the private key docs']) {
+  for (const clean of ['line 1 ok', 'Authorization: required', 'Authorization: required for all endpoints', 'eyJ short', 'ghp_ short', 'see the private key docs']) {
     assert.equal(containsCredential(clean), false, clean);
+  }
+});
+
+// '-' is a \b boundary, so a \b-anchored JWT pattern took over 100 s on this.
+test('containsCredential stays linear on adversarial runs', () => {
+  for (const unit of ['eyJ-', 'GOCSPX-', 'ya29.', 'github_pat_', 'abc1Q~']) {
+    const started = Date.now();
+    containsCredential(unit.repeat(50000));
+    assert.ok(Date.now() - started < 5000, `${unit} took ${Date.now() - started} ms`);
   }
 });
 
