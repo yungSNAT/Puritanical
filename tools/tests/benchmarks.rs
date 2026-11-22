@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-License-Identifier: Apache-2.0
 
 //! The benchmark analysis commands on small hand-made runs.
 

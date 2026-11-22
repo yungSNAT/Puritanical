@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0 AND MIT
+// SPDX-License-Identifier: Apache-2.0
 
 //! JavaScript semantics the generated files depend on: number printing,
 //! `toFixed`, `Math.round`, UTF-16 lengths, `trim`, `JSON.stringify` and
