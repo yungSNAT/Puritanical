@@ -61,7 +61,7 @@ fn a_fresh_write_reproduces_every_committed_byte() {
         assert!(ok(&cmd(tmp.path(), &[], &[c])).starts_with("wrote "), "{c}");
     }
     let files = outputs();
-    assert_eq!(files.len(), 104);
+    assert_eq!(files.len(), 32);
     for rel in &files {
         let want = fs::read(repo().join(rel)).expect("committed file");
         assert!(

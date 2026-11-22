@@ -140,10 +140,8 @@ struct Lang {
 // Rough rendered width: about 0.5em in the sans stack and 0.6em in mono.
 // fit() shrinks a font size until the text fits.
 fn text_w(s: &str, fs: f64, mono: bool) -> f64 {
-    s.chars().fold(0.0, |w, c| {
-        w + fs
-            * if mono { ADV } else { 0.5 }
-    })
+    let advance = if mono { ADV } else { 0.5 };
+    s.chars().fold(0.0, |w, _| w + fs * advance)
 }
 
 fn fit_as(s: &str, fs: f64, maxw: f64, mono: bool) -> f64 {
