@@ -82,7 +82,7 @@ const RTK_SETTINGS = JSON.stringify({ hooks: { PreToolUse: RTK_HOOK } });
 const RTK_HOOK_SETTINGS = JSON.stringify({ hooks: { PreToolUse: RTK_HOOK.concat(plugin.hooks.PreToolUse), PostToolUse: plugin.hooks.PostToolUse } })
   .split('${CLAUDE_PLUGIN_ROOT}').join(ROOT);
 if (ARMS.some((a) => a.startsWith('rtk'))) {
-  try { console.log('rtk: ' + execFileSync('rtk', ['--version'], { encoding: 'utf8' }).trim()); }
+  try { console.log('rtk: ' + execFileSync('rtk', ['--version'], { encoding: 'utf8' }).trim()); } // NOSONAR: rtk from PATH, as the benchmark measures the user's installed rtk.
   catch { console.error('rtk arms need rtk on PATH'); process.exit(1); }
 }
 
@@ -103,7 +103,7 @@ const stat = (p) => {
   let src = '';
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- A file walk() found in a cell's temporary repo copy.
   try { src = fs.readFileSync(p, 'utf8'); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-  return { loc: src.split('\n').filter((l) => l.trim()).length, hash: crypto.createHash('sha1').update(src).digest('hex') };
+  return { loc: src.split('\n').filter((l) => l.trim()).length, hash: crypto.createHash('sha256').update(src).digest('hex') };
 };
 const snapshot = (root) => new Map(walk(root).map((f) => [f, stat(path.join(root, f))])); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 
@@ -180,7 +180,7 @@ function runHiddenTest(c, repo, rec) {
   const hidden = path.join(repo, '__hidden_test.js'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   fs.copyFileSync(path.join(FIX, c.fx, 'test.js'), hidden); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
   try {
-    execFileSync('node', ['__hidden_test.js'], { cwd: repo, timeout: 20000, stdio: 'pipe' });
+    execFileSync(process.execPath, ['__hidden_test.js'], { cwd: repo, timeout: 20000, stdio: 'pipe' });
     rec.pass = true; rec.test_output = '';
   } catch (e) {
     rec.pass = false;
@@ -231,7 +231,7 @@ function runCell(c) {
       args.push('--settings', c.arm === 'rtk-chisle-hook' ? RTK_HOOK_SETTINGS : HOOK_SETTINGS);
     }
 
-    execFile('claude', args, {
+    execFile('claude', args, { // NOSONAR: claude from PATH, as the benchmark measures the user's installed CLI.
       cwd: repo,
       timeout: 300000,
       maxBuffer: 32 * 1024 * 1024,
@@ -262,7 +262,7 @@ function runCell(c) {
   });
 }
 
-(async () => {
+void (async () => {
   const queue = todo.slice();
   await Promise.all(Array.from({ length: PAR }, async () => {
     while (queue.length && !limited) await runCell(queue.shift());

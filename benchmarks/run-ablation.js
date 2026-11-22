@@ -98,7 +98,7 @@ const run = (c) => new Promise((resolve) => {
   const args = ['-p', c.prompt, '--model', MODEL, '--output-format', 'stream-json', '--verbose',
     '--tools', '', '--strict-mcp-config', '--settings', '{"showThinkingSummaries":true}'];
   if (c.arm.prompt) args.push('--append-system-prompt-file', c.arm.prompt);
-  execFile('claude', args, { cwd: WORK, timeout: 240000, maxBuffer: 64 << 20, env: { ...process.env, HOME: WORK, CLAUDE_CONFIG_DIR: ISO } },
+  execFile('claude', args, { cwd: WORK, timeout: 240000, maxBuffer: 64 << 20, env: { ...process.env, HOME: WORK, CLAUDE_CONFIG_DIR: ISO } }, // NOSONAR: claude from PATH, as the benchmark measures the user's installed CLI.
     (err, stdout) => {
       const { result, thinking } = parseStream(stdout);
       const text = String((result && result.result) || '');
@@ -111,7 +111,7 @@ const run = (c) => new Promise((resolve) => {
     });
 });
 
-(async () => {
+void (async () => {
   const q = todo.slice();
   await Promise.all(Array.from({ length: Number(par) }, async () => { while (q.length && !limited) await run(q.shift()); }));
   console.log(limited ? 'STOPPED after repeated failures (usage limit?). Re-run to resume.' : `done -> ${out}`);
