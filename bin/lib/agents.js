@@ -9,7 +9,7 @@
 const path = require('path');
 const ENV = require('./env');
 const FENCE = require('./fence');
-const { piSources } = require('./uninstall');
+const { piSources, isForkSource } = require('./uninstall');
 
 const COMPRESSOR = ['chisle-compress-output.js', 'chisle-command-filters.js', 'chisle-config.js'];
 const COMMONJS_PACKAGE = '{ "type": "commonjs" }\n';
@@ -22,10 +22,15 @@ function installPi(ctx) {
   const { say, note, opts, results } = ctx;
   results.detected++;
   say('→ Pi detected');
-  if (!opts.force && piSources(ENV.capture('pi', ['list']).stdout).length) {
+  const sources = piSources(ENV.capture('pi', ['list']).stdout);
+  // Only this fork counts as installed. Upstream sources from earlier installs
+  // are removed, so the fork replaces them instead of being skipped.
+  const legacy = sources.filter(source => !isForkSource(source));
+  if (!opts.force && sources.length > legacy.length) {
     note('  chisle package already installed (use --force)');
     results.skipped.push(['pi', 'already installed']); blankLine(); return;
   }
+  for (const source of legacy) ENV.run('pi', ['remove', source], opts.dryRun);
   const r = ENV.run('pi', ['install', `git:github.com/${ENV.REPO}`], opts.dryRun);
   if (ENV.ranOk(r)) results.installed.push('pi');
   else results.failed.push(['pi', 'pi package install failed']);

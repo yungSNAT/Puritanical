@@ -195,4 +195,9 @@ function piSources(output) {
     .map(source => source.replace(/@[^/@]+$/, ''));
 }
 
-module.exports = { uninstall, piSources };
+// A source from this fork, as opposed to the upstream ones piSources also accepts.
+function isForkSource(source) {
+  return /github\.com[/:]yungSNAT\/Puritanical$/i.test(source);
+}
+
+module.exports = { uninstall, piSources, isForkSource };

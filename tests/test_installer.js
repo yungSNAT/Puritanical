@@ -141,11 +141,18 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
   assert.deepEqual(readJson(settings), { theme: 'dark', packages: ['npm:foreign'] },
     'installer edited Pi settings instead of delegating to Pi');
 
-  writeText(list, 'User packages:\n  npm:chisle@3.0.0\n');
+  writeText(list, 'User packages:\n  git:github.com/yungSNAT/Puritanical@v4 (user)\n');
   writeText(log, '');
   result = runCLI(['--only', 'pi'], { env });
   assert.match(result.out, /already installed/);
   assert.equal(readText(log), 'list\n');
+
+  // An upstream package from an earlier install is replaced, not skipped.
+  writeText(list, 'User packages:\n  npm:chisle@3.0.0\n');
+  writeText(log, '');
+  result = runCLI(['--only', 'pi'], { env });
+  assert.doesNotMatch(result.out, /already installed/);
+  assert.equal(readText(log), 'list\nremove npm:chisle\ninstall git:github.com/yungSNAT/Puritanical\n');
 
   writeText(list, '');
   writeText(log, '');
@@ -346,7 +353,7 @@ function piUpdateFixture(installed) {
 }
 
 test('--update refreshes an installed Pi package instead of skipping it', { skip: process.platform === 'win32' }, () => {
-  const env = piUpdateFixture('npm:chisle@3.0.0');
+  const env = piUpdateFixture('git:github.com/yungSNAT/Puritanical@v4 (user)');
 
   // plain install: sees it, leaves it alone
   const plain = runCLI(['--only', 'pi'], { env });
@@ -386,8 +393,9 @@ test('--update is read-only under --dry-run', { skip: process.platform === 'win3
   const env = piUpdateFixture('npm:chisle@3.0.0');
 
   const r = runCLI(['--only', 'pi', '--update', '--dry-run'], { env });
+  assert.match(r.out, /would run: pi remove npm:chisle/);
   assert.match(r.out, /would run: pi install git:github\.com\/yungSNAT\/Puritanical/);
-  assert.doesNotMatch(readText('home/pi.log'), /install/, 'dry-run mutated');
+  assert.doesNotMatch(readText('home/pi.log'), /install|remove/, 'dry-run mutated');
 });
 
 test('--help advertises --update', () => {
