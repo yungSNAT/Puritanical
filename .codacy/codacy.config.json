@@ -798,6 +798,252 @@
         },
         {
           "patternId": "Semgrep_yaml_spring_rule-SpringActuatorFullyEnabled"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-aes-ecb"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-aes-noiv"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-insecure-random-generator"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-md5"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-sha1"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-timing-attack"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-tls-reject"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_crypto_rule-node-weak-crypto"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-knex-sqli-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-nosqli-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-nosqli-js-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-node-sqli-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-sequelize-tls"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-sequelize-tls-cert-validation"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_database_rule-sequelize-weak-tls"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_dos_rule-layer7-object-dos"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-allow-http"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-blink-integration"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-context-isolation"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-disable-websecurity"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-experimental-features"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_electronjs_rule-electron-nodejs-integration"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-eval-nodejs"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-eval-require"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-grpc-insecure-connection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-node-deserialize"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-sandbox-code-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-serializetojs-deserialize"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-server-side-template-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-code-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-compilefunction-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-runincontext-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm-runinnewcontext-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm2-code-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-vm2-context-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_eval_rule-yaml-deserialize"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_exec_rule-shelljs-os-command-exec"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-default"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-domain"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-httponly"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-maxage"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-path"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-samesite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-cookie-session-no-secure"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-express-cors"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-generic-cors"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-generic-header-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-header-xss-generic"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-header-xss-lusca"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-helmet-feature-disabled"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_headers_rule-host-header-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-hardcoded-jwt-secret"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-exposed-credentials"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-exposed-data"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-express-hardcoded"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-jwt-not-revoked"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_jwt_rule-node-jwt-none-algorithm"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_redirect_rule-express-open-redirect"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_redirect_rule-express-open-redirect2"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-node-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-phantom-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-playwright-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-puppeteer-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-wkhtmltoimage-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_ssrf_rule-wkhtmltopdf-ssrf"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-admzip-path-overwrite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-express-lfr"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-express-lfr-warning"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-generic-path-traversal"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-tar-path-overwrite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_traversal_rule-zip-path-overwrite"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-node-entity-expansion"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-node-xpath-injection"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-node-xxe"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xml_rule-xxe-expat"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-express-xss"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-handlebars-noescape"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-handlebars-safestring"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-squirrelly-autoescape"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-xss-disable-mustache-escape"
+        },
+        {
+          "patternId": "Semgrep_rules_lgpl_javascript_xss_rule-xss-serialize-javascript"
         }
       ]
     },
@@ -2840,6 +3086,14 @@
         },
         {
           "patternId": "psscriptanalyzer_psusetoexportfieldsinmanifest"
+        }
+      ]
+    },
+    {
+      "toolId": "PMD",
+      "patterns": [
+        {
+          "patternId": "PMD_category_ecmascript_errorprone_InnaccurateNumericLiteral"
         }
       ]
     }

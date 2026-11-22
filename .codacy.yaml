@@ -1,9 +1,19 @@
 ---
+# Mirrors the global exclude in .codacy/codacy.config.json, which the codacy.yml
+# analyze job uses: the agentic fixtures are deliberately messy repositories the
+# benchmark asks agents to fix, the test fixtures are helper processes the tests
+# spawn, and samples.json is built by tools/src/samples.rs.
+exclude_paths:
+  - "benchmarks/agentic/fixtures/**"
+  - "tests/fixtures/**"
+  - "site/src/data/samples.json"
 engines:
   lizard:
     # npm generates these files. OSV and Trivy scan their dependencies.
+    # Test files are long lists of cases; the CLI config excludes them too.
     exclude_paths:
       - "**/package-lock.json"
+      - "tests/**"
       # The published Astra replay and graders are frozen benchmark inputs.
       - "benchmarks/results/2026-11-21-astra/replay.py"
       - "benchmarks/results/2026-11-21-astra/retired_checks.py"
@@ -12,6 +22,17 @@ engines:
     exclude_paths:
       - "benchmarks/results/2026-11-21-astra/replay.py"
       - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
+  opengrep:
+    # The frozen Astra replay runs saved answers in bubblewrap and imports the
+    # original graders by name, as the Bandit note below explains.
+    exclude_paths:
+      - "benchmarks/results/2026-11-21-astra/replay.py"
+      - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
+  agentlinter:
+    # AGENTS.md is the shipped Chisle rule text, tuned against the benchmarks.
+    # Its absolute rules are deliberate; a wording change needs a new run.
+    exclude_paths:
+      - "AGENTS.md"
   bandit:
     # The replay runs the saved answers through bubblewrap without network
     # access, with a fixed PATH and a private /tmp. Both "pass" values are

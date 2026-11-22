@@ -83,7 +83,8 @@ function gradeCode(item, answer) {
   const ctx = { module: { exports: {} }, exports: {}, console: { log() {} }, require: () => { throw new Error('no deps allowed'); } };
   vm.createContext(ctx);
   try {
-    vm.runInContext(cleaned + `\n;globalThis.__fn = typeof ${item.fn} === 'function' ? ${item.fn} : undefined;`, ctx, { timeout: 3000 });
+    // Runs the model's answer, which is what this grader measures; the context has no require and a 3 s timeout.
+    vm.runInContext(cleaned + `\n;globalThis.__fn = typeof ${item.fn} === 'function' ? ${item.fn} : undefined;`, ctx, { timeout: 3000 }); // nosemgrep: rules_lgpl_javascript_eval_rule-vm-code-injection
   } catch (e) { return { pass: false, why: 'eval: ' + e.message }; }
   const fn = ctx.__fn;
   if (typeof fn !== 'function') return { pass: false, why: `no function ${item.fn}` };
