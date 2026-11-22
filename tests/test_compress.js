@@ -435,6 +435,9 @@ const CREDENTIALS = {
   'JSON Authorization header': '{"authorization": "' + 'Basic ' + 'dXNlcjpwYXNz"}',
   'OAuth 1.0 Authorization header': 'Authorization: ' + 'OAuth oauth_consumer_key="k", oauth_signature="s"',
   'bare Authorization token': 'authorization=' + 'Zx9'.repeat(8),
+  'realm-first OAuth header': 'Authorization: OAuth realm="r", ' + 'oauth_consumer_key="k", oauth_signature="s"',
+  'lowercase opaque Bearer token': 'Authorization: Bearer ' + 'qwertyuiop'.repeat(3),
+  'mixed-case header name': 'aUtHoRiZaTiOn: Bearer ' + 'tok3n'.repeat(4),
   'hyphen-prefixed JWT': 'session-' + 'ey' + 'JhbGciOiJIUzI1NiJ9.' + 'ey' + 'JzdWIiOiIxMjM0NTY3ODkwIn0.' + 'S'.repeat(43),
   'hyphen-prefixed GCP client secret': 'client-GOC' + 'SPX-' + 'x'.repeat(28),
 };
@@ -444,7 +447,8 @@ test('containsCredential detects each credential pattern', () => {
     assert.equal(containsCredential(`noise before ${secret} noise after`), true, name);
   }
   for (const clean of ['line 1 ok', 'Authorization: required', 'Authorization: required for all endpoints',
-    'Authorization: token required', 'authorization: Bearer required', 'eyJ short', 'eyJabc.def.ghi',
+    'Authorization: token required', 'authorization: Bearer required', 'Authorization: required for internationalization',
+    'eyJ short', 'eyJabc.def.ghi',
     'ghp_ short', 'see the private key docs']) {
     assert.equal(containsCredential(clean), false, clean);
   }

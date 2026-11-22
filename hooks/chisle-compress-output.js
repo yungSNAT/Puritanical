@@ -551,12 +551,12 @@ const CREDENTIAL_RES = [
   /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
 ];
 
-// Authorization header: either of its first 2 words (scheme and value, any
-// scheme) is 8+ characters with a digit, symbol or inner capital, so prose
-// such as 'Authorization: token required' stays clean.
-const AUTH_HEADER_RE = /(?:[Aa]uthorization|AUTHORIZATION)["']?[ \t]*[:=]([^\r\n]{0,200})/g;
-const containsAuthHeader = text => Array.from(text.matchAll(AUTH_HEADER_RE)).some(m => m[1].split(/[\s"',;]+/)
-  .filter(Boolean).slice(0, 2).some(word => word.length >= 8 && /[0-9=+/_.~-]|.[A-Z]/.test(word)));
+// Authorization header (any case, any scheme): a word in its first 200
+// characters is 24+ characters, or 8+ with a digit, symbol or inner capital,
+// so prose such as 'Authorization: token required' stays clean.
+const AUTH_HEADER_RE = /authorization["']?[ \t]*[:=]([^\r\n]{0,200})/gi;
+const authWord = word => word.length >= 24 || (word.length >= 8 && /[0-9=+/_.~-]|.[A-Z]/.test(word));
+const containsAuthHeader = text => Array.from(text.matchAll(AUTH_HEADER_RE)).some(m => m[1].split(/[\s"',;]+/).some(authWord));
 
 // JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
 // not a regex: '-' is a segment character, so a regex restarts at every
