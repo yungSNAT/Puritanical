@@ -93,7 +93,7 @@ process.stderr.write('warn: flaky\\n'); process.exit(3);`);
   // stdout and stderr into one place (2>&1): order kept, all on stdout.
   fs.writeFileSync('fake-test.js', `const w = (s, t) => new Promise(r => setTimeout(() => { s.write(t); r(); }, 20));
 (async () => { await w(process.stdout, 'out-1\\n'); await w(process.stderr, 'ERR-2\\n'); await w(process.stdout, 'out-3\\n'); process.exit(1); })();`);
-  const both = spawnSync('sh', ['-c', `"${process.execPath}" "${RUNNER}" -- go test ./... 2>&1`], {
+  const both = spawnSync('/bin/sh', ['-c', `"${process.execPath}" "${RUNNER}" -- go test ./... 2>&1`], {
     encoding: 'utf8', env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}`, CLAUDE_CONFIG_DIR: dir },
   });
   assert.equal(both.status, 1);

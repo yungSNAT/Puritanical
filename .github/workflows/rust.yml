@@ -64,7 +64,7 @@ jobs:
           retention-days: 1
 
   # The upload runs apart from the tests, so the OIDC token is never available
-  # whilst test code runs; the same rule as the Node upload in coverage.yml.
+  # whilst test code runs; the same rule as the Node upload in test.yml.
   upload:
     needs: check
     if: github.event_name != 'schedule' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)

@@ -111,12 +111,30 @@ function gradeCode(item, answer) {
     .replace(/^\s*import\s.*$/gm, '');
   checkSandbox();
   // SIGKILL, because an answer can catch SIGTERM; --die-with-parent then ends it.
+  // The sandbox gets the arguments only: the expected values stay here, so an
+  // answer that escapes vm and writes its own stdout can claim outputs, never a pass.
   const r = spawnSync(BWRAP, [...SANDBOX, process.execPath, '/bench/grade-cell.js'], {
-    input: JSON.stringify({ item, cleaned }), encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
+    input: JSON.stringify({ fn: item.fn, args: item.cases.map(([args]) => args), cleaned }),
+    encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
   });
-  // A killed answer fails, even if it printed a passing result before it hung.
+  // A killed answer fails, even if it printed outputs before it hung.
   if (r.error || r.signal) return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : r.signal) };
-  try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + String(r.stderr).trim().split('\n').pop() }; }
+  let out;
+  try { out = JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + String(r.stderr).trim().split('\n').pop() }; }
+  return verdict(item, out);
+}
+
+// Compares the sandbox's reported outputs with the expected values, case by case.
+function verdict(item, out) {
+  if (typeof out?.why === 'string') return { pass: false, why: out.why };
+  const got = Array.isArray(out?.got) ? out.got : [];
+  for (const [i, [args, want]] of item.cases.entries()) {
+    const a = JSON.stringify(args);
+    const g = got.at(i); // undefined only past the end: JSON has no undefined
+    if (g === undefined) return { pass: false, why: typeof out?.threw === 'string' ? `threw on ${a}: ${out.threw}` : `sandbox: no output for ${a}` };
+    if (g !== JSON.stringify(want)) return { pass: false, why: `${a} -> ${g} want ${JSON.stringify(want)}` };
+  }
+  return { pass: true, why: '' };
 }
 
 // --- load + grade ----------------------------------------------------------
@@ -184,7 +202,7 @@ function printAccuracy(rows, agg, dropped) {
   if (dropped) console.log(`_${dropped} cell(s) excluded: no counterpart in the other arm._\n`);
   console.log('| suite | arm | n | correct | accuracy | format-clean | mean output tokens | mean answer chars |');
   console.log('|-------|-----|--:|--------:|---------:|-------------:|-------------------:|------------------:|');
-  const segs = [...new Set(rows.map((r) => `${r.suite} ${r.tier}`))].sort().concat('all');
+  const segs = [...new Set(rows.map((r) => `${r.suite} ${r.tier}`))].sort((a, b) => (a < b ? -1 : Number(a > b))).concat('all');
   for (const seg of segs) {
     for (const arm of ARMS) {
       const a = agg.get(seg + '|' + arm);
@@ -240,7 +258,7 @@ function printFailures(rows) {
   else {
     console.log('| arm | suite | item | seed | why |');
     console.log('|-----|-------|------|-----:|-----|');
-    for (const f of fails) console.log(`| ${f.arm} | ${f.suite} | ${f.id} | ${f.seed} | ${f.why.replace(/\|/g, '\\|').slice(0, 110)} |`);
+    for (const f of fails) console.log(`| ${f.arm} | ${f.suite} | ${f.id} | ${f.seed} | ${f.why.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').slice(0, 110)} |`);
   }
 }
 
