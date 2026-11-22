@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global module, process, require -- Node.js runtime */
 // chisle — stdio MCP proxy: tool-output compression for any MCP host.
 //
 // Most agents cannot rewrite a tool result from a hook (Windsurf, Cline,
@@ -70,7 +71,7 @@ function compressResult(result, toolName) {
 function rewriteLine(line, pending) {
   if (!pending.size || line.indexOf('"result"') === -1) return line;
   let msg;
-  try { msg = JSON.parse(line); } catch (e) { return line; }
+  try { msg = JSON.parse(line); } catch { return line; }
   const msgs = Array.isArray(msg) ? msg : [msg];
   let saved = 0;
   for (const m of msgs) {
@@ -91,7 +92,7 @@ function rewriteLine(line, pending) {
 function observeRequest(line, pending) {
   if (line.indexOf('tools/call') === -1 && line.indexOf('notifications/cancelled') === -1) return;
   let msg;
-  try { msg = JSON.parse(line); } catch (e) { return; }
+  try { msg = JSON.parse(line); } catch { return; }
   for (const m of Array.isArray(msg) ? msg : [msg]) {
     if (m && m.method === 'tools/call' && m.id != null) {
       pending.set(JSON.stringify(m.id), m.params && typeof m.params.name === 'string' ? m.params.name : '');
@@ -127,6 +128,20 @@ function quoteWin(a) {
   return a;
 }
 
+// Stream error handlers. Writes to a server that has exited fail with EPIPE;
+// the child's close handler reports its exit status, so that error is dropped.
+function ignoreServerGone() {
+  return function serverGone() {};
+}
+
+// The host stopped reading: stop the server and exit quietly.
+function exitWhenHostGone(child) {
+  return function hostGone() {
+    try { child.kill(); } catch {}
+    process.exit(0);
+  };
+}
+
 function main(argv) {
   const sep = argv.indexOf('--');
   const cmd = sep === -1 ? argv : argv.slice(sep + 1);
@@ -137,9 +152,12 @@ function main(argv) {
 
   // Windows MCP commands are usually npx/uvx shims (.cmd), which Node refuses
   // to spawn without a shell; elsewhere spawn directly, no shell parsing.
+  // The proxy exists to run the MCP server command from the user's own agent
+  // configuration, so the command is trusted; quoteWin quotes each argument.
   const child = IS_WIN
-    ? cp.spawn(cmd.map(quoteWin).join(' '), [], { stdio: ['pipe', 'pipe', 'inherit'], shell: true, windowsHide: true })
-    : cp.spawn(cmd[0], cmd.slice(1), { stdio: ['pipe', 'pipe', 'inherit'] });
+    // eslint-disable-next-line security-node/detect-child-process -- .cmd shims need cmd.exe; the command comes from the user's MCP config.
+    ? cp.spawn(cmd.map(quoteWin).join(' '), [], { stdio: ['pipe', 'pipe', 'inherit'], shell: true, windowsHide: true }) // nosemgrep: javascript_exec_rule-child-process, javascript.lang.security.audit.spawn-shell-true.spawn-shell-true, javascript.lang.security.detect-child-process.detect-child-process
+    : cp.spawn(cmd[0], cmd.slice(1), { stdio: ['pipe', 'pipe', 'inherit'] }); // nosemgrep: javascript_exec_rule-child-process, javascript.lang.security.detect-child-process.detect-child-process
 
   const enabled = process.env.CHISLE_COMPRESS !== '0' && getDefaultMode() !== 'off';
   const pending = new Map();
@@ -148,8 +166,8 @@ function main(argv) {
     process.stderr.write('chisle-mcp-proxy: cannot start ' + cmd[0] + ': ' + e.message + '\n');
     process.exit(127);
   });
-  child.stdin.on('error', () => {}); // server gone; exit handler reports it
-  process.stdout.on('error', () => { try { child.kill(); } catch (e) {} process.exit(0); }); // host gone
+  child.stdin.on('error', ignoreServerGone());
+  process.stdout.on('error', exitWhenHostGone(child));
 
   // Host → server: forward raw, observe tool calls on the side.
   const reqLines = lineSplitter(line => observeRequest(line, pending));
@@ -169,7 +187,7 @@ function main(argv) {
   } else {
     const resLines = lineSplitter((line, eol) => {
       let out = line;
-      try { out = rewriteLine(line, pending); } catch (e) { out = line; }
+      try { out = rewriteLine(line, pending); } catch { out = line; }
       if (!process.stdout.write(out + eol)) {
         child.stdout.pause();
         process.stdout.once('drain', () => child.stdout.resume());
@@ -181,15 +199,15 @@ function main(argv) {
   }
 
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-    process.on(sig, () => { try { child.kill(sig); } catch (e) {} });
+    process.on(sig, () => { try { child.kill(sig); } catch {} });
   }
 
   child.on('close', (code, signal) => {
-    const status = code != null ? code : (signal ? 128 + (require('os').constants.signals[signal] || 1) : 1);
+    const status = code != null ? code : (signal ? 128 + (new Map(Object.entries(require('os').constants.signals)).get(signal) || 1) : 1);
     process.stdout.write('', () => process.exit(status));
   });
 }
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { mcpToolAllowed, compressResult, rewriteLine, observeRequest, lineSplitter };
+module.exports = { mcpToolAllowed, compressResult, rewriteLine, observeRequest, lineSplitter, exitWhenHostGone };

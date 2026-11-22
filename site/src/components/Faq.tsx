@@ -1,6 +1,7 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import SectionHead from "./SectionHead";
 
@@ -43,30 +44,40 @@ const QA = [
   },
 ];
 
-export default function Faq() {
+const COLLAPSED = { height: 0, opacity: 0 };
+const EXPANDED = { height: "auto", opacity: 1 };
+const TRANSITION = { duration: 0.3, ease: [0.16, 1, 0.3, 1] as const };
+
+export default function Faq(): React.JSX.Element {
   const [open, setOpen] = useState<number | null>(0);
+  const toggle = useCallback((event: React.MouseEvent<HTMLButtonElement>): void => {
+    const i = Number(event.currentTarget.value);
+    setOpen((current) => (current === i ? null : i));
+  }, []);
   return (
     <section id="faq" className="py-28">
       <div className="mx-auto max-w-3xl px-5">
         <SectionHead eyebrow="FAQ" title="Questions, answered tersely" center />
         <div className="mt-12 space-y-3">
           {QA.map((item, i) => (
-            <div key={i} className="rounded-xl border border-line bg-surface px-5 transition-colors has-[[aria-expanded=true]]:border-brand-hover/60">
+            <div key={item.q} className="rounded-xl border border-line bg-surface px-5 transition-colors has-[[aria-expanded=true]]:border-brand-hover/60">
               <button
-                onClick={() => setOpen(open === i ? null : i)}
+                type="button"
+                value={i}
+                onClick={toggle}
                 className="flex w-full items-center justify-between gap-4 py-4 text-left font-medium transition-colors hover:text-accent"
                 aria-expanded={open === i}
               >
                 <span>{item.q}</span>
-                <span aria-hidden className={`grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent-soft text-accent transition-transform ${open === i ? "rotate-45" : ""}`}>+</span>
+                <span aria-hidden className={`grid size-6 shrink-0 place-items-center rounded-md bg-accent-soft text-accent transition-transform ${open === i ? "rotate-45" : ""}`}>+</span>
               </button>
               <AnimatePresence initial={false}>
                 {open === i && (
                   <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                    initial={COLLAPSED}
+                    animate={EXPANDED}
+                    exit={COLLAPSED}
+                    transition={TRANSITION}
                     className="overflow-hidden"
                   >
                     <p className="pb-5 text-sm leading-relaxed text-dim">{item.a}</p>

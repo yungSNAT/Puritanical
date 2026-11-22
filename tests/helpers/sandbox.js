@@ -21,9 +21,14 @@ function repoPath(...parts) {
   return under(REPO_ROOT, ...parts);
 }
 
-function tempRoot(t, prefix) {
+// A new private directory under os.tmpdir(); the caller removes it.
+function makeTempDir(prefix) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
-  const root = fs.mkdtempSync(under(os.tmpdir(), prefix));
+  return fs.mkdtempSync(under(os.tmpdir(), prefix));
+}
+
+function tempRoot(t, prefix) {
+  const root = makeTempDir(prefix);
   t.after(() => remove(root, { recursive: true, force: true }));
   return root;
 }
@@ -49,6 +54,16 @@ function writeJson(filename, value) {
 function exists(filename) {
   // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
   return fs.existsSync(filename); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
+}
+
+function linkStat(filename) {
+  // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
+  return fs.lstatSync(filename); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
+}
+
+function makeLink(target, linkPath, type) {
+  // nosemgrep -- test-only helper; paths come from os.tmpdir() fixtures or the repository checkout, never from user input
+  fs.symlinkSync(target, linkPath, type); // eslint-disable-line security/detect-non-literal-fs-filename -- Test-only helper; paths come from os.tmpdir() fixtures or the repository checkout.
 }
 
 function makeDir(dirname, options) {
@@ -120,12 +135,15 @@ module.exports = {
   under,
   absolutePath,
   repoPath,
+  makeTempDir,
   tempRoot,
   readText,
   writeText,
   readJson,
   writeJson,
   exists,
+  linkStat,
+  makeLink,
   makeDir,
   listDir,
   remove,

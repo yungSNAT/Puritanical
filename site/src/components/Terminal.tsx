@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -15,33 +16,52 @@ const HEAD = [
   "@shop/api:build: transforming...",
 ];
 const NOISE_COUNT = 312;
+const LINES_PER_FRAME = 41;
+const FRAME_MS = 100;
+const SUMMARY_DELAY_MS = 700;
+const LINES_PER_PREVIEW = 60;
+const PREVIEW_ROWS = [
+  "@shop/api:build: dist/assets/chunk-1000.js  4.20 kB",
+  "@shop/ui:build: dist/assets/chunk-2eef.js  7.90 kB",
+  "@shop/web:build: dist/assets/chunk-4dde.js  11.60 kB",
+  "@shop/api:build: dist/assets/chunk-6ccd.js  15.30 kB",
+  "@shop/ui:build: dist/assets/chunk-8bbc.js  19.00 kB",
+  "@shop/web:build: dist/assets/chunk-aaab.js  22.70 kB",
+  "@shop/api:build: dist/assets/chunk-c99a.js  26.40 kB",
+];
 const SALVAGED = [
   "@shop/api:build: warning: src/billing/invoice.ts:41 'roundCents' is declared but never used",
   "@shop/ui:build: WARNING in asset size limit: dist/ui.js (612 KiB) exceeds the recommended limit",
 ];
 const TAIL = [" Tasks:    3 successful, 3 total"];
 
-export default function Terminal() {
+export default function Terminal(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-120px" });
-  const [phase, setPhase] = useState<"idle" | "flood" | "done">("idle");
-  const [flood, setFlood] = useState(0);
+  const inView: boolean = useInView(ref, { once: true, margin: "-120px" });
+  const [summaryVisible, setSummaryVisible]: [boolean, (shown: boolean) => void] = useState(false);
+  const [flood, setFlood] = useState<number>(0);
+  const phase = !inView ? "idle" : summaryVisible ? "done" : "flood";
 
   useEffect(() => {
-    if (!inView) return;
-    setPhase("flood");
+    if (!inView) return undefined;
     let n = 0;
-    const t = setInterval(() => {
-      n += 41;
+    let summaryTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+    const tick = setInterval(() => {
+      n += LINES_PER_FRAME;
       if (n >= NOISE_COUNT) {
-        clearInterval(t);
+        clearInterval(tick);
         setFlood(NOISE_COUNT);
-        setTimeout(() => setPhase("done"), 700);
+        summaryTimer = setTimeout(() => {
+          setSummaryVisible(true);
+        }, SUMMARY_DELAY_MS);
       } else {
         setFlood(n);
       }
-    }, 100);
-    return () => clearInterval(t);
+    }, FRAME_MS);
+    return (): void => {
+      clearInterval(tick);
+      clearTimeout(summaryTimer);
+    };
   }, [inView]);
 
   return (
@@ -54,8 +74,7 @@ export default function Terminal() {
       <Reveal delay={0.1}>
         <div
           ref={ref}
-          className="mt-10 overflow-hidden rounded-xl border border-term-line bg-term"
-          style={{ fontFamily: "var(--font-mono)" }}
+          className="mt-10 overflow-hidden rounded-xl border border-term-line bg-term font-mono"
         >
           <div className="flex items-center border-b border-term-line px-4 py-2.5">
             <span className="text-xs text-term-dim">PostToolUse · Bash</span>
@@ -69,8 +88,8 @@ export default function Terminal() {
             ))}
             {phase === "flood" && (
               <div className="text-term-dim/50">
-                {Array.from({ length: Math.min(7, Math.ceil(flood / 60)) }).map((_, i) => (
-                  <div key={i}>@shop/{["api", "ui", "web"][i % 3]}:build: dist/assets/chunk-{(i * 7919 + 4096).toString(16)}.js  {(i * 3.7 + 4.2).toFixed(2)} kB</div>
+                {PREVIEW_ROWS.slice(0, Math.ceil(flood / LINES_PER_PREVIEW)).map((row) => (
+                  <div key={row}>{row}</div>
                 ))}
                 <div>… {flood} lines and counting …</div>
               </div>

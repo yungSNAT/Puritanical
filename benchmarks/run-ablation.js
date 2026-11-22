@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, console, process, require, setTimeout -- Node.js runtime */
 // Side-by-side ruleset benchmark: any number of named rulesets in ONE run, so an
 // old and a new Chisle (and the rivals) answer the same prompts in the same
 // session of the same model. run-live.sh fixes its arm names; this does not.
@@ -23,6 +24,10 @@ const { execFile } = require('child_process');
 const [out, seeds, par, ...armSpecs] = process.argv.slice(2);
 if (!out || !armSpecs.length) { console.error('usage: run-ablation.js <out-dir> <seeds> <parallel> <arm>...'); process.exit(2); }
 const MODEL = process.env.MODEL || 'claude-haiku-4-5-20251001';
+// Arm names become file names in the private temp dir and <out-dir>; refuse any
+// that could leave them ('../x', 'a/b') before a path is built.
+const badArm = armSpecs.map((spec) => spec.split('=')[0]).find((name) => !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(name));
+if (badArm !== undefined) { console.error(`run-ablation.js: invalid arm name ${JSON.stringify(badArm)}: use letters, digits, '-', '_' and '.', not leading '.'`); process.exit(2); }
 
 const ISO = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-ablation-'));
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-ablation-work-'));
@@ -32,17 +37,25 @@ process.on('exit', () => { for (const d of [ISO, WORK]) fs.rmSync(d, { recursive
 const arms = armSpecs.map((spec) => {
   const [name, file] = spec.split('=');
   if (!file) return { name };
-  const text = fs.readFileSync(file, 'utf8');
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A ruleset file named on the command line by the person running the benchmark.
+  const text = fs.readFileSync(file, 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   const body = /^---\s*$/m.test(text.split('\n')[0]) ? text.split(/^---\s*$/m).slice(2).join('---').trim() : text.trim();
-  const prompt = path.join(ISO, `${name}.txt`);
-  fs.writeFileSync(prompt, body + '\n');
+  const prompt = path.join(ISO, `${name}.txt`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A prompt file in the private temporary config directory, named by an arm name checked above.
+  fs.writeFileSync(prompt, body + '\n'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   return { name, prompt };
 });
 
 // The prompts live in run-live.sh; read them rather than keep a second copy.
 // Normalize CRLF: a Windows checkout with core.autocrlf=true breaks the heredoc match.
-const live = fs.readFileSync(path.join(__dirname, 'run-live.sh'), 'utf8').replace(/\r\n/g, '\n');
-const heredoc = (v) => live.match(new RegExp(`\\n${v}=\\$\\(cat <<'EOF'\\n([\\s\\S]*?)\\nEOF`))[1];
+const live = fs.readFileSync(path.join(__dirname, 'run-live.sh'), 'utf8').replace(/\r\n/g, '\n'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+const heredoc = (v) => {
+  const open = `\n${v}=$(cat <<'EOF'\n`;
+  const at = live.indexOf(open);
+  const end = live.indexOf('\nEOF', at + open.length);
+  if (at < 0 || end < 0) throw new Error(`no ${v} heredoc in run-live.sh`);
+  return live.slice(at + open.length, end);
+};
 const suites = { default: heredoc('TASKS'), large: heredoc('TASKS_LARGE') };
 
 const cells = [];
@@ -50,35 +63,50 @@ for (let s = 1; s <= Number(seeds); s++) for (const [suite, tasks] of Object.ent
   const [task, , prompt] = line.split('\t');
   for (const arm of arms) cells.push({ dir: path.join(out, `${suite}-s${s}`), task, prompt, arm });
 }
-const file = (c, ext) => path.join(c.dir, `${c.task}__${c.arm.name}.${ext}`);
-const todo = cells.filter((c) => !fs.existsSync(file(c, 'json')));
+const file = (c, ext) => path.join(c.dir, `${c.task}__${c.arm.name}.${ext}`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal, rules_lgpl_javascript_traversal_rule-join-resolve-path-traversal
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file under the output directory named on the command line.
+const todo = cells.filter((c) => !fs.existsSync(file(c, 'json'))); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 console.log(`${MODEL} | ${todo.length}/${cells.length} cells | parallel ${par}`);
 let limited = false;
 
+// The final result event and the thinking summaries from a stream-json transcript.
+function parseStream(stdout) {
+  let result = null; const thinking = [];
+  for (const l of String(stdout || '').split('\n')) {
+    let e; try { e = JSON.parse(l); } catch { continue; }
+    if (e.type === 'assistant') for (const b of e.message.content || []) if (b.type === 'thinking' && b.thinking) thinking.push(b.thinking);
+    if (e.type === 'result') result = e;
+  }
+  return { result, thinking };
+}
+
+// Only a short, error-shaped result is a limit hit, not an answer about rate limiting.
+const unrecorded = (result, text) => !result || !result.usage || !result.usage.output_tokens || result.is_error
+  || (text.length < 300 && /limit reached|hit your .{0,20}limit|usage limit|session limit|rate_limit_error/i.test(text));
+
+// c is a benchmark cell, not an HTTP request: the timer below calls run(), never eval.
+function retry(c, text, err, resolve) {
+  c.tries = (c.tries || 0) + 1; // nosemgrep: rules_lgpl_javascript_eval_rule-eval-nodejs
+  console.log(`  ${path.basename(c.dir)}/${c.task}/${c.arm.name} not recorded (try ${c.tries}): ${(text || (err && err.message) || '').slice(0, 120)}`);
+  if (c.tries >= 6) { limited = true; resolve(); return; }
+  setTimeout(() => run(c).then(resolve), 60000 * c.tries); // nosemgrep: rules_lgpl_javascript_eval_rule-eval-nodejs
+}
+
 const run = (c) => new Promise((resolve) => {
-  fs.mkdirSync(c.dir, { recursive: true });
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A suite directory under the output directory named on the command line.
+  fs.mkdirSync(c.dir, { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   const args = ['-p', c.prompt, '--model', MODEL, '--output-format', 'stream-json', '--verbose',
     '--tools', '', '--strict-mcp-config', '--settings', '{"showThinkingSummaries":true}'];
   if (c.arm.prompt) args.push('--append-system-prompt-file', c.arm.prompt);
   execFile('claude', args, { cwd: WORK, timeout: 240000, maxBuffer: 64 << 20, env: { ...process.env, HOME: WORK, CLAUDE_CONFIG_DIR: ISO } },
     (err, stdout) => {
-      let result = null; const thinking = [];
-      for (const l of String(stdout || '').split('\n')) {
-        let e; try { e = JSON.parse(l); } catch (_) { continue; }
-        if (e.type === 'assistant') for (const b of e.message.content || []) if (b.type === 'thinking' && b.thinking) thinking.push(b.thinking);
-        if (e.type === 'result') result = e;
-      }
-      // Only a short, error-shaped result is a limit hit, not an answer about rate limiting.
+      const { result, thinking } = parseStream(stdout);
       const text = String((result && result.result) || '');
-      if (!result || !result.usage || !result.usage.output_tokens || result.is_error
-          || (text.length < 300 && /limit reached|hit your .{0,20}limit|usage limit|session limit|rate_limit_error/i.test(text))) {
-        c.tries = (c.tries || 0) + 1;
-        console.log(`  ${path.basename(c.dir)}/${c.task}/${c.arm.name} not recorded (try ${c.tries}): ${(text || (err && err.message) || '').slice(0, 120)}`);
-        if (c.tries >= 6) { limited = true; return resolve(); }
-        return setTimeout(() => run(c).then(resolve), 60000 * c.tries);
-      }
-      fs.writeFileSync(file(c, 'json'), JSON.stringify(result));
-      fs.writeFileSync(file(c, 'think.txt'), thinking.join('\n\n---\n\n'));
+      if (unrecorded(result, text)) { retry(c, text, err, resolve); return; }
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file under the output directory named on the command line.
+      fs.writeFileSync(file(c, 'json'), JSON.stringify(result)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- A cell file under the output directory named on the command line.
+      fs.writeFileSync(file(c, 'think.txt'), thinking.join('\n\n---\n\n')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       resolve();
     });
 });

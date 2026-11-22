@@ -32,7 +32,7 @@ function majorUpdateNotice(installed, latest) {
 
 function installedVersion() {
   try {
-    return JSON.parse(fs.readFileSync(
+    return JSON.parse(fs.readFileSync( // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version;
   } catch { return null; } // standalone-hooks install → no manifest → skip
 }
@@ -110,7 +110,7 @@ function run(source) {
   // config-file only, defaults to both enabled — see chisle-config.js).
   let skillContent = '';
   try {
-    skillContent = fs.readFileSync(
+    skillContent = fs.readFileSync( // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'
     );
   } catch {}

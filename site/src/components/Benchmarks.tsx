@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import { useRef } from "react";
@@ -15,6 +16,18 @@ const ARMS = [
   { name: "ponytail", pct: 80 },
   { name: "bare model", pct: 100 },
 ];
+
+// Motion props per bar, built once rather than on every render.
+const EASE = [0.16, 1, 0.3, 1] as const;
+const BAR_START = { width: 0 };
+const BAR_IDLE = {};
+const BARS = ARMS.map((a, i) => ({
+  name: a.name,
+  pct: a.pct,
+  self: a.self === true,
+  grown: { width: `${a.pct}%` },
+  transition: { duration: 1, delay: i * 0.12, ease: EASE },
+}));
 
 // % of the bare model. Claude Code rows from benchmarks/results/raw-314-sidebyside/
 // (Chisle 3.14, Haiku 4.5, 26 answers in one run, tools off). Billed tokens tie
@@ -35,9 +48,9 @@ const CORRECT = [
   { label: "real repos, hidden tests, 7 fixtures × 5 seeds", bare: "31 / 35", chisle: "31 / 35" },
 ];
 
-export default function Benchmarks() {
+export default function Benchmarks(): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const inView: boolean = useInView(ref, { once: true, margin: "-100px" });
 
   return (
     <section id="numbers" className="border-y border-line bg-surface py-28">
@@ -52,19 +65,18 @@ export default function Benchmarks() {
             rel="noopener noreferrer"
           >
             ship in the repo
-          </a>
-          .
+          </a>.
         </SectionHead>
 
         <div ref={ref} className="mt-12 space-y-5 rounded-xl border border-line bg-bg p-6 sm:p-8">
-          {ARMS.map((a, i) => (
+          {BARS.map((a) => (
             <div key={a.name} className="grid grid-cols-[7.5rem_1fr] items-center gap-4 text-sm">
               <span className={a.self ? "font-semibold" : "text-dim"}>{a.name}</span>
               <div className="h-8 overflow-hidden rounded-md bg-raised">
                 <motion.div
-                  initial={{ width: 0 }}
-                  animate={inView ? { width: `${a.pct}%` } : {}}
-                  transition={{ duration: 1, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
+                  initial={BAR_START}
+                  animate={inView ? a.grown : BAR_IDLE}
+                  transition={a.transition}
                   className={`flex h-full items-center justify-end rounded-md pr-2.5 text-xs font-semibold ${
                     a.self ? "bg-gradient-to-r from-brand to-[#ffc56b] text-on-brand" : "bg-dim/35 text-fg"
                   }`}

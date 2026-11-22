@@ -1,6 +1,7 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // Documentation-site pattern: the nav tells you where you are, not just where
 // you can go. A reading-progress rail sits under the bar, and the link for the
@@ -14,14 +15,14 @@ const SECTIONS = [
   { id: "faq", label: "FAQ" },
 ];
 
-export default function NavLinks() {
+export default function NavLinks(): React.JSX.Element {
   const [active, setActive] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     // Progress is cheap enough to compute on scroll; the section marker uses an
     // observer so we are not measuring every element on every frame.
-    const onScroll = () => {
+    const onScroll = (): void => {
       const h = document.documentElement;
       const max = h.scrollHeight - h.clientHeight;
       setProgress(max > 0 ? (h.scrollTop / max) * 100 : 0);
@@ -33,7 +34,8 @@ export default function NavLinks() {
       (entries) => {
         const seen = entries
           .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+          .at(0);
         if (seen) setActive(seen.target.id);
       },
       // Band across the upper-middle of the viewport: a section counts as
@@ -45,11 +47,13 @@ export default function NavLinks() {
       if (el) obs.observe(el);
     });
 
-    return () => {
+    return (): void => {
       window.removeEventListener("scroll", onScroll);
       obs.disconnect();
     };
   }, []);
+
+  const progressStyle = useMemo(() => ({ width: `${progress}%` }), [progress]);
 
   return (
     <>
@@ -74,7 +78,7 @@ export default function NavLinks() {
       <span
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-brand to-[#ffc56b] transition-[width] duration-150"
-        style={{ width: `${progress}%` }}
+        style={progressStyle}
       />
     </>
   );

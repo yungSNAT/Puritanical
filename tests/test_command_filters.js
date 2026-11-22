@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process, require -- Node.js runtime */
 // Command-aware filter tests: what gets dropped, what must survive, and when
 // filtering must not run at all.
 // Run: node --test tests/test_command_filters.js
@@ -149,7 +150,7 @@ test('git log: several commits cap bodies (never stats), shared author named onc
     ...Array.from({ length: 7 }, (_, i) => `src/f${i}.js | ${i + 1}`), '7 files +28',
     'bbbbbbbbbb Subject b (2026-11-17)', '  c1'].join('\n'));
   const two = commit('a', 'Ada', ['x']) + '\n' + commit('b', 'Bo', ['y']);
-  assert.match(filterCommand('git log', two), /^a{10} Subject a \(2026-11-17 Ada\)\n  x\nb{10} Subject b \(2026-11-17 Bo\)\n  y$/);
+  assert.match(filterCommand('git log', two), /^a{10} Subject a \(2026-11-17 Ada\)\n {2}x\nb{10} Subject b \(2026-11-17 Bo\)\n {2}y$/);
 });
 
 test('git diff: headers become one path line, hunks untouched', () => {

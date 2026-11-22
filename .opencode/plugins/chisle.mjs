@@ -34,21 +34,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The compressor core is CommonJS. When installed by `chisle --only opencode`
 // it sits in ./chisle-hooks/; running straight from the repo it's ../../hooks/.
-function loadFrom(names) {
-  for (const rel of names) {
-    try { return require(rel); }
+// Each loader is a literal require; the first one that resolves wins.
+function loadFrom(loaders) {
+  for (const load of loaders) {
+    try { return load(); }
     catch (e) { if (e && e.code !== 'MODULE_NOT_FOUND' && e.code !== 'ERR_MODULE_NOT_FOUND') throw e; }
   }
   return null;
 }
 
 const core = loadFrom([
-  './chisle-hooks/chisle-compress-output.js',
-  '../../hooks/chisle-compress-output.js',
+  () => require('./chisle-hooks/chisle-compress-output.js'),
+  () => require('../../hooks/chisle-compress-output.js'),
 ]);
 const config = loadFrom([
-  './chisle-hooks/chisle-config.js',
-  '../../hooks/chisle-config.js',
+  () => require('./chisle-hooks/chisle-config.js'),
+  () => require('../../hooks/chisle-config.js'),
 ]) || { getDefaultMode: () => 'on' };
 
 const compressForOpencode = core && core.compressForOpencode;
@@ -62,6 +63,18 @@ const getOpencodeStateDir = config.getOpencodeStateDir || config.getOpencodeDir 
 const CHISLE_MARK = '[chisle:';
 const getOpencodeMaxChars = () =>
   (core && core.limitsFor && core.limitsFor().maxChars) || 8000;
+
+// One completed tool part from messages.transform, compressed in place.
+function compressToolPart(part, mode) {
+  if (!part || part.type !== 'tool') return;
+  const st = part.state;
+  if (!st || st.status !== 'completed' || typeof st.output !== 'string') return;
+  if (st.output.includes(CHISLE_MARK) && st.output.length <= getOpencodeMaxChars()) return;
+  const updated = compressForOpencode(part.tool, st.output, { mode, command: st.input && st.input.command });
+  if (updated != null && updated.length < st.output.length) {
+    st.output = updated;
+  }
+}
 
 export default async () => {
   return {
@@ -93,7 +106,7 @@ export default async () => {
             recordSavings(original.length - updated.length, getOpencodeStateDir());
           }
         }
-      } catch (e) { /* keep the original output */ }
+      } catch { /* keep the original output */ }
     },
 
     // Request-time safety net over completed tool parts. Runs after MCP
@@ -111,18 +124,9 @@ export default async () => {
         for (const msg of output.messages) {
           const parts = msg && msg.parts;
           if (!Array.isArray(parts)) continue;
-          for (const part of parts) {
-            if (!part || part.type !== 'tool') continue;
-            const st = part.state;
-            if (!st || st.status !== 'completed' || typeof st.output !== 'string') continue;
-            if (st.output.includes(CHISLE_MARK) && st.output.length <= getOpencodeMaxChars()) continue;
-            const updated = compressForOpencode(part.tool, st.output, { mode, command: st.input && st.input.command });
-            if (updated != null && updated.length < st.output.length) {
-              st.output = updated;
-            }
-          }
+          for (const part of parts) compressToolPart(part, mode);
         }
-      } catch (e) { /* leave messages untouched */ }
+      } catch { /* leave messages untouched */ }
     },
   };
 };

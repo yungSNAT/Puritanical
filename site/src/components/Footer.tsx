@@ -1,4 +1,5 @@
-import { Logo } from "./Nav";
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
+import Logo from "./Logo";
 
 const COLS = [
   {
@@ -30,7 +31,7 @@ const COLS = [
   },
 ];
 
-export default function Footer() {
+export default function Footer(): React.JSX.Element {
   return (
     <footer className="border-t border-line bg-surface">
       <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
@@ -48,7 +49,8 @@ export default function Footer() {
                 <li key={label}>
                   <a
                     href={href}
-                    {...(href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                    target={href.startsWith("http") ? "_blank" : undefined}
+                    rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
                     className="transition-colors hover:text-fg"
                   >
                     {label}

@@ -1,26 +1,33 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
-export default function ThemeToggle() {
-  const [theme, setTheme] = useState<string | null>(null);
+// The theme lives on <html data-theme>. The server snapshot is null, so the
+// first client render matches the server HTML; React then reads the real value.
+function subscribe(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return (): void => { observer.disconnect(); };
+}
+const readTheme = (): string => document.documentElement.dataset.theme ?? "dark";
+const serverTheme = (): null => null;
 
-  useEffect(() => {
-    setTheme(document.documentElement.dataset.theme ?? "dark");
-  }, []);
+export default function ThemeToggle(): React.JSX.Element {
+  const theme = useSyncExternalStore(subscribe, readTheme, serverTheme);
 
-  const flip = () => {
+  const flip = useCallback((): void => {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     localStorage.setItem("chisle-theme", next);
-    setTheme(next);
-  };
+  }, [theme]);
 
   return (
     <button
+      type="button"
       onClick={flip}
       aria-label="Toggle color theme"
-      className="flex h-8 w-8 items-center justify-center rounded-md border border-line text-dim transition-colors hover:border-brand-hover hover:text-fg"
+      className="flex size-8 items-center justify-center rounded-md border border-line text-dim transition-colors hover:border-brand-hover hover:text-fg"
     >
       {theme === "dark" ? (
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>

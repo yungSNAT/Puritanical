@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global console, process, require -- Node.js runtime */
 // Deterministic replay benchmark for Chisle's tool-output compressor.
 //
 // Usage:
@@ -29,14 +30,20 @@ const totals = {
   results: 0, chars: 0, eligible: 0, before: 0, after: 0, salvaged: 0,
   dedup: 0, dedupChars: 0, failedBig: 0, failedBigChars: 0,
 };
-const skippedByTool = {};
-const byTool = {};
+const skippedByTool = new Map();
+const byTool = new Map();
+
+function toolStats(name) {
+  if (!byTool.has(name)) byTool.set(name, { outputs: 0, before: 0, after: 0 });
+  return byTool.get(name);
+}
 
 function walk(dir) {
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The transcript root from argv or the harness's session directory, then its subdirectories.
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   for (const entry of entries) {
-    const file = path.join(dir, entry.name);
+    const file = path.join(dir, entry.name); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     if (entry.isDirectory()) walk(file);
     else if (entry.name.endsWith('.jsonl')) scan(file);
   }
@@ -62,25 +69,26 @@ function account(name, text, lastHash, allowDedup, failed, command) {
     return;
   }
   if (!allowed(name)) {
-    if (size > limits.maxChars) skippedByTool[name] = (skippedByTool[name] || 0) + size;
+    if (size > limits.maxChars) skippedByTool.set(name, (skippedByTool.get(name) || 0) + size);
     return;
   }
 
   if (allowDedup && process.env.CHISLE_COMPRESS_DEDUP !== '0' && size >= 2048) {
     const hash = crypto.createHash('sha256').update(text).digest('hex');
-    if (lastHash[name] === hash) {
+    // eslint-disable-next-line security/detect-possible-timing-attacks, security-node/detect-possible-timing-attacks -- Compares digests of tool output for deduplication; nothing secret.
+    if (lastHash.get(name) === hash) { // nosemgrep: rules_lgpl_javascript_crypto_rule-node-timing-attack
       const marker = duplicateMarker(name, text);
       totals.dedup++;
       totals.dedupChars += size - marker.length;
 
-      const t = byTool[name] ??= { outputs: 0, before: 0, after: 0 };
+      const t = toolStats(name);
       t.outputs++;
       t.before += size;
       t.after += marker.length;
 
       return;
     }
-    lastHash[name] = hash;
+    lastHash.set(name, hash);
   }
 
   const output = transform(text, limits, undefined, undefined, command);
@@ -89,7 +97,7 @@ function account(name, text, lastHash, allowDedup, failed, command) {
   totals.before += size;
   totals.after += output.length;
 
-  const t = byTool[name] ??= { outputs: 0, before: 0, after: 0 };
+  const t = toolStats(name);
   t.outputs++;
   t.before += size;
   t.after += output.length;
@@ -99,18 +107,19 @@ function account(name, text, lastHash, allowDedup, failed, command) {
 
 function scan(file) {
   let lines;
-  try { lines = fs.readFileSync(file, 'utf8').split('\n'); } catch (_) { return; }
-  if (harness === 'pi') return scanPi(lines);
-  scanClaude(lines);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A .jsonl file walk() found under the transcript root.
+  try { lines = fs.readFileSync(file, 'utf8').split('\n'); } catch { return; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (harness === 'pi') scanPi(lines);
+  else scanClaude(lines);
 }
 
 function scanClaude(lines) {
   const idName = {};
   const idCmd = {};
-  const lastHash = {};
+  const lastHash = new Map();
   for (const line of lines) {
     if (!line) continue;
-    let entry; try { entry = JSON.parse(line); } catch (_) { continue; }
+    let entry; try { entry = JSON.parse(line); } catch { continue; }
     const message = entry.message;
     if (!message || !message.content) continue;
     if (typeof message.content === 'string') { sessionChars += message.content.length; continue; }
@@ -128,7 +137,7 @@ function scanClaude(lines) {
 function scanPi(lines) {
   for (const line of lines) {
     if (!line) continue;
-    let entry; try { entry = JSON.parse(line); } catch (_) { continue; }
+    let entry; try { entry = JSON.parse(line); } catch { continue; }
     if (entry.type === 'custom_message') {
       sessionChars += contentChars(entry.content);
       continue;
@@ -151,7 +160,7 @@ function scanPi(lines) {
       // content (coding-agent src/core/agent-session.ts:508). Only calls failed
       // before execution (unknown tool, bad args, blocked) skip the hook; those
       // are short error strings, below any compression threshold.
-      account(message.toolName || '?', extractText(message.content), {}, false);
+      account(message.toolName || '?', extractText(message.content), new Map(), false);
     } else {
       sessionChars += contentChars(message.content);
     }
@@ -177,7 +186,7 @@ if (totals.failedBig) {
     + 'failed calls go to PostToolUseFailure, which cannot rewrite output)');
 }
 console.log('\nper-tool breakdown (incl. dedup):');
-for (const [name, stats] of Object.entries(byTool)
+for (const [name, stats] of [...byTool]
   .sort((a, b) => (b[1].before - b[1].after) - (a[1].before - a[1].after))) {
   const toolSaved = stats.before - stats.after;
   console.log(
@@ -186,7 +195,7 @@ for (const [name, stats] of Object.entries(byTool)
     + `saved ${toolSaved.toLocaleString('en-US')} chars`
   );
 }
-const skipped = Object.entries(skippedByTool).sort((a, b) => b[1] - a[1]);
+const skipped = [...skippedByTool].sort((a, b) => b[1] - a[1]);
 if (skipped.length) {
   console.log('\nbig outputs NOT touched (correctness allowlist):');
   for (const [name, chars] of skipped) console.log(`  ${name.padEnd(20)} ${chars.toLocaleString('en-US')} chars`);

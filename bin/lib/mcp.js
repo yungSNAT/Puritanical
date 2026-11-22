@@ -1,3 +1,4 @@
+/* global __dirname, module, process, require -- Node.js runtime */
 // chisle — `npx chisle mcp <wrap|unwrap|status>`: route stdio MCP servers
 // through hooks/chisle-mcp-proxy.js so their oversized tool results get the
 // same compression Claude Code and Pi get from PostToolUse.
@@ -19,11 +20,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { getConfigDir } = require('../../hooks/chisle-config');
+const { getConfigDir, readSettingsText, secureDirectory } = require('../../hooks/chisle-config');
+const { writeAtomically } = require('./settings');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const PROXY_FILE = 'chisle-mcp-proxy.js';
-const PROXY_SOURCES = ['chisle-mcp-proxy.js', 'chisle-compress-output.js', 'chisle-config.js'];
+const PROXY_SOURCES = ['chisle-mcp-proxy.js', 'chisle-compress-output.js', 'chisle-config.js', 'chisle-command-filters.js'];
 
 function home() { return process.env.CHISLE_HOME || os.homedir(); }
 function proxyDir() { return path.join(getConfigDir(), 'mcp-proxy'); }
@@ -33,7 +35,7 @@ function vscodeUserDirs() {
   const base = process.platform === 'darwin' ? path.join(home(), 'Library', 'Application Support')
     : process.platform === 'win32' ? (process.env.APPDATA || path.join(home(), 'AppData', 'Roaming'))
     : (process.env.XDG_CONFIG_HOME || path.join(home(), '.config'));
-  return ['Code', 'Code - Insiders', 'VSCodium', 'Cursor', 'Windsurf'].map(n => path.join(base, n, 'User'));
+  return ['Code', 'Code - Insiders', 'VSCodium', 'Cursor', 'Windsurf'].map(n => path.join(base, n, 'User')); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 // Global MCP config files. JSON ones hold `{ "mcpServers": { name: { command, args } } }`
@@ -85,15 +87,26 @@ function unwrapEntry(entry) {
   if (!entry.args.length) delete entry.args; // wrap added it; most configs omit an empty one
 }
 
+function loadConfigText(file) {
+  try {
+    const raw = readSettingsText(file);
+    return raw === null ? { error: 'not a readable, bounded config file' } : { raw };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { missing: true };
+    return { error: 'could not read config (' + error.code + ')' };
+  }
+}
+
 function readConfig(file) {
-  let raw;
-  try { raw = fs.readFileSync(file, 'utf8'); } catch (e) { return { missing: true }; }
+  const loaded = loadConfigText(file);
+  if (loaded.raw === undefined) return loaded;
+  const { raw } = loaded;
   if (!raw.trim()) return { data: {}, raw };   // an empty file has no servers yet
   try {
-    const data = JSON.parse(raw.replace(/^﻿/, ''));
+    const data = JSON.parse(raw.replace(/^\uFEFF/, ''));
     if (!data || typeof data !== 'object' || Array.isArray(data)) return { error: 'not a JSON object' };
     return { data, raw };
-  } catch (e) { return { error: 'not strict JSON (comments?); edit by hand' }; }
+  } catch { return { error: 'not strict JSON (comments?); edit by hand' }; }
 }
 
 function writeConfig(file, raw, data) {
@@ -102,43 +115,64 @@ function writeConfig(file, raw, data) {
 
 function writeText(file, raw, text) {
   const bak = file + '.chisle-bak';
-  if (!fs.existsSync(bak)) fs.writeFileSync(bak, raw, { mode: 0o600 });
+  try {
+    writeAtomically(bak, raw, { noReplace: true });
+  } catch (error) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The .chisle-bak backup beside an MCP config file from the target table or the user's own --file argument.
+    if (error.code !== 'EEXIST' || !fs.lstatSync(bak).isFile()) throw error; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  }
   let mode = 0o600;
-  try { mode = fs.statSync(file).mode & 0o777; } catch (e) {}
-  const tmp = file + '.chisle-tmp-' + process.pid;
-  fs.writeFileSync(tmp, text, { mode });
-  fs.renameSync(tmp, file);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- An MCP config file from the target table or the user's own --file argument.
+  try { mode = fs.statSync(file).mode & 0o777; } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  writeAtomically(file, text, { mode });
 }
 
 // ── Codex TOML ──────────────────────────────────────────────────────────────
 // Only the command/args lines of [mcp_servers.<name>] tables are read and
 // rewritten; every other byte of config.toml is left as it was. A table whose
 // values are not plain strings / string arrays is skipped, never guessed at.
-const TOML_TABLE = /^\s*\[\s*mcp_servers\.(?:"((?:[^"\\]|\\.)*)"|([A-Za-z0-9_-]+))\s*\]\s*(?:#.*)?$/;
+const TOML_TABLE = /^\s*\[\s*mcp_servers\.(?:"((?:[^"\\]|\\.)*)"|([A-Za-z0-9_-]+))\s*\]\s*(?:#.*$|$)/;
 
 // Parse TOML strings from text starting at index i: one string, or an array
 // of strings when the text opens with '['. Returns { value, end } or null.
 function tomlValue(text, i) {
   const str = () => {
-    const q = text[i];
+    const q = text.charAt(i);
     if (text.startsWith(q.repeat(3), i)) return null;   // multi-line strings: not handled
     let j = i + 1;
-    while (j < text.length && text[j] !== q) { if (q === '"' && text[j] === '\\') j++; j++; }
+    while (j < text.length && text.charAt(j) !== q) {
+      if (q === '"' && text.charAt(j) === '\\') j++;
+      j++;
+    }
     if (j >= text.length) return null;
     const lit = text.slice(i, j + 1);
     i = j + 1;
-    try { return q === "'" ? lit.slice(1, -1) : JSON.parse(lit); } catch (e) { return null; }
+    try { return q === "'" ? lit.slice(1, -1) : JSON.parse(lit); } catch { return null; }
   };
-  const skip = () => { while (i < text.length) { if (/\s|,/.test(text[i])) i++; else if (text[i] === '#') while (i < text.length && text[i] !== '\n') i++; else break; } };
+  const skip = () => {
+    while (i < text.length) {
+      const char = text.charAt(i);
+      if (/\s|,/.test(char)) i++;
+      else if (char === '#') {
+        const newline = text.indexOf('\n', i);
+        i = newline < 0 ? text.length : newline;
+      } else break;
+    }
+  };
   skip();
-  if (text[i] === '"' || text[i] === "'") { const v = str(); return v == null ? null : { value: v, end: i }; }
-  if (text[i] !== '[') return null;
+  const first = text.charAt(i);
+  if (first === '"' || first === "'") {
+    const value = str();
+    return value == null ? null : { value, end: i };
+  }
+  if (first !== '[') return null;
   i++;
   const arr = [];
   for (;;) {
     skip();
-    if (text[i] === ']') return { value: arr, end: i + 1 };
-    if (text[i] !== '"' && text[i] !== "'") return null;
+    const char = text.charAt(i);
+    if (char === ']') return { value: arr, end: i + 1 };
+    if (char !== '"' && char !== "'") return null;
     const v = str();
     if (v == null) return null;
     arr.push(v);
@@ -146,39 +180,49 @@ function tomlValue(text, i) {
 }
 
 function readToml(file) {
-  let raw;
-  try { raw = fs.readFileSync(file, 'utf8'); } catch (e) { return { missing: true }; }
+  const loaded = loadConfigText(file);
+  if (loaded.raw === undefined) return loaded;
+  const { raw } = loaded;
   const lines = raw.split('\n');
-  const servers = {}, tables = {};
+  const tables = new Map();
   let cur = null;
   for (let n = 0; n < lines.length; n++) {
-    const m = TOML_TABLE.exec(lines[n]);
+    const line = lines.at(n);
+    const m = TOML_TABLE.exec(line);
     if (m) {
-      const name = m[1] != null ? JSON.parse('"' + m[1] + '"') : m[2];
-      cur = tables[name] = { header: n, entry: {}, ok: true };
+      let name = m[2];
+      if (m[1] !== undefined) {
+        try { name = JSON.parse('"' + m[1] + '"'); }
+        catch { cur = null; continue; }
+      }
+      cur = { entry: {}, ok: true };
+      tables.set(name, cur);
       continue;
     }
-    if (/^\s*\[/.test(lines[n])) { cur = null; continue; }
-    const kv = cur && /^(\s*)(command|args|url)\s*=\s*/.exec(lines[n]);
+    if (/^\s*\[/.test(line)) { cur = null; continue; }
+    const kv = cur && /^(\s*)(command|args|url)\s*=\s*/.exec(line);
     if (!kv) continue;
     // An array may run over several lines: parse from here and find its end.
     const rest = lines.slice(n).join('\n');
-    const v = kv[2] === 'url' ? { value: 'url', end: lines[n].length } : tomlValue(rest, kv[0].length);
+    const v = kv[2] === 'url' ? { value: 'url', end: line.length } : tomlValue(rest, kv[0].length);
     if (!v || (kv[2] === 'command' && typeof v.value !== 'string') || (kv[2] === 'args' && !Array.isArray(v.value))) { cur.ok = false; continue; }
     const last = n + (rest.slice(0, v.end).match(/\n/g) || []).length;
     cur.entry[kv[2]] = v.value;
     cur[kv[2]] = { start: n, end: last, indent: kv[1] };
     n = last;
   }
-  for (const [name, t] of Object.entries(tables)) if (t.ok) servers[name] = t.entry;
-  return { raw, lines, tables, data: { mcp_servers: servers } };
+  const servers = new Map();
+  for (const [name, table] of tables) {
+    if (table.ok) servers.set(name, table.entry);
+  }
+  return { raw, lines, tables, servers };
 }
 
 function writeToml(file, cfg, names) {
   const lines = cfg.lines.slice();
   const edits = [];
   for (const name of names) {
-    const t = cfg.tables[name], e = cfg.data.mcp_servers[name];
+    const t = cfg.tables.get(name), e = t.entry;
     const indent = t.command ? t.command.indent : '';
     const argsLine = e.args && e.args.length ? [indent + 'args = [' + e.args.map(a => JSON.stringify(a)).join(', ') + ']'] : [];
     edits.push({ start: t.command.start, end: t.command.end, text: [indent + 'command = ' + JSON.stringify(e.command)].concat(t.args ? [] : argsLine) });
@@ -188,21 +232,52 @@ function writeToml(file, cfg, names) {
   writeText(file, cfg.raw, lines.join('\n'));
 }
 
+// Removes a proxy file before it is written again. A link is removed itself,
+// never followed, so a planted link cannot redirect the write outside the folder.
+function clearProxyEntry(file) {
+  let st;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- A fixed proxy file name in the checked mcp-proxy folder, inspected without following links.
+  try { st = fs.lstatSync(file); } catch (e) { if (e.code === 'ENOENT') return; throw e; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  if (!st.isFile() && !st.isSymbolicLink()) throw new Error(file + ' is not a regular file');
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes the entry itself (a file or a link, not its target) in the checked mcp-proxy folder.
+  fs.unlinkSync(file); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+}
+
 function installProxy() {
   const dir = proxyDir();
-  fs.mkdirSync(dir, { recursive: true });
-  for (const f of PROXY_SOURCES) fs.copyFileSync(path.join(REPO_ROOT, 'hooks', f), path.join(dir, f));
-  fs.writeFileSync(path.join(dir, 'package.json'), '{ "type": "commonjs" }\n');
+  if (!secureDirectory(dir, getConfigDir())) throw new Error('unsafe MCP proxy folder (a link or not a folder): ' + dir);
+  for (const f of PROXY_SOURCES) {
+    const dst = path.join(dir, f);
+    clearProxyEntry(dst);
+    // Exclusive create: fails rather than follow a link planted after the removal.
+    fs.copyFileSync(path.join(REPO_ROOT, 'hooks', f), dst, fs.constants.COPYFILE_EXCL); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  }
+  const pkg = path.join(dir, 'package.json');
+  clearProxyEntry(pkg);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Exclusive create of package.json in the checked mcp-proxy folder.
+  fs.writeFileSync(pkg, '{ "type": "commonjs" }\n', { flag: 'wx' }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   return path.join(dir, PROXY_FILE);
+}
+
+// Proxies copied by an older version can lack newer sources
+// (chisle-command-filters.js), so an install or update refreshes an existing
+// copy. Returns its folder, or null when no proxy is installed.
+function refreshProxy() {
+  const dir = proxyDir();
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The mcp-proxy folder inside the Chisle config directory.
+  if (!fs.existsSync(dir)) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  installProxy();
+  return dir;
 }
 
 function parse(argv) {
   const o = { action: argv[0], dryRun: false, only: [], files: [] };
-  for (let i = 1; i < argv.length; i++) {
-    const a = argv[i];
+  const args = argv.slice(1);
+  while (args.length) {
+    const a = args.shift();
     if (a === '--dry-run') o.dryRun = true;
-    else if (a === '--only' && argv[i + 1]) o.only.push(argv[++i]);
-    else if (a === '--file' && argv[i + 1]) o.files.push(path.resolve(argv[++i]));
+    else if (a === '--only' && args[0]) o.only.push(args.shift());
+    else if (a === '--file' && args[0]) o.files.push(path.resolve(args.shift())); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
     else if (a === '--no-color' || a === '--') continue;
     else throw new Error('unknown option: ' + a);
   }
@@ -215,6 +290,58 @@ function selected(o) {
   return targets().filter(t => !o.only.length || o.only.includes(t.id));
 }
 
+// The servers table of a loaded config → { key, entries }.
+function serverEntries(t, cfg) {
+  const key = t.format === 'toml' ? 'mcp_servers' : t.key || (cfg.data.mcpServers ? 'mcpServers' : 'servers');
+  return { key, entries: cfg.servers ?? Object.getOwnPropertyDescriptor(cfg.data, key)?.value };
+}
+
+// Wrap or unwrap `todo` in one file and save it (unless --dry-run).
+function applyChanges(t, cfg, o, proxy, todo, out) {
+  for (const [, entry] of todo) {
+    if (o.action === 'wrap') wrapEntry(entry, proxy);
+    else unwrapEntry(entry);
+  }
+  const names = todo.map(([name]) => name);
+  if (!o.dryRun) (t.format === 'toml' ? writeToml(t.file, cfg, names) : writeConfig(t.file, cfg.raw, cfg.data));
+  out('  ' + t.label + ': ' + (o.dryRun ? 'would ' + o.action : o.action + 'ped') + ' ' + names.join(', ') + '  ' + t.file);
+  return todo.length;
+}
+
+// One config file: report, wrap or unwrap. Servers changed, or null when the file is missing.
+function runTarget(t, o, proxy, out) {
+  const cfg = t.format === 'toml' ? readToml(t.file) : readConfig(t.file);
+  if (cfg.missing) { if (o.files.length) out('  ' + t.file + ': not found'); return null; }
+  if (cfg.error) { out('  ' + t.label + ': ' + t.file + ': skipped, ' + cfg.error); return 0; }
+  const { key, entries } = serverEntries(t, cfg);
+  if (!entries || typeof entries !== 'object') { out('  ' + t.label + ': no ' + key + ' in ' + t.file); return 0; }
+
+  const servers = entries instanceof Map ? [...entries] : Object.entries(entries);
+  const stdio = servers.filter(([, entry]) => isStdio(entry));
+  const wrapped = servers.filter(([, entry]) => isWrapped(entry));
+  if (o.action === 'status') {
+    out('  ' + t.label + ': ' + wrapped.length + '/' + stdio.length +
+      ' stdio server(s) wrapped  ' + t.file);
+    return 0;
+  }
+
+  const todo = o.action === 'wrap'
+    ? stdio.filter(([, entry]) => !isWrapped(entry))
+    : wrapped;
+  if (!todo.length) { out('  ' + t.label + ': nothing to ' + o.action + '  ' + t.file); return 0; }
+  return applyChanges(t, cfg, o, proxy, todo, out);
+}
+
+function printSavings(out) {
+  const dir = process.env.CHISLE_STATE_DIR || getConfigDir();
+  let stats = null;
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed ledger name in CHISLE_STATE_DIR or the Chisle config directory.
+  try { stats = JSON.parse(fs.readFileSync(path.join(dir, '.chisle-compress-stats.json'), 'utf8')); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  out('\n  saved so far: ' + (stats && Number.isFinite(stats.savedChars)
+    ? stats.savedChars.toLocaleString('en-US') + ' chars over ' + stats.events + ' tool result(s)'
+    : 'nothing yet') + '  (' + dir + ')');
+}
+
 // Returns { changed, files } so `--uninstall` can reuse it quietly.
 function run(argv, out) {
   out = out || (s => process.stdout.write(s + '\n'));
@@ -223,41 +350,14 @@ function run(argv, out) {
   let changed = 0, found = 0;
 
   for (const t of selected(o)) {
-    const cfg = t.format === 'toml' ? readToml(t.file) : readConfig(t.file);
-    if (cfg.missing) { if (o.files.length) out('  ' + t.file + ': not found'); continue; }
+    const n = runTarget(t, o, proxy, out);
+    if (n === null) continue;
     found++;
-    if (cfg.error) { out('  ' + t.label + ': ' + t.file + ': skipped, ' + cfg.error); continue; }
-    const key = t.format === 'toml' ? 'mcp_servers' : t.key || (cfg.data.mcpServers ? 'mcpServers' : 'servers');
-    const servers = cfg.data[key];
-    if (!servers || typeof servers !== 'object') { out('  ' + t.label + ': no ' + key + ' in ' + t.file); continue; }
-
-    const names = Object.keys(servers);
-    const wrapped = names.filter(n => isWrapped(servers[n]));
-    if (o.action === 'status') {
-      out('  ' + t.label + ': ' + wrapped.length + '/' + names.filter(n => isStdio(servers[n])).length +
-        ' stdio server(s) wrapped  ' + t.file);
-      continue;
-    }
-
-    const todo = o.action === 'wrap'
-      ? names.filter(n => isStdio(servers[n]) && !isWrapped(servers[n]))
-      : wrapped;
-    if (!todo.length) { out('  ' + t.label + ': nothing to ' + o.action + '  ' + t.file); continue; }
-    for (const n of todo) (o.action === 'wrap' ? wrapEntry(servers[n], proxy) : unwrapEntry(servers[n]));
-    if (!o.dryRun) (t.format === 'toml' ? writeToml(t.file, cfg, todo) : writeConfig(t.file, cfg.raw, cfg.data));
-    changed += todo.length;
-    out('  ' + t.label + ': ' + (o.dryRun ? 'would ' + o.action : o.action + 'ped') + ' ' + todo.join(', ') + '  ' + t.file);
+    changed += n;
   }
 
   if (!found) out('  no MCP config files found' + (o.only.length ? ' for ' + o.only.join(', ') : ''));
-  if (o.action === 'status') {
-    const dir = process.env.CHISLE_STATE_DIR || getConfigDir();
-    let stats = null;
-    try { stats = JSON.parse(fs.readFileSync(path.join(dir, '.chisle-compress-stats.json'), 'utf8')); } catch (e) {}
-    out('\n  saved so far: ' + (stats && Number.isFinite(stats.savedChars)
-      ? stats.savedChars.toLocaleString('en-US') + ' chars over ' + stats.events + ' tool result(s)'
-      : 'nothing yet') + '  (' + dir + ')');
-  }
+  if (o.action === 'status') printSavings(out);
   if (o.action === 'wrap' && changed && !o.dryRun) out('\n  Restart the agent so it relaunches its MCP servers.');
   return { changed, found };
 }
@@ -267,4 +367,4 @@ function main(argv) {
   catch (e) { process.stderr.write('error: ' + e.message + '\n'); process.exit(2); }
 }
 
-module.exports = { main, run, targets, isWrapped, isStdio, proxyDir };
+module.exports = { main, run, targets, isWrapped, isStdio, proxyDir, refreshProxy };

@@ -1,8 +1,10 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Reveal from "./Reveal";
 import CopyCmd from "./CopyCmd";
+import Step from "./Step";
 
 // Every install path the project documents. Kept in sync with the README's
 // Install section. If a command changes there, it changes here.
@@ -34,24 +36,12 @@ const INSTALLS = [
   },
 ];
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  return (
-    <li className="relative grid gap-4 pb-12 pl-14 last:pb-0">
-      <span
-        aria-hidden
-        className="absolute left-0 top-0 grid h-9 w-9 place-items-center rounded-full border border-brand-hover/60 bg-accent-soft font-mono text-sm font-semibold text-accent"
-      >
-        {n}
-      </span>
-      <h3 className="pt-1 text-lg font-semibold tracking-tight">{title}</h3>
-      {children}
-    </li>
-  );
-}
-
-export default function GetStarted() {
+export default function GetStarted(): React.JSX.Element {
   const [active, setActive] = useState(INSTALLS[0].id);
-  const current = INSTALLS.find((i) => i.id === active)!;
+  const current = INSTALLS.find((i) => i.id === active) ?? INSTALLS[0];
+  const choose = useCallback((event: React.MouseEvent<HTMLButtonElement>): void => {
+    setActive(event.currentTarget.value);
+  }, []);
 
   return (
     <section id="get-started" className="mx-auto max-w-6xl px-5 py-28">
@@ -76,15 +66,17 @@ export default function GetStarted() {
         </Reveal>
 
         <Reveal delay={0.08}>
-          <ol className="relative before:absolute before:left-[17px] before:top-10 before:bottom-10 before:w-px before:bg-line">
+          <ol className="relative before:absolute before:inset-y-10 before:left-[17px] before:w-px before:bg-line">
             <Step n={1} title="Install">
               <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-surface p-1 w-fit" role="tablist" aria-label="Installation method">
                 {INSTALLS.map((i) => (
                   <button
+                    type="button"
                     key={i.id}
                     role="tab"
                     aria-selected={i.id === active}
-                    onClick={() => setActive(i.id)}
+                    value={i.id}
+                    onClick={choose}
                     className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                       i.id === active ? "bg-raised text-fg shadow-sm" : "text-dim hover:text-fg"
                     }`}
@@ -93,7 +85,7 @@ export default function GetStarted() {
                   </button>
                 ))}
               </div>
-              <CopyCmd cmd={current.cmd} label={current.label} />
+              <CopyCmd key={current.id} cmd={current.cmd} label={current.label} />
               <p className="-mt-2 text-xs text-dim">{current.note}</p>
             </Step>
 

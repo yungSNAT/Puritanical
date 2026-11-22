@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, process, require -- Node.js runtime */
 // Integration tests for chisle-mode-tracker.js — drives it via stdin with a temp
 // CLAUDE_CONFIG_DIR and asserts the resulting flag state.
 // Run: node --test tests/test_tracker.js
@@ -6,19 +7,21 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const isolateWorkingDirectory = require('./fixtures/working-directory');
+const { absolutePath, makeDir, makeLink, writeText } = require('./helpers/sandbox');
 
 const TRACKER = path.join(__dirname, '..', 'hooks', 'chisle-mode-tracker.js');
 const { requestedMode } = require('../hooks/chisle-mode');
+isolateWorkingDirectory();
 
 // Run the tracker with a given prompt against a fresh temp config dir.
 // Returns the flag contents after the run (or null if the flag was removed).
 function runTracker(prompt, { preActive, defaultMode = 'on' } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-'));
-  const flagPath = path.join(dir, '.chisle-active');
-  if (preActive) fs.writeFileSync(flagPath, preActive, { mode: 0o600 });
+  const dir = process.cwd();
+  fs.rmSync('.chisle-active', { force: true });
+  if (preActive) fs.writeFileSync('.chisle-active', preActive, { mode: 0o600 });
 
   try {
     execFileSync(process.execPath, [TRACKER], {
@@ -27,12 +30,9 @@ function runTracker(prompt, { preActive, defaultMode = 'on' } = {}) {
       encoding: 'utf8',
       timeout: 5000,
     });
-  } catch (e) { /* tracker silent-fails; we assert on flag state */ }
+  } catch { /* tracker silent-fails; we assert on flag state */ }
 
-  let flag = null;
-  try { flag = fs.readFileSync(flagPath, 'utf8').trim(); } catch (e) {}
-  fs.rmSync(dir, { recursive: true, force: true });
-  return flag;
+  try { return fs.readFileSync('.chisle-active', 'utf8').trim(); } catch { return null; }
 }
 
 test('shared parser only deactivates when off-verb targets Chisle', () => {
@@ -94,14 +94,15 @@ test('REGRESSION: "chisle please stop the server" stays active', () => {
 // regardless.
 
 function runTrackerOutput(prompt, { preActive = 'on', sectionsValue } = {}) {
-  const claudeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-'));
-  const xdgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-xdg-'));
-  const flagPath = path.join(claudeDir, '.chisle-active');
-  if (preActive) fs.writeFileSync(flagPath, preActive, { mode: 0o600 });
+  const claudeDir = path.resolve('claude');
+  const xdgDir = path.resolve('config');
+  fs.mkdirSync('claude', { recursive: true });
+  fs.rmSync('claude/.chisle-active', { force: true });
+  fs.rmSync('config/chisle/config.json', { force: true });
+  if (preActive) fs.writeFileSync('claude/.chisle-active', preActive, { mode: 0o600 });
   if (sectionsValue !== undefined) {
-    const chisleDir = path.join(xdgDir, 'chisle');
-    fs.mkdirSync(chisleDir, { recursive: true });
-    fs.writeFileSync(path.join(chisleDir, 'config.json'), JSON.stringify({ sections: sectionsValue }));
+    fs.mkdirSync('config/chisle', { recursive: true });
+    fs.writeFileSync('config/chisle/config.json', JSON.stringify({ sections: sectionsValue }));
   }
 
   let stdout = '';
@@ -112,14 +113,9 @@ function runTrackerOutput(prompt, { preActive = 'on', sectionsValue } = {}) {
       encoding: 'utf8',
       timeout: 5000,
     });
-  } catch (e) { /* tracker silent-fails */ }
+  } catch { /* tracker silent-fails */ }
 
-  fs.rmSync(claudeDir, { recursive: true, force: true });
-  fs.rmSync(xdgDir, { recursive: true, force: true });
-
-  let context = null;
-  try { context = JSON.parse(stdout).hookSpecificOutput.additionalContext; } catch (e) {}
-  return context;
+  try { return JSON.parse(stdout).hookSpecificOutput.additionalContext; } catch { return null; }
 }
 
 test('reinforcement: no config → unchanged (byte-identical to prior hardcoded line)', () => {
@@ -164,27 +160,25 @@ test('reinforcement: malformed sections value falls back to enabled, no throw', 
 
 // ── resume nudge ─────────────────────────────────────────────────────────────
 
-function runWithTranscript(minutesAgo, context) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-trk-'));
-  fs.writeFileSync(path.join(dir, '.chisle-active'), 'on', { mode: 0o600 });
-  const transcript = path.join(dir, 'session.jsonl');
+// Claude Code keeps transcripts under <config dir>/projects/<project>/.
+const TRANSCRIPT = path.join('projects', 'p', 'session.jsonl');
+
+function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptPath, configDir = process.cwd() } = {}) {
+  fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
   const entry = {
     type: 'assistant',
     timestamp: new Date(Date.now() - minutesAgo * 60000).toISOString(),
     message: { model: 'claude-opus-5-5', usage: { input_tokens: 5, cache_creation_input_tokens: 1000, cache_read_input_tokens: context - 1005, output_tokens: 50 } },
   };
-  fs.writeFileSync(transcript, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
-  try {
-    const out = execFileSync(process.execPath, [TRACKER], {
-      input: JSON.stringify({ prompt: 'next task', transcript_path: transcript }),
-      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on' },
-      encoding: 'utf8',
-      timeout: 5000,
-    });
-    return JSON.parse(out);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  makeDir(path.dirname(file), { recursive: true });
+  writeText(file, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
+  const out = execFileSync(process.execPath, [TRACKER], {
+    input: JSON.stringify({ prompt: 'next task', transcript_path: absolutePath(transcriptPath || file) }),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CHISLE_DEFAULT_MODE: 'on' },
+    encoding: 'utf8',
+    timeout: 5000,
+  });
+  return JSON.parse(out);
 }
 
 test('resume nudge: big context after an expired cache warns the user', () => {
@@ -193,6 +187,54 @@ test('resume nudge: big context after an expired cache warns the user', () => {
   assert.match(out.systemMessage, /~480k-token context/);
   assert.match(out.systemMessage, /\/compact/);
   assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+});
+
+test('resume nudge: silent when the transcript has no assistant usage', () => {
+  fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
+  makeDir(path.dirname(TRANSCRIPT), { recursive: true });
+  writeText(TRANSCRIPT, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
+  const out = JSON.parse(execFileSync(process.execPath, [TRACKER], {
+    input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(TRANSCRIPT) }),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: process.cwd(), CHISLE_DEFAULT_MODE: 'on' },
+    encoding: 'utf8',
+    timeout: 5000,
+  }));
+  assert.equal(out.systemMessage, undefined);
+  assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+});
+
+test('resume nudge: ignores a transcript outside the Claude projects folder', () => {
+  fs.mkdirSync('projects');
+  for (const file of ['session.jsonl', path.join('elsewhere', 'session.jsonl')]) {
+    const out = runWithTranscript(180, 480000, { file });
+    assert.equal(out.systemMessage, undefined, file);
+    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+  }
+});
+
+test('resume nudge: ignores a linked transcript or a linked projects subfolder', () => {
+  const outside = path.join('outside', 'session.jsonl');
+  makeDir(path.join('projects', 'p'), { recursive: true });
+  fs.mkdirSync('outside');
+  makeLink(absolutePath(outside), path.join('projects', 'p', 'linked.jsonl'));
+  makeLink(absolutePath('outside'), path.join('projects', 'linked'), 'dir');
+  for (const link of [path.join('projects', 'p', 'linked.jsonl'), path.join('projects', 'linked', 'session.jsonl')]) {
+    const out = runWithTranscript(180, 480000, { file: outside, transcriptPath: link });
+    assert.equal(out.systemMessage, undefined, link);
+    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+  }
+  // The same transcript inside the tree still warns.
+  assert.match(runWithTranscript(180, 480000).systemMessage, /3 h idle/);
+});
+
+test('resume nudge: warns for a transcript under a linked Claude config folder', () => {
+  // A stow-managed ~/.claude is itself a link; its transcripts still count.
+  makeDir('real-config');
+  makeLink(absolutePath('real-config'), 'linked-config', 'dir');
+  writeText(path.join('linked-config', '.chisle-active'), 'on', { mode: 0o600 });
+  const file = path.join('linked-config', 'projects', 'p', 'session.jsonl');
+  const out = runWithTranscript(180, 480000, { file, configDir: absolutePath('linked-config') });
+  assert.match(out.systemMessage, /3 h idle/);
 });
 
 test('resume nudge: silent while the cache is warm or the context is small', () => {

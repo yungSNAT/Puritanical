@@ -1,3 +1,4 @@
+/* eslint react/react-in-jsx-scope: off -- Next.js uses the automatic JSX runtime. */
 "use client";
 
 import Reveal from "./Reveal";
@@ -71,7 +72,12 @@ const RUNGS = [
   },
 ];
 
-export default function Ladder() {
+// Both passes of the marquee, each rung with a stable key.
+const MARQUEE = [false, true].flatMap((copy) =>
+  RUNGS.map((r, n) => ({ ...r, key: copy ? `${r.tag}-copy` : r.tag, rung: n + 1, copy }))
+);
+
+export default function Ladder(): React.JSX.Element {
   return (
     <section id="ladder" className="py-28">
       <div className="mx-auto max-w-6xl px-5">
@@ -85,14 +91,14 @@ export default function Ladder() {
         <div className="marquee pane-scroll mt-10">
           {/* Rendered twice for a seamless loop; the copy is inert (no screen reader, no Tab stop). */}
           <ol className="marquee-track flex w-max pt-2 pb-4" aria-label="Ladder rungs">
-            {[...RUNGS, ...RUNGS].map((r, i) => (
+            {MARQUEE.map((r) => (
               <li
-                key={i}
-                inert={i >= RUNGS.length || undefined}
+                key={r.key}
+                inert={r.copy || undefined}
                 className="lift mr-4 flex w-[85vw] max-w-[22rem] shrink-0 flex-col rounded-xl border border-line bg-surface p-5"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-dim">rung {(i % RUNGS.length) + 1}/7</span>
+                  <span className="font-mono text-xs text-dim">rung {r.rung}/7</span>
                   <span className="rounded-md bg-accent-soft px-2 py-0.5 font-mono text-[11px] text-accent">{r.tag}</span>
                 </div>
                 <h3 className="mt-4 text-lg font-semibold leading-snug">{r.q}</h3>

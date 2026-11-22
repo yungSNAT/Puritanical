@@ -171,7 +171,7 @@ test('mode tracker ignores an unreadable transcript while still reinforcing acti
     cwd: root,
     input: JSON.stringify({
       prompt: 'continue',
-      transcript_path: under(root, 'missing-session.jsonl'),
+      transcript_path: under(claudeDir, 'projects', 'p', 'missing-session.jsonl'),
     }),
     env: childEnv(root, claudeDir, xdgDir),
     encoding: 'utf8',

@@ -1,17 +1,19 @@
 'use strict';
 
-const path = require('path');
-
-function load(name) {
-  try { return require(path.join(__dirname, 'chisle-hooks', name)); }
+// Installed beside ./chisle-hooks/; running from the repo, the core is in
+// ../../../hooks/. Both loaders are literal requires.
+function load(installed, repo) {
+  try { return installed(); }
   catch (error) {
     if (error && error.code !== 'MODULE_NOT_FOUND') throw error;
-    return require(path.join(__dirname, '..', '..', '..', 'hooks', name));
+    return repo();
   }
 }
 
-const core = load('chisle-compress-output.js');
-const config = load('chisle-config.js');
+const core = load(() => require('./chisle-hooks/chisle-compress-output.js'),
+  () => require('../../../hooks/chisle-compress-output.js'));
+const config = load(() => require('./chisle-hooks/chisle-config.js'),
+  () => require('../../../hooks/chisle-config.js'));
 const CHISLE_MARK = '[chisle:';
 
 module.exports = async function setup(ctx) {
@@ -38,6 +40,6 @@ module.exports = async function setup(ctx) {
           ? content.map((part) => part && part.type === 'text' ? { ...part, text: compress(part.text) } : part)
           : content;
       if (updated !== content) event.result = { ...event.result, content: updated };
-    } catch (_) {}
+    } catch {}
   });
 };

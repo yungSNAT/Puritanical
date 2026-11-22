@@ -1,0 +1,11 @@
+---
+# CKV_SECRET_4 detects illustrative Basic Auth URLs in these frozen benchmark
+# answers. Each match was verified against synthetic placeholder values and
+# hosts. All other Checkov checks and all Trivy checks still run on the files.
+skip-check:
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-314-sonnet/default-s2/pooling__vanilla\.json$'
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sidebyside/large-s2/migration__vanilla\.json$'
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sonnet/default-s1/pooling__vanilla\.json$'
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sonnet/default-s2/pooling__vanilla\.json$'
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sonnet/default-s3/pooling__vanilla\.json$'
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov/large-s2/authflow__chisle\.json$'
