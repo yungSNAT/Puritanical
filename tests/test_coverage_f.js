@@ -224,3 +224,21 @@ test('mcp reads a config named by --file and refuses an unknown option', (t) => 
   assert.equal(bogus.status, 2, bogus.out);
   assert.match(bogus.out, /unknown option: --bogus/);
 });
+
+test('pi git sources must name github.com as their host', () => {
+  for (const prefix of ['', 'https://', 'http://', 'git+https://', 'ssh://git@', 'git@']) {
+    const source = `git:${prefix}github.com/JayPokale/Chisle`;
+    assert.deepEqual(piSources(`${source}@v1 (user)`), [source], source);
+  }
+  // The scp-style form git uses for SSH remotes.
+  assert.deepEqual(piSources('git:git@github.com:JayPokale/Chisle@v1 (user)'), ['git:git@github.com:JayPokale/Chisle']);
+  for (const lookalike of [
+    'git:evil.com/x/github.com/JayPokale/Chisle',
+    'git:https://evilgithub.com/JayPokale/Chisle',
+    'git:https://github.com.evil/JayPokale/Chisle',
+    'git:https://github.com@evil.com/JayPokale/Chisle',
+    'git:git@github.com:evil/JayPokale/Chisle',
+  ]) {
+    assert.deepEqual(piSources(lookalike), [], lookalike);
+  }
+});

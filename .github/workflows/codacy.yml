@@ -39,6 +39,10 @@ jobs:
       # - Replaced PMD7, whose JavaScript parser fails on modern syntax, with
       #   the ESLint rules for its 4 patterns (eqeqeq, radix, consistent-return;
       #   no-with was already on).
+      # - Added the Semgrep rules_lgpl JavaScript rules and PMD 6's
+      #   InnaccurateNumericLiteral, which hosted Codacy runs, so this job
+      #   catches what the pull request analysis does. Left out regex-dos:
+      #   hosted Codacy does not run it and it times out on the large files.
       # Every security pattern stays on. Reviewed exceptions are inline, each
       # naming its rule and reason.
       - name: Analyse the repository

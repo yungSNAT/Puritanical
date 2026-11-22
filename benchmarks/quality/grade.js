@@ -14,10 +14,22 @@
 
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
+const { spawnSync } = require('child_process');
 const { fisher, wilson, fmtP } = require('../stats.js');
 
 const HERE = __dirname;
+// Code answers run in grade-cell.js under bubblewrap, as the Astra replay's
+// answers do: no network, read-only system directories, an empty /tmp and no
+// inherited environment. Node's own permission model is not a boundary against hostile
+// code, so there is no fallback without bubblewrap.
+// A fixed path, not a PATH lookup, so a planted bwrap cannot stand in for it.
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- one of 2 fixed install paths.
+const BWRAP = ['/usr/bin/bwrap', '/usr/local/bin/bwrap'].find((p) => fs.existsSync(p)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+const SANDBOX = ['--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--clearenv'];
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- one of the 4 fixed system directories.
+for (const dir of ['/usr', '/bin', '/lib', '/lib64']) if (fs.existsSync(dir)) SANDBOX.push('--ro-bind', dir, dir); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+SANDBOX.push('--dev', '/dev', '--proc', '/proc', '--size', '67108864', '--tmpfs', '/tmp', '--chdir', '/tmp', '--dir', '/bench',
+  '--ro-bind', process.execPath, process.execPath, '--ro-bind', path.join(HERE, 'grade-cell.js'), '/bench/grade-cell.js');
 const RAW = process.env.RAW_DIR ? path.resolve(process.env.RAW_DIR) : path.join(HERE, 'raw');
 const ARMS = ['vanilla', 'chisle'];
 const math = JSON.parse(fs.readFileSync(path.join(HERE, 'math.json'), 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -71,6 +83,23 @@ function extractBlock(answer) {
   return blocks.length ? blocks.join('\n\n') : null;
 }
 
+// Once per run, before the first code answer: stop rather than record every
+// code cell as failed when bubblewrap is missing or cannot build the sandbox.
+let sandboxReady = false;
+function checkSandbox() {
+  if (sandboxReady) return;
+  if (!BWRAP) {
+    console.error('grade.js runs model-written code only under bubblewrap (bwrap): use Linux, or WSL on Windows');
+    process.exit(2);
+  }
+  const r = spawnSync(BWRAP, [...SANDBOX, process.execPath, '-e', "process.stdout.write('ok')"], { encoding: 'utf8', timeout: 10000 });
+  if (r.stdout !== 'ok') {
+    console.error('bubblewrap could not start the grading sandbox: ' + (r.error ? r.error.message : String(r.stderr).trim()));
+    process.exit(2);
+  }
+  sandboxReady = true;
+}
+
 function gradeCode(item, answer) {
   const src = extractBlock(answer);
   if (!src) return { pass: false, why: 'no code block' };
@@ -80,24 +109,14 @@ function gradeCode(item, answer) {
     .replace(/^\s*export\s+(?=(function|const|let|var|class)\b)/gm, '')
     .replace(/^\s*module\.exports.*$/gm, '')
     .replace(/^\s*import\s.*$/gm, '');
-  const ctx = { module: { exports: {} }, exports: {}, console: { log() {} }, require: () => { throw new Error('no deps allowed'); } };
-  vm.createContext(ctx);
-  try {
-    vm.runInContext(cleaned + `\n;globalThis.__fn = typeof ${item.fn} === 'function' ? ${item.fn} : undefined;`, ctx, { timeout: 3000 });
-  } catch (e) { return { pass: false, why: 'eval: ' + e.message }; }
-  const fn = ctx.__fn;
-  if (typeof fn !== 'function') return { pass: false, why: `no function ${item.fn}` };
-  for (const [args, want] of item.cases) {
-    let got;
-    // Build args inside the context: host-realm objects fail a correct
-    // `Object.getPrototypeOf(x) === Object.prototype` plain-object check.
-    try { got = vm.runInContext(`__fn(...JSON.parse(${JSON.stringify(JSON.stringify(args))}))`, ctx, { timeout: 3000 }); }
-    catch (e) { return { pass: false, why: `threw on ${JSON.stringify(args)}: ${e.message}` }; }
-    if (JSON.stringify(got) !== JSON.stringify(want)) {
-      return { pass: false, why: `${JSON.stringify(args)} -> ${JSON.stringify(got)} want ${JSON.stringify(want)}` };
-    }
-  }
-  return { pass: true, why: '' };
+  checkSandbox();
+  // SIGKILL, because an answer can catch SIGTERM; --die-with-parent then ends it.
+  const r = spawnSync(BWRAP, [...SANDBOX, process.execPath, '/bench/grade-cell.js'], {
+    input: JSON.stringify({ item, cleaned }), encoding: 'utf8', timeout: 3000 * (item.cases.length + 2), killSignal: 'SIGKILL',
+  });
+  // A killed answer fails, even if it printed a passing result before it hung.
+  if (r.error || r.signal) return { pass: false, why: 'sandbox: ' + (r.error ? r.error.message : r.signal) };
+  try { return JSON.parse(r.stdout); } catch { return { pass: false, why: 'sandbox: ' + String(r.stderr).trim().split('\n').pop() }; }
 }
 
 // --- load + grade ----------------------------------------------------------
