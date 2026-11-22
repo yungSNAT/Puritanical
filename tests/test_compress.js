@@ -11,6 +11,7 @@ const {
 
 const {
   extractText, rebuildResponse, scrub, compress, transform, limitsFor, toolAllowed, processPayload, THRESHOLDS,
+  unsafeToolName, containsCredential,
 } = require('../hooks/chisle-compress-output');
 
 const FULL = THRESHOLDS;
@@ -221,7 +222,49 @@ test('Read/Edit/Write are NEVER compressed (Edit old_string correctness)', () =>
 test('Bash, Agent, mcp__ tools are compressible', () => {
   assert.equal(toolAllowed('Bash'), true);
   assert.equal(toolAllowed('Agent'), true);
-  assert.equal(toolAllowed('mcp__tokensave__tokensave_read'), true);
+  assert.equal(toolAllowed('mcp__context7__query-docs'), true);
+  assert.equal(toolAllowed('mcp__github__list_issues'), true);
+});
+
+// File readers, LSP tools and code-host file tools return content the model
+// quotes back or edits against, so the shared name guard keeps them whole,
+// even when CHISLE_COMPRESS_TOOLS names them.
+const UNSAFE_MCP = [
+  'mcp__tokensave__tokensave_read', 'mcp__filesystem__read_text_file', 'mcp__github__get_file_contents',
+  'mcp__github__search_code', 'mcp__ide__lsp_hover', 'mcp__serena__find_symbol', 'mcp__lsp__goto_definition',
+  'mcp__gitlab__get_blob', 'mcp__repo__view_source', 'mcp__x__apply_patch', 'mcp__ide__hover',
+  'mcp__ide__find_references', 'mcp__lsp__goto_implementation', 'mcp__lsp__goto_declaration',
+];
+
+test('MCP file, source and LSP tools are never compressed (Claude/Pi)', () => {
+  for (const t of UNSAFE_MCP) assert.equal(toolAllowed(t), false, t);
+  process.env.CHISLE_COMPRESS_TOOLS = UNSAFE_MCP.join(',');
+  try {
+    for (const t of UNSAFE_MCP) assert.equal(toolAllowed(t), false, `${t} via override`);
+  } finally { delete process.env.CHISLE_COMPRESS_TOOLS; }
+});
+
+test('unsafeToolName is the one guard the proxy, Pi, Copilot and OpenCode share', () => {
+  const { mcpToolAllowed } = require('../hooks/chisle-mcp-proxy');
+  const { piToolAllowed } = require('../pi-extension/index.js');
+  const { copilotToolAllowed, opencodeToolAllowed } = require('../hooks/chisle-compress-output');
+  for (const t of ['get_file_contents', 'search_code', 'lsp_references', 'find_symbol', 'read_resource', 'hover',
+    'find_references', 'goto_implementation']) {
+    assert.equal(unsafeToolName(t), true, t);
+    assert.equal(mcpToolAllowed(t), false, `proxy: ${t}`);
+  }
+  assert.equal(mcpToolAllowed('run_logs'), true);
+  assert.equal(piToolAllowed('mcp__github__get_file_contents'), false);
+  assert.equal(piToolAllowed('mcp__github__list_issues'), true);
+  process.env.CHISLE_COMPRESS_TOOLS = 'bash,github_get_file_contents,github-tools_search_code';
+  try {
+    assert.equal(copilotToolAllowed('github_get_file_contents'), false);
+    assert.equal(opencodeToolAllowed('github-tools_search_code'), false);
+    assert.equal(opencodeToolAllowed('bash'), true);
+  } finally { delete process.env.CHISLE_COMPRESS_TOOLS; }
+  for (const t of ['Bash', 'Agent', 'WebFetch', 'WebSearch', 'Grep', 'Glob', 'powershell', 'web_fetch', 'task', 'shell', 'list']) {
+    assert.equal(unsafeToolName(t), false, `built-in ${t} must stay compressible`);
+  }
 });
 
 test('CHISLE_COMPRESS_TOOLS overrides the allowlist', () => {
@@ -367,6 +410,82 @@ test('the spill directory stays bounded', () => {
     for (let i = 0; i < 55; i++) transform(bigOutput(500, `run${i}`), FULL, 'Bash');
     const files = listDir(under(dir, 'chisle-spill'));
     assert.ok(files.length <= 41, `spill dir grew to ${files.length} files`);
+  });
+});
+
+// Spill files outlive the session, so output carrying a credential is elided
+// without being written to disk. Fixtures are assembled at run time so the
+// source holds no credential-shaped literal for scanners to flag.
+const CREDENTIALS = {
+  'PEM private key': '-----BEGIN RSA ' + 'PRIVATE KEY-----\nMIIEow' + 'A'.repeat(40),
+  'OpenSSH private key': '-----BEGIN OPENSSH ' + 'PRIVATE KEY-----',
+  JWT: 'ey' + 'JhbGciOiJIUzI1NiJ9.' + 'ey' + 'JzdWIiOiIxMjM0NTY3ODkwIn0.' + 'S'.repeat(43),
+  'AWS access key ID': 'AK' + 'IA' + 'Q'.repeat(16),
+  'AWS secret key': 'aws_secret_access_key = ' + 'a/B+'.repeat(10),
+  'GCP API key': 'AI' + 'za' + 'S'.repeat(35),
+  'GCP OAuth token': 'ya' + '29.' + 'a0'.repeat(20),
+  'GCP client secret': 'GOC' + 'SPX-' + 'x'.repeat(28),
+  'Azure storage key': 'DefaultEndpointsProtocol=https;Account' + 'Key=' + 'Ab+/'.repeat(10),
+  'Azure SAS signature': 'https://a.blob.core.windows.net/c?sv=2024&' + 'sig=' + 'AbC%2B'.repeat(6),
+  'Azure client secret': 'abc' + '8Q~' + 'd'.repeat(34),
+  'GitHub classic token': 'gh' + 'p_' + 'A1'.repeat(18),
+  'GitHub OAuth token': 'gh' + 'o_' + 'B2'.repeat(18),
+  'GitHub fine-grained token': 'github' + '_pat_' + '11ABC'.repeat(6),
+  'Authorization header': 'Authorization: ' + 'Bearer ' + 'tok.en-' + 'z'.repeat(20),
+  'JSON Authorization header': '{"authorization": "' + 'Basic ' + 'dXNlcjpwYXNz"}',
+  'OAuth 1.0 Authorization header': 'Authorization: ' + 'OAuth oauth_consumer_key="k", oauth_signature="s"',
+  'bare Authorization token': 'authorization=' + 'Zx9'.repeat(8),
+  'realm-first OAuth header': 'Authorization: OAuth realm="r", ' + 'oauth_consumer_key="k", oauth_signature="s"',
+  'lowercase opaque Bearer token': 'Authorization: Bearer ' + 'qwertyuiop'.repeat(3),
+  'mixed-case header name': 'aUtHoRiZaTiOn: Bearer ' + 'tok3n'.repeat(4),
+  'hyphen-prefixed JWT': 'session-' + 'ey' + 'JhbGciOiJIUzI1NiJ9.' + 'ey' + 'JzdWIiOiIxMjM0NTY3ODkwIn0.' + 'S'.repeat(43),
+  'hyphen-prefixed GCP client secret': 'client-GOC' + 'SPX-' + 'x'.repeat(28),
+};
+
+test('containsCredential detects each credential pattern', () => {
+  for (const [name, secret] of Object.entries(CREDENTIALS)) {
+    assert.equal(containsCredential(`noise before ${secret} noise after`), true, name);
+  }
+  for (const clean of ['line 1 ok', 'Authorization: required', 'Authorization: required for all endpoints',
+    'Authorization: token required', 'authorization: Bearer required', 'Authorization: required for internationalization',
+    'eyJ short', 'eyJabc.def.ghi',
+    'ghp_ short', 'see the private key docs']) {
+    assert.equal(containsCredential(clean), false, clean);
+  }
+});
+
+// '-' is a \b boundary, so a \b-anchored JWT pattern took over 100 s on this.
+test('containsCredential stays linear on adversarial runs', () => {
+  for (const unit of ['eyJ-', '-eyJabcdefghijkl', 'eyJabcdefghijk.x', 'GOCSPX-', 'ya29.', 'github_pat_', 'abc1Q~',
+    'authorization:', 'Authorization: token ', 'authorization:abcdefgh']) {
+    const started = Date.now();
+    containsCredential(unit.repeat(50000));
+    assert.ok(Date.now() - started < 5000, `${unit} took ${Date.now() - started} ms`);
+  }
+});
+
+test('output carrying a credential is elided but never spilled', () => {
+  for (const [name, secret] of Object.entries(CREDENTIALS)) {
+    withSpillDir((dir) => {
+      const lines = bigOutput(500).split('\n');
+      lines[250] = secret;
+      const text = lines.join('\n');
+      const out = transform(text, FULL, 'Bash');
+      assert.ok(out && out.length < text.length, `${name}: still must compress`);
+      assert.doesNotMatch(out, /Full output:/, name);
+      assert.ok(!exists(under(dir, 'chisle-spill')), `${name}: spilled to disk`);
+    });
+  }
+});
+
+test('clean output that only mentions credentials still spills', () => {
+  withSpillDir((dir) => {
+    const text = bigOutput(500) + '\nAuthorization: required\nAuthorization: token required\nprivate key rotation docs';
+    const out = transform(text, FULL, 'Bash');
+    const m = out.match(/Full output: (\S+)/);
+    assert.ok(m, 'clean output lost its spill');
+    assert.equal(readText(m[1]), text);
+    assert.equal(listDir(under(dir, 'chisle-spill')).length, 1);
   });
 });
 

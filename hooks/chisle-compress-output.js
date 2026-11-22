@@ -76,7 +76,8 @@ const { filterCommand, ANSI_RE } = require('./chisle-command-filters');
 const THRESHOLDS = { maxChars: 8000, headLines: 60, tailLines: 40 };
 
 // Tools whose output is safe to elide. Read/Edit/Write are absent on purpose:
-// their output feeds exact-match edits. mcp__* are read-only info tools.
+// their output feeds exact-match edits. mcp__* tools are allowed unless
+// unsafeToolName() marks them as file or source readers.
 const SAFE_TOOLS = ['Bash', 'Agent', 'WebFetch', 'WebSearch', 'Grep', 'Glob'];
 
 // The correctness invariant, enforced rather than merely defaulted: these tools'
@@ -96,6 +97,17 @@ const SAFE_TOOLS_COPILOT = ['bash', 'powershell', 'grep', 'glob', 'web_fetch', '
 // Copilot's Read/Edit/Write family, hard-blocked for the same reason as
 // NEVER_COMPRESS above — not merely absent from the allowlist.
 const NEVER_COMPRESS_COPILOT = ['view', 'create', 'edit', 'str_replace', 'insert'];
+
+// MCP and other non-built-in tool names whose output is file or source content
+// the model may quote back or edit against: file readers, LSP tools and
+// code-host file and code-search tools (get_file_contents, search_code).
+// Matched anywhere in the name, server part included, so it errs towards not
+// compressing. One guard for every path: the Claude/Pi hook's mcp__ tools, the
+// stdio MCP proxy, and names allowlisted by CHISLE_COMPRESS_TOOLS (Copilot,
+// OpenCode), which cannot override it.
+const UNSAFE_TOOL_NAME_RE = /read|view|file|edit|write|patch|replace|insert|lsp|symbol|definition|declaration|implementation|reference|hover|content|source|blob|search_code/i;
+
+const unsafeToolName = name => UNSAFE_TOOL_NAME_RE.test(name);
 
 // Letter/digit boundaries, not \b: `_` is a word char, so \b missed severities
 // inside codes like FATAL_MEMORY_PROBE / APP_ERROR_CODE (#38), and `err!` then
@@ -146,7 +158,7 @@ function salvageLine(line) {
 
 function toolAllowed(name) {
   if (!name || typeof name !== 'string') return false;
-  if (NEVER_COMPRESS.includes(name.toLowerCase())) return false;
+  if (NEVER_COMPRESS.includes(name.toLowerCase()) || unsafeToolName(name)) return false;
   const list = process.env.CHISLE_COMPRESS_TOOLS
     ? process.env.CHISLE_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean)
     : SAFE_TOOLS;
@@ -156,7 +168,7 @@ function toolAllowed(name) {
 // Same override semantics as toolAllowed, against Copilot's tool-name scheme.
 function copilotToolAllowed(name) {
   if (!name || typeof name !== 'string') return false;
-  if (NEVER_COMPRESS_COPILOT.includes(name.toLowerCase())) return false;
+  if (NEVER_COMPRESS_COPILOT.includes(name.toLowerCase()) || unsafeToolName(name)) return false;
   const list = process.env.CHISLE_COMPRESS_TOOLS
     ? process.env.CHISLE_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean)
     : SAFE_TOOLS_COPILOT;
@@ -181,7 +193,7 @@ function opencodeToolAllowed(name) {
   // Source-bearing and mutating tools are never compressed, even via
   // CHISLE_COMPRESS_TOOLS: their output feeds exact-match edits, an invariant
   // INSTALL.md promises rather than an overridable default.
-  if (UNSAFE_TOOLS_OPENCODE.includes(lower)) return false;
+  if (UNSAFE_TOOLS_OPENCODE.includes(lower) || unsafeToolName(name)) return false;
   if (process.env.CHISLE_COMPRESS_TOOLS) {
     return process.env.CHISLE_COMPRESS_TOOLS
       .split(',').map(s => s.trim()).filter(Boolean).includes(name);
@@ -525,8 +537,39 @@ function pruneSpill(dir) {
   } catch {}
 }
 
+// A spill file keeps the output verbatim on disk long after the session, so
+// output that carries a credential is never spilled; elision still happens,
+// without the recovery path. Patterns: PEM private keys, JWTs, AWS, GCP and
+// Azure keys, GitHub tokens and Authorization headers.
+const CREDENTIAL_RES = [
+  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/,
+  // AWS key IDs; GCP API keys, OAuth tokens and client secrets; GitHub tokens.
+  /\b(?:(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b|AIza[\w-]{35}|ya29\.[\w-]{20,}|GOCSPX-[\w-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{22,})/,
+  /aws_secret_access_key["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}/i,
+  /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
+  /[?&]sig=[A-Za-z0-9%+/]{20,}/,
+  /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
+];
+
+// Authorization header (any case, any scheme): a word in its first 200
+// characters is 24+ characters, or 8+ with a digit, symbol or inner capital,
+// so prose such as 'Authorization: token required' stays clean.
+const AUTH_HEADER_RE = /authorization["']?[ \t]*[:=]([^\r\n]{0,200})/gi;
+const authWord = word => word.length >= 24 || (word.length >= 8 && /[0-9=+/_.~-]|.[A-Z]/.test(word));
+const containsAuthHeader = text => Array.from(text.matchAll(AUTH_HEADER_RE)).some(m => m[1].split(/[\s"',;]+/).some(authWord));
+
+// JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
+// not a regex: '-' is a segment character, so a regex restarts at every
+// 'eyJ' in a long run and rescans it to the end (quadratic).
+const containsJwt = text => text.split(/[^\w.-]+/).some(token => token.split('.').some((part, i, parts) => {
+  const at = part.indexOf('eyJ');
+  return at !== -1 && part.length - at >= 13 && i + 2 < parts.length && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10;
+}));
+
+const containsCredential = text => CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text) || containsAuthHeader(text);
+
 function spill(text, toolName, stateDir) {
-  if (process.env.CHISLE_COMPRESS_SPILL === '0') return null;
+  if (process.env.CHISLE_COMPRESS_SPILL === '0' || containsCredential(text)) return null;
   try {
     const root = stateDir || getClaudeDir();
     const dir = spillDir(stateDir);
@@ -744,7 +787,7 @@ if (require.main === module) main();
 
 module.exports = {
   extractText, rebuildResponse, scrub, compress, transform, limitsFor, toolAllowed, processPayload, commandOf,
-  duplicateMarker, THRESHOLDS, SAFE_TOOLS, NEVER_COMPRESS,
+  duplicateMarker, THRESHOLDS, SAFE_TOOLS, NEVER_COMPRESS, unsafeToolName, containsCredential,
   // Copilot-specific additions (see PR description for rationale):
   isCopilotPayload, copilotToolAllowed, SAFE_TOOLS_COPILOT, NEVER_COMPRESS_COPILOT,
   // OpenCode-specific additions (plugin uses tool.execute.after +

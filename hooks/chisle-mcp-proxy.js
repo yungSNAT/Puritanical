@@ -37,13 +37,12 @@ const { getDefaultMode, getConfigDir } = require('./chisle-config');
 
 const IS_WIN = process.platform === 'win32';
 
-// Tool names whose output may feed a later exact-match edit, or is file
-// content the model quotes back. Matched on the raw MCP tool name.
-const UNSAFE_MCP_RE = /read|view|file|edit|write|patch|replace|insert/i;
 const MAX_PENDING_LINE = 16 * 1024 * 1024; // drop observation of absurd lines
 
 function mcpToolAllowed(name) {
-  return typeof name === 'string' && !!name && !UNSAFE_MCP_RE.test(name);
+  // Tool names whose output may feed a later exact-match edit, or is file
+  // content the model quotes back: the hook's shared guard, on the raw name.
+  return typeof name === 'string' && !!name && !core.unsafeToolName(name);
 }
 
 function stateDir() {
@@ -123,9 +122,18 @@ function lineSplitter(onLine) {
   };
 }
 
+// Windows argv quoting in one pass: inside the quotes, n backslashes before a
+// quote become 2n+1 plus the quote, n at the end become 2n, others stay.
 function quoteWin(a) {
-  if (a === '' || /[\s"&|<>^()%!]/.test(a)) return '"' + String(a).replace(/\\(?=\\*"|$)/g, '\\\\').replace(/"/g, '\\"') + '"';
-  return a;
+  if (a !== '' && !/[\s"&|<>^()%!]/.test(a)) return a;
+  let out = '"';
+  let run = 0;
+  for (const ch of String(a)) {
+    if (ch === '\\') { run++; continue; }
+    out += '\\'.repeat(ch === '"' ? 2 * run + 1 : run) + ch;
+    run = 0;
+  }
+  return out + '\\'.repeat(2 * run) + '"';
 }
 
 // Stream error handlers. Writes to a server that has exited fail with EPIPE;
@@ -210,4 +218,4 @@ function main(argv) {
 
 if (require.main === module) main(process.argv.slice(2));
 
-module.exports = { mcpToolAllowed, compressResult, rewriteLine, observeRequest, lineSplitter, exitWhenHostGone };
+module.exports = { mcpToolAllowed, compressResult, rewriteLine, observeRequest, lineSplitter, exitWhenHostGone, quoteWin };
