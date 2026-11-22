@@ -10,8 +10,8 @@ const {
 } = require('./helpers/sandbox');
 
 const SANDBOX = require.resolve('./helpers/sandbox');
-const COMPRESS = repoPath('hooks', 'chisle-compress-output.js');
-const PROXY = repoPath('hooks', 'chisle-mcp-proxy.js');
+const COMPRESS = repoPath('hooks', 'puritanical-compress-output.js');
+const PROXY = repoPath('hooks', 'puritanical-mcp-proxy.js');
 
 const { extractText, recordSavings } = loadModule(COMPRESS);
 
@@ -27,8 +27,8 @@ function isolatedEnv(t, prefix, extra = {}) {
       APPDATA: under(dir, 'appdata'),
       CLAUDE_CONFIG_DIR: under(dir, 'claude'),
       COPILOT_HOME: under(dir, 'copilot'),
-      CHISLE_HOME: under(dir, 'chisle'),
-      CHISLE_STATE_DIR: under(dir, 'state'),
+      PURITANICAL_HOME: under(dir, 'puritanical'),
+      PURITANICAL_STATE_DIR: under(dir, 'state'),
       ...extra,
     },
   };
@@ -48,8 +48,8 @@ test('extractText returns null when an object cannot be JSON-stringified', () =>
 });
 
 test('recordSavings leaves an existing ledger unchanged when opening it is unsafe', (t) => {
-  const dir = tempRoot(t, 'chisle-safe-read-');
-  const ledger = under(dir, '.chisle-compress-stats.json');
+  const dir = tempRoot(t, 'puritanical-safe-read-');
+  const ledger = under(dir, '.puritanical-compress-stats.json');
   const original = JSON.stringify({ savedChars: 12, events: 3 });
   writeText(ledger, original);
 
@@ -75,22 +75,22 @@ test('recordSavings leaves an existing ledger unchanged when opening it is unsaf
 });
 
 test('Claude hook writes a shape-preserving replacement, spill file, stats, and successful exit', (t) => {
-  const { dir, env } = isolatedEnv(t, 'chisle-claude-main-', {
-    CHISLE_DEFAULT_MODE: 'on',
-    CHISLE_COMPRESS: '',
-    CHISLE_COMPRESS_DEDUP: '0',
-    CHISLE_COMPRESS_FILTERS: '0',
-    CHISLE_COMPRESS_SCRUB: '0',
-    CHISLE_COMPRESS_SPILL: '',
-    CHISLE_COMPRESS_MAX_CHARS: '1000',
-    CHISLE_COMPRESS_HEAD_LINES: '3',
-    CHISLE_COMPRESS_TAIL_LINES: '2',
-    CHISLE_COMPRESS_TOOLS: '',
+  const { dir, env } = isolatedEnv(t, 'puritanical-claude-main-', {
+    PURITANICAL_DEFAULT_MODE: 'on',
+    PURITANICAL_COMPRESS: '',
+    PURITANICAL_COMPRESS_DEDUP: '0',
+    PURITANICAL_COMPRESS_FILTERS: '0',
+    PURITANICAL_COMPRESS_SCRUB: '0',
+    PURITANICAL_COMPRESS_SPILL: '',
+    PURITANICAL_COMPRESS_MAX_CHARS: '1000',
+    PURITANICAL_COMPRESS_HEAD_LINES: '3',
+    PURITANICAL_COMPRESS_TAIL_LINES: '2',
+    PURITANICAL_COMPRESS_TOOLS: '',
   });
 
   const claudeDir = env.CLAUDE_CONFIG_DIR;
   makeDir(claudeDir, { recursive: true });
-  writeText(under(claudeDir, '.chisle-active'), 'on\n');
+  writeText(under(claudeDir, '.puritanical-active'), 'on\n');
 
   const text = bigOutput();
   const payload = {
@@ -124,18 +124,18 @@ test('Claude hook writes a shape-preserving replacement, spill file, stats, and 
   assert.equal(rebuilt.interrupted, false);
   assert.equal(rebuilt.stderr, '');
   assert.ok(rebuilt.stdout.length < text.length);
-  assert.match(rebuilt.stdout, /\[chisle: elided/);
+  assert.match(rebuilt.stdout, /\[puritanical: elided/);
   assert.match(rebuilt.stdout, /^line 0 /);
   assert.match(rebuilt.stdout, /line 199 /);
 
-  const statsPath = under(claudeDir, '.chisle-compress-stats.json');
+  const statsPath = under(claudeDir, '.puritanical-compress-stats.json');
   const stats = readJson(statsPath);
   assert.deepEqual(stats, {
     savedChars: text.length - rebuilt.stdout.length,
     events: 1,
   });
 
-  const spillDir = under(claudeDir, 'chisle-spill');
+  const spillDir = under(claudeDir, 'puritanical-spill');
   const spillFiles = listDir(spillDir).filter(name => name.endsWith('.txt'));
   assert.equal(spillFiles.length, 1);
   assert.equal(readText(under(spillDir, spillFiles[0])), text);
@@ -144,7 +144,7 @@ test('Claude hook writes a shape-preserving replacement, spill file, stats, and 
 });
 
 test('MCP proxy prints usage and exits with status 2 when no command is supplied', (t) => {
-  const { env } = isolatedEnv(t, 'chisle-proxy-usage-');
+  const { env } = isolatedEnv(t, 'puritanical-proxy-usage-');
   const run = spawnSync(process.execPath, [PROXY], {
     input: '',
     encoding: 'utf8',
@@ -154,13 +154,13 @@ test('MCP proxy prints usage and exits with status 2 when no command is supplied
 
   assert.equal(run.status, 2);
   assert.equal(run.stdout, '');
-  assert.equal(run.stderr, 'usage: chisle-mcp-proxy -- <command> [args...]\n');
+  assert.equal(run.stderr, 'usage: puritanical-mcp-proxy -- <command> [args...]\n');
 });
 
 test('MCP proxy Windows branch quotes special arguments and leaves plain arguments unquoted', (t) => {
-  const { env } = isolatedEnv(t, 'chisle-proxy-win-', {
-    CHISLE_COMPRESS: '0',
-    CHISLE_DEFAULT_MODE: 'on',
+  const { env } = isolatedEnv(t, 'puritanical-proxy-win-', {
+    PURITANICAL_COMPRESS: '0',
+    PURITANICAL_DEFAULT_MODE: 'on',
   });
 
   const bootstrap = `
@@ -243,9 +243,9 @@ test('MCP proxy Windows branch quotes special arguments and leaves plain argumen
 });
 
 test('MCP proxy pauses server output on backpressure and resumes it after drain', (t) => {
-  const { env } = isolatedEnv(t, 'chisle-proxy-backpressure-', {
-    CHISLE_COMPRESS: '',
-    CHISLE_DEFAULT_MODE: 'on',
+  const { env } = isolatedEnv(t, 'puritanical-proxy-backpressure-', {
+    PURITANICAL_COMPRESS: '',
+    PURITANICAL_DEFAULT_MODE: 'on',
   });
 
   const bootstrap = `

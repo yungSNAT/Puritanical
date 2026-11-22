@@ -1,0 +1,7 @@
+# puritanical slash command
+# Maximum-efficiency dev mode
+# Usage: /puritanical  ·  /puritanical off
+
+[command]
+name = "puritanical"
+description = "Activate puritanical: zero-fluff prose + YAGNI ladder code decisions. /puritanical off to stop."

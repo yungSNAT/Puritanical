@@ -13,23 +13,23 @@ Three places, depending on what you have:
 
 ## Before you ask
 
-- [README](README.md) for what Chisle does and the measured numbers.
+- [README](README.md) for what Puritanical does and the measured numbers.
 - [INSTALL.md](INSTALL.md) for per-agent install paths and the verification
   steps ("did it actually install?").
 - [`docs/`](docs/) for agent portability, Windows notes, and releasing.
 
-Chisle wires thirteen agents with different config layouts, so most "it isn't
+Puritanical wires thirteen agents with different config layouts, so most "it isn't
 working" reports come down to *which* agent and *where* it installed. Running
-`npx chisle --list` and pasting the output answers that in one step.
+`npx github:yungSNAT/Puritanical --list` and pasting the output answers that in one step.
 
 ## What helps a question get answered
 
 - The agent and version (Claude Code, Pi, OpenCode, …).
 - OS and `node --version` — the installer needs Node ≥18.
-- Output of `npx chisle --list`, and `npx chisle --dry-run` if the install
+- Output of `npx github:yungSNAT/Puritanical --list`, and `npx github:yungSNAT/Puritanical --dry-run` if the install
   itself is the problem.
-- For compression questions, whether `CHISLE_COMPRESS=0` is set, and what
-  `npx chisle --stats` reports.
+- For compression questions, whether `PURITANICAL_COMPRESS=0` is set, and what
+  `npx github:yungSNAT/Puritanical --stats` reports.
 
 ## Response expectations
 

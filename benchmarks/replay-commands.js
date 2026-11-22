@@ -34,8 +34,8 @@
 
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { transform, limitsFor } = require('../hooks/chisle-compress-output');
-const { rewriteCommand } = require('../hooks/chisle-run');
+const { transform, limitsFor } = require('../hooks/puritanical-compress-output');
+const { rewriteCommand } = require('../hooks/puritanical-run');
 
 const CORPUS = [
   ['chisle', 'git status'],
@@ -105,10 +105,10 @@ const PREV = process.env.CHISLE_PREV ? require(path.resolve(process.env.CHISLE_P
 
 function compress(text, failed, command, filters, core = { transform, limitsFor }) {
   if (failed) return text;
-  const prev = process.env.CHISLE_COMPRESS_FILTERS;
-  process.env.CHISLE_COMPRESS_FILTERS = filters ? '1' : '0';
+  const prev = process.env.PURITANICAL_COMPRESS_FILTERS;
+  process.env.PURITANICAL_COMPRESS_FILTERS = filters ? '1' : '0';
   try { return core.transform(text, core.limitsFor(), undefined, undefined, command) || text; }
-  finally { if (prev === undefined) delete process.env.CHISLE_COMPRESS_FILTERS; else process.env.CHISLE_COMPRESS_FILTERS = prev; }
+  finally { if (prev === undefined) delete process.env.PURITANICAL_COMPRESS_FILTERS; else process.env.PURITANICAL_COMPRESS_FILTERS = prev; }
 }
 
 const root = process.argv[2];

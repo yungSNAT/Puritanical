@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* global process, require -- Node.js runtime */
-// chisle: cross-platform installer.
+// puritanical: cross-platform installer.
 //
-// Detects the AI coding agents on this machine and installs Chisle for each:
+// Detects the AI coding agents on this machine and installs Puritanical for each:
 //   - Claude Code  → plugin (marketplace add + install), fallback to standalone
 //                    hooks + settings.json merge + statusline badge
 //   - Pi           → Pi package (extension + skill)
@@ -14,13 +14,13 @@
 //   - Cursor/Windsurf/Cline/Kiro/Copilot/Antigravity → project rule file dropped into CWD
 //
 // Usage:
-//   npx chisle                 auto-detect + install
-//   npx chisle --list          show detected agents, install nothing
-//   npx chisle --only claude   install for one agent
-//   npx chisle --dry-run       print actions, change nothing
-//   npx chisle --uninstall     remove what we installed
-//   npx chisle mcp wrap        route stdio MCP servers through the compressor
-//   npx chisle --help
+//   npx github:yungSNAT/Puritanical                 auto-detect + install
+//   npx github:yungSNAT/Puritanical --list          show detected agents, install nothing
+//   npx github:yungSNAT/Puritanical --only claude   install for one agent
+//   npx github:yungSNAT/Puritanical --dry-run       print actions, change nothing
+//   npx github:yungSNAT/Puritanical --uninstall     remove what we installed
+//   npx github:yungSNAT/Puritanical mcp wrap        route stdio MCP servers through the compressor
+//   npx github:yungSNAT/Puritanical --help
 //
 // Pure stdlib, zero runtime deps.
 
@@ -54,24 +54,24 @@ const PROVIDERS = [
   { id: 'opencode', label: 'OpenCode',        scope: 'global',  detect: 'cmd:opencode' },
   { id: 'hermes',   label: 'Hermes Agent',    scope: 'global',  detect: 'cmd:hermes||dir:~/.hermes' },
   { id: 'cursor',   label: 'Cursor',        scope: 'project', detect: 'cmd:cursor||dir:~/.cursor',
-    rule: '.cursor/rules/chisle.mdc' },
+    rule: '.cursor/rules/puritanical.mdc' },
   { id: 'windsurf', label: 'Windsurf',      scope: 'project', detect: 'cmd:windsurf||dir:~/.windsurf||dir:~/.codeium/windsurf',
-    rule: '.windsurf/rules/chisle.md' },
+    rule: '.windsurf/rules/puritanical.md' },
   { id: 'cline',    label: 'Cline',         scope: 'project', detect: 'vscode-ext:cline',
-    rule: '.clinerules/chisle.md' },
+    rule: '.clinerules/puritanical.md' },
   { id: 'kiro',     label: 'Kiro',          scope: 'project', detect: 'cmd:kiro||dir:~/.kiro',
-    rule: '.kiro/steering/chisle.md' },
+    rule: '.kiro/steering/puritanical.md' },
   { id: 'copilot',  label: 'GitHub Copilot',scope: 'project', detect: 'vscode-ext:github.copilot||vscode-ext:github.copilot-chat',
     rule: '.github/copilot-instructions.md' },
   // Antigravity IDE (`antigravity`) and its CLI (`agy`, antigravity-cli) both
   // load workspace rules from .agents/rules/*.md.
   { id: 'antigravity', label: 'Antigravity', scope: 'project', detect: 'cmd:antigravity||cmd:agy||dir:~/.antigravity',
-    rule: '.agents/rules/chisle.md' },
+    rule: '.agents/rules/puritanical.md' },
 ];
 
 // ── argv ────────────────────────────────────────────────────────────────────
 // Boolean flags. --update is --force narrowed to what is already there:
-// refresh every agent that has Chisle, add it to none that don't.
+// refresh every agent that has Puritanical, add it to none that don't.
 const FLAGS = new Map([
   ['--dry-run', o => { o.dryRun = true; }],
   ['--force', o => { o.force = true; }],
@@ -106,10 +106,10 @@ function parseArgs(argv) {
     if (a === '--') continue; // npx sometimes forwards the literal end-of-options marker
     if (FLAGS.has(a)) { FLAGS.get(a)(opts); continue; }
     if (VALUE_FLAGS.has(a)) { VALUE_FLAGS.get(a)(opts, args.shift()); continue; }
-    die(`error: unknown flag: ${a}\nrun 'npx chisle --help' for usage`);
+    die(`error: unknown flag: ${a}\nrun 'npx github:yungSNAT/Puritanical --help' for usage`);
   }
   const known = new Set(PROVIDERS.map(p => p.id));
-  for (const id of opts.only) if (!known.has(id)) die(`error: unknown agent: ${id}\n  see 'npx chisle --list'`);
+  for (const id of opts.only) if (!known.has(id)) die(`error: unknown agent: ${id}\n  see 'npx github:yungSNAT/Puritanical --list'`);
   return opts;
 }
 
@@ -153,8 +153,8 @@ function providerDetected(provider) {
 }
 
 // ── what is already installed ───────────────────────────────────────────────
-// Every install path skips when Chisle is already present, which is right for
-// `npx chisle` and useless for an upgrade: the run reports success and changes
+// Every install path skips when Puritanical is already present, which is right for
+// `npx github:yungSNAT/Puritanical` and useless for an upgrade: the run reports success and changes
 // nothing. --update pairs this check with --force so a refresh touches exactly
 // the agents that already have it.
 function hasFence(file) {
@@ -164,12 +164,12 @@ function hasFence(file) {
 const INSTALLED = new Map([
   ['claude', opts => CLAUDE.claudeInstalled(opts)],
   ['pi', () => ENV.hasCmd('pi') && piSources(ENV.capture('pi', ['list']).stdout).length > 0],
-  ['gemini', () => ENV.hasCmd('gemini') && ENV.listsChisle('gemini', ['extensions', 'list'])],
+  ['gemini', () => ENV.hasCmd('gemini') && ENV.listsPuritanical('gemini', ['extensions', 'list'])],
   ['codex', () => hasFence(path.join(ENV.homeDir(), '.codex', 'AGENTS.md'))],
   ['opencode', () => hasFence(path.join(ENV.opencodeDir(), 'AGENTS.md'))
-    || FENCE.exists(path.join(ENV.opencodeDir(), 'skills', 'chisle', 'SKILL.md'))],
-  ['hermes', () => FENCE.exists(path.join(ENV.homeDir(), '.hermes', 'skills', 'chisle', 'SKILL.md'))],
-  ['copilot-cli', () => FENCE.exists(path.join(ENV.copilotDir(), 'hooks', 'chisle.json'))],
+    || FENCE.exists(path.join(ENV.opencodeDir(), 'skills', 'puritanical', 'SKILL.md'))],
+  ['hermes', () => FENCE.exists(path.join(ENV.homeDir(), '.hermes', 'skills', 'puritanical', 'SKILL.md'))],
+  ['copilot-cli', () => FENCE.exists(path.join(ENV.copilotDir(), 'hooks', 'puritanical.json'))],
 ]);
 
 function installedFor(prov, opts) {
@@ -181,19 +181,19 @@ function installedFor(prov, opts) {
 
 // ── help / banner ───────────────────────────────────────────────────────────
 function printHelp(c) {
-  process.stdout.write(`${c.orange('chisle')}: maximum-efficiency dev mode installer
+  process.stdout.write(`${c.orange('puritanical')}: maximum-efficiency dev mode installer
 
 Usage:
-  npx chisle [flags]
+  npx github:yungSNAT/Puritanical [flags]
 
 Flags:
   --list           Detect agents and print them; install nothing
   --stats          Print tool-output savings recorded so far; change nothing
-  --update         Refresh every agent that already has Chisle; install none
+  --update         Refresh every agent that already has Puritanical; install none
   --only <id>      Limit install/uninstall to one agent (repeatable)
   --dry-run        Print actions, change nothing
   --force          Reinstall / overwrite even if already present
-  --uninstall, -u  Remove what chisle installed (also restores wrapped MCP servers)
+  --uninstall, -u  Remove what puritanical installed (also restores wrapped MCP servers)
   --config-dir <p> Override Claude config dir (default: $CLAUDE_CONFIG_DIR or ~/.claude)
   --no-color       Disable ANSI color
   --help, -h       This help
@@ -201,24 +201,24 @@ Flags:
 Agents: ${PROVIDERS.map(p => p.id).join(', ')}
 
 MCP output compression (opt-in, any agent that launches stdio MCP servers):
-  npx chisle mcp wrap   [--only <id>] [--file <mcp.json>] [--dry-run]
-  npx chisle mcp unwrap [--only <id>] [--file <mcp.json>] [--dry-run]
-  npx chisle mcp status
+  npx github:yungSNAT/Puritanical mcp wrap   [--only <id>] [--file <mcp.json>] [--dry-run]
+  npx github:yungSNAT/Puritanical mcp unwrap [--only <id>] [--file <mcp.json>] [--dry-run]
+  npx github:yungSNAT/Puritanical mcp status
   Targets: ${[...new Set(MCP.targets().map(t => t.id))].join(', ')}. Never Claude Code
   (its own hook already compresses MCP output).
 
 Tool schemas (Claude Code; every request carries every loaded tool's schema):
-  npx chisle tools            # schema size vs. your own calls, last 30 days
-  npx chisle tools trim       # deny the heavy tools you have not used [--days N] [--dry-run]
-  npx chisle tools restore    # remove exactly what trim added
+  npx github:yungSNAT/Puritanical tools            # schema size vs. your own calls, last 30 days
+  npx github:yungSNAT/Puritanical tools trim       # deny the heavy tools you have not used [--days N] [--dry-run]
+  npx github:yungSNAT/Puritanical tools restore    # remove exactly what trim added
 
 Examples:
-  npx chisle                  # auto-detect + install
-  npx chisle --only claude    # just Claude Code
-  npx chisle --dry-run        # preview
-  npx chisle --stats          # what the compressor has saved
-  npx chisle mcp wrap         # compress MCP tool output in Cursor, Codex, Gemini, ...
-  npx chisle@latest --update  # upgrade what is already installed
+  npx github:yungSNAT/Puritanical                  # auto-detect + install
+  npx github:yungSNAT/Puritanical --only claude    # just Claude Code
+  npx github:yungSNAT/Puritanical --dry-run        # preview
+  npx github:yungSNAT/Puritanical --stats          # what the compressor has saved
+  npx github:yungSNAT/Puritanical mcp wrap         # compress MCP tool output in Cursor, Codex, Gemini, ...
+  npx github:yungSNAT/Puritanical --update  # upgrade what is already installed
 `);
 }
 
@@ -233,15 +233,15 @@ function printStats(c, opts) {
   const dir = only === 'opencode' ? ENV.opencodeStateDir()
     : only === 'copilot-cli' ? ENV.copilotDir()
     : ENV.claudeDir(opts);
-  const p = path.join(dir, '.chisle-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
-  process.stdout.write(c.orange('chisle') + ': tool-output savings\n\n');
+  const p = path.join(dir, '.puritanical-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  process.stdout.write(c.orange('puritanical') + ': tool-output savings\n\n');
   const stats = readStats(dir);
 
   if (!stats || stats.events === 0) {
     process.stdout.write('  no compression recorded yet\n\n');
     process.stdout.write(c.dim(`  ledger: ${p}\n`));
     process.stdout.write(c.dim('  it fills as the compressor elides oversized tool output.\n'));
-    process.stdout.write(c.dim("  nothing there after real use? check `npx chisle --list` and that Chisle is active.\n"));
+    process.stdout.write(c.dim("  nothing there after real use? check `npx github:yungSNAT/Puritanical --list` and that Puritanical is active.\n"));
     return;
   }
 
@@ -258,14 +258,14 @@ function printStats(c, opts) {
 }
 
 function printList(c) {
-  process.stdout.write(c.orange('chisle') + ': detected agents:\n\n');
+  process.stdout.write(c.orange('puritanical') + ': detected agents:\n\n');
   for (const p of PROVIDERS) {
     const found = providerDetected(p);
     const mark = found ? c.green('✓') : c.dim('·');
     const scope = p.scope === 'project' ? c.dim(' (project-scoped)') : '';
     process.stdout.write(`  ${mark} ${p.label}${scope}\n`);
   }
-  process.stdout.write('\nRun ' + c.orange('npx chisle') + ' to install for the detected (✓) agents.\n');
+  process.stdout.write('\nRun ' + c.orange('npx github:yungSNAT/Puritanical') + ' to install for the detected (✓) agents.\n');
 }
 
 // ── main ────────────────────────────────────────────────────────────────────
@@ -278,14 +278,14 @@ function runTools() {
 
 function reportNothingToDo({ opts, warn, note }) {
   if (opts.update) {
-    warn('Nothing to update: Chisle is not installed for any detected agent.');
-    note('Run `npx chisle` to install it, or `npx chisle --list` to see what we look for.');
+    warn('Nothing to update: Puritanical is not installed for any detected agent.');
+    note('Run `npx github:yungSNAT/Puritanical` to install it, or `npx github:yungSNAT/Puritanical --list` to see what we look for.');
     note('Project-scoped agents (Cursor, Windsurf, Cline, Kiro, Copilot, Antigravity) are per-repo:');
     note('run this from the project that has the rule file.');
     return;
   }
   warn('No supported agents detected.');
-  note('Run `npx chisle --list` to see what we look for, or `--only <id>` to force one.');
+  note('Run `npx github:yungSNAT/Puritanical --list` to see what we look for, or `--only <id>` to force one.');
 }
 
 function installFor(ctx, p) {
@@ -312,7 +312,7 @@ function refreshMcpProxy({ note, warn }) {
 
 function install(ctx) {
   const { say, opts, results, c } = ctx;
-  say(c.orange(opts.update ? '╭─ Chisle updater ─╮' : '╭─ Chisle installer ─╮'));
+  say(c.orange(opts.update ? '╭─ Puritanical updater ─╮' : '╭─ Puritanical installer ─╮'));
   say(c.dim(opts.dryRun ? '  (dry run, nothing will change)' : '  maximum signal, minimum noise'));
   say('');
 
@@ -326,7 +326,7 @@ function install(ctx) {
   printSummary(ctx);
   const code = results.failed.length ? 1 : 0;
   if (!opts.dryRun && results.installed.length) {
-    say(c.orange('Done.') + ' Restart your agent. Type ' + c.orange('/chisle') + ' in Claude Code or Pi, or just start coding.');
+    say(c.orange('Done.') + ' Restart your agent. Type ' + c.orange('/puritanical') + ' in Claude Code or Pi, or just start coding.');
     return askStar(ctx).catch(() => {}).then(() => process.exit(code));
   }
   return process.exit(code);

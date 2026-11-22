@@ -81,13 +81,13 @@ fn drift_fails_the_check() {
         ok(&cmd(tmp.path(), &[], &[c]));
     }
     let root = tmp.path();
-    fs::remove_file(root.join(".kiro/steering/chisle.md")).expect("remove");
-    fs::write(root.join(".clinerules/chisle.md"), "edited by hand\n").expect("edit");
+    fs::remove_file(root.join(".kiro/steering/puritanical.md")).expect("remove");
+    fs::write(root.join(".clinerules/puritanical.md"), "edited by hand\n").expect("edit");
     let out = cmd(root, &[], &["rules", "--check"]);
     assert_eq!(out.code, 1);
     assert_eq!(
         out.stderr,
-        "OUT OF SYNC: .clinerules/chisle.md\nOUT OF SYNC: .kiro/steering/chisle.md\n\n2 file(s) out of sync. Run: npm run build:rules\n"
+        "OUT OF SYNC: .clinerules/puritanical.md\nOUT OF SYNC: .kiro/steering/puritanical.md\n\n2 file(s) out of sync. Run: npm run build:rules\n"
     );
 
     let mutate = |rel: &str| {
@@ -195,7 +195,7 @@ fn unwritable_targets_report_the_path() {
         assert_eq!(out.code, 1, "{args:?}");
         out.stderr
     };
-    assert!(bad(&["rules"]).contains("chisle.mdc"));
+    assert!(bad(&["rules"]).contains("puritanical.mdc"));
     assert!(bad(&["readme-art"]).contains("line.svg"));
     let tmp2 = inputs();
     write(&tmp2.path().join("assets"), "");

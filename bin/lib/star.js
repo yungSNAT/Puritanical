@@ -1,17 +1,17 @@
 /* global module, process, require -- Node.js runtime */
-// chisle installer: the savings ledger reader and the post-install star prompt.
+// puritanical installer: the savings ledger reader and the post-install star prompt.
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
-const { getConfigDir } = require('../../hooks/chisle-config');
+const { getConfigDir } = require('../../hooks/puritanical-config');
 const { hasCmd, claudeDir } = require('./env');
 
 // The compressor's savings ledger, or null when absent/unreadable.
 function readStats(dir) {
-  const p = path.join(dir, '.chisle-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const p = path.join(dir, '.puritanical-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed ledger name in the Claude, OpenCode state or Copilot directory.
     if (fs.lstatSync(p).isSymbolicLink()) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -25,8 +25,8 @@ function readStats(dir) {
 // Opt-in: asked only in an interactive terminal (not CI, not a dry run).
 // Default is "later": Enter (or an answer we can't read) saves nothing and
 // asks at the next install or update. Only an explicit yes or no is saved in
-// the Chisle config, after which it is never asked again. Nothing touches GitHub without a
-// "y"; on yes the user's own `gh` login does the starring, Chisle never sees
+// the Puritanical config, after which it is never asked again. Nothing touches GitHub without a
+// "y"; on yes the user's own `gh` login does the starring, Puritanical never sees
 // a token. Without `gh` (or if it fails) it prints the links instead.
 const OWNER = 'yungSNAT';
 const REPO = `${OWNER}/Puritanical`;
@@ -35,10 +35,10 @@ const FOLLOW_URL = `https://github.com/${OWNER}`;
 
 function starPromptState() {
   const file = path.join(getConfigDir(), 'config.json');
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- config.json in the Chisle config directory.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- config.json in the Puritanical config directory.
   if (!fs.existsSync(file)) return { file, cfg: {} }; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- config.json in the Chisle config directory.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- config.json in the Puritanical config directory.
     const cfg = JSON.parse(fs.readFileSync(file, 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     return cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? { file, cfg } : null;
   } catch { return null; } // unreadable config: never overwrite it
@@ -47,9 +47,9 @@ function starPromptState() {
 function saveAnswer(st, yes) {
   if (!st) return;
   try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The Chisle config directory.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The Puritanical config directory.
     fs.mkdirSync(path.dirname(st.file), { recursive: true }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- config.json in the Chisle config directory.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- config.json in the Puritanical config directory.
     fs.writeFileSync(st.file, JSON.stringify({ ...st.cfg, starPrompt: yes ? 'yes' : 'no' }, null, 2) + '\n'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   } catch {}
 }
@@ -58,14 +58,14 @@ function canPrompt(opts) {
   return !opts.dryRun && !process.env.CI && process.stdin.isTTY && process.stdout.isTTY;
 }
 
-// Lead with what Chisle already did for this user when the ledger says so
+// Lead with what Puritanical already did for this user when the ledger says so
 // (an update); a first install has nothing to show yet.
 function starHeadline(opts, c) {
   const stats = readStats(claudeDir(opts));
   const tokens = stats ? Math.floor(stats.savedChars / 4) : 0;
-  if (tokens < 1000) return `${c.orange('★')} Chisle is free and open source. A star helps other developers find it.`;
+  if (tokens < 1000) return `${c.orange('★')} Puritanical is free and open source. A star helps other developers find it.`;
   const short = tokens >= 1000000 ? `${(tokens / 1000000).toFixed(1)}M` : `${Math.round(tokens / 1000)}k`;
-  return `${c.orange('★')} Chisle has kept ~${short} tokens of tool output out of your context so far.`;
+  return `${c.orange('★')} Puritanical has kept ~${short} tokens of tool output out of your context so far.`;
 }
 
 async function ask(c) {
@@ -102,7 +102,7 @@ async function askStar(ctx) {
   const st = starPromptState();
   if (st && st.cfg.starPrompt) return;
   if (!canPrompt(opts)) {
-    note(`If Chisle earns its keep, a star helps others find it: ${REPO_URL}`);
+    note(`If Puritanical earns its keep, a star helps others find it: ${REPO_URL}`);
     return;
   }
   say('');

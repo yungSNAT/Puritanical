@@ -48,8 +48,8 @@ test('readSettings returns null for a path that is not a regular file', () => {
 
 test('addCommandHook adds once, second call is a no-op', () => {
   const s = {};
-  const a = S.addCommandHook(s, 'SessionStart', { command: 'node /x/chisle-activate.js', marker: 'chisle-activate' });
-  const b = S.addCommandHook(s, 'SessionStart', { command: 'node /x/chisle-activate.js', marker: 'chisle-activate' });
+  const a = S.addCommandHook(s, 'SessionStart', { command: 'node /x/puritanical-activate.js', marker: 'puritanical-activate' });
+  const b = S.addCommandHook(s, 'SessionStart', { command: 'node /x/puritanical-activate.js', marker: 'puritanical-activate' });
   assert.equal(a, true);
   assert.equal(b, false);
   assert.equal(s.hooks.SessionStart.length, 1);
@@ -57,18 +57,18 @@ test('addCommandHook adds once, second call is a no-op', () => {
 
 test('addCommandHook preserves a foreign hook already present', () => {
   const s = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'node /other/thing.js' }] }] } };
-  S.addCommandHook(s, 'SessionStart', { command: 'node /x/chisle-activate.js', marker: 'chisle-activate' });
+  S.addCommandHook(s, 'SessionStart', { command: 'node /x/puritanical-activate.js', marker: 'puritanical-activate' });
   assert.equal(s.hooks.SessionStart.length, 2); // foreign one untouched
 });
 
 // ── removeHooks (uninstall) ──────────────────────────────────────────────────
 
-test('removeHooks strips only chisle entries, leaves foreign ones', () => {
+test('removeHooks strips only puritanical entries, leaves foreign ones', () => {
   const s = { hooks: { SessionStart: [
-    { hooks: [{ type: 'command', command: 'node /x/chisle-activate.js' }] },
+    { hooks: [{ type: 'command', command: 'node /x/puritanical-activate.js' }] },
     { hooks: [{ type: 'command', command: 'node /other/keep.js' }] },
   ] } };
-  const removed = S.removeHooks(s, 'chisle-');
+  const removed = S.removeHooks(s, 'puritanical-');
   assert.equal(removed, 1);
   assert.equal(s.hooks.SessionStart.length, 1);
   assert.match(s.hooks.SessionStart[0].hooks[0].command, /keep\.js/);
@@ -77,9 +77,9 @@ test('removeHooks strips only chisle entries, leaves foreign ones', () => {
 test('install then uninstall round-trips to original', () => {
   const original = { model: 'opus', hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'node /foo/bar.js' }] }] } };
   const s = JSON.parse(JSON.stringify(original));
-  S.addCommandHook(s, 'SessionStart', { command: 'node /x/chisle-activate.js', marker: 'chisle-activate' });
-  S.addCommandHook(s, 'UserPromptSubmit', { command: 'node /x/chisle-mode-tracker.js', marker: 'chisle-mode-tracker' });
-  S.removeHooks(s, 'chisle-');
+  S.addCommandHook(s, 'SessionStart', { command: 'node /x/puritanical-activate.js', marker: 'puritanical-activate' });
+  S.addCommandHook(s, 'UserPromptSubmit', { command: 'node /x/puritanical-mode-tracker.js', marker: 'puritanical-mode-tracker' });
+  S.removeHooks(s, 'puritanical-');
   assert.deepEqual(s, original); // user's original config restored exactly
 });
 

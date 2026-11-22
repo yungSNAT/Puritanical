@@ -1,8 +1,8 @@
 /* global module, process, require -- Node.js runtime */
-// chisle installer: fenced AGENTS.md rulesets and Agent-Skills copies.
+// puritanical installer: fenced AGENTS.md rulesets and Agent-Skills copies.
 //
 // Targets are global agent files under the user's home or agent config
-// directories (CHISLE_HOME, CODEX/OpenCode/Copilot roots); sources are files in
+// directories (PURITANICAL_HOME, CODEX/OpenCode/Copilot roots); sources are files in
 // this package.
 
 'use strict';
@@ -11,10 +11,10 @@ const fs = require('fs');
 const path = require('path');
 const { REPO_ROOT } = require('./env');
 
-const FENCE_BEGIN = '<!-- chisle-begin -->';
-const FENCE_END = '<!-- chisle-end -->';
+const FENCE_BEGIN = '<!-- puritanical-begin -->';
+const FENCE_END = '<!-- puritanical-end -->';
 
-// Begin and end offsets of the first chisle block; e is -1 when the block is
+// Begin and end offsets of the first puritanical block; e is -1 when the block is
 // missing or has no end marker.
 function fenceSpan(txt) {
   const b = txt.indexOf(FENCE_BEGIN);
@@ -64,7 +64,7 @@ function writeFencedRuleset(target, opts, note) {
     return 'installed';
   }
   if (!opts.force) {
-    note('  ' + target + ' already contains chisle ruleset (--force to refresh)');
+    note('  ' + target + ' already contains puritanical ruleset (--force to refresh)');
     return 'skipped';
   }
   const { b, e } = fenceSpan(existing);
@@ -73,7 +73,7 @@ function writeFencedRuleset(target, opts, note) {
   // content of unknown extent, so refuse rather than guess: rewriting would
   // delete the rest of their global instructions.
   if (e === -1) {
-    note('  ' + target + ' has a chisle-begin marker with no chisle-end; leaving it alone');
+    note('  ' + target + ' has a puritanical-begin marker with no puritanical-end; leaving it alone');
     note('  remove the stray marker by hand, then re-run');
     return 'skipped';
   }
@@ -89,7 +89,7 @@ function separator(existing) {
   return existing.slice(-1) === '\n' ? '\n' : '\n\n';
 }
 
-// Text with the chisle block cut out, or null when there is no complete block.
+// Text with the puritanical block cut out, or null when there is no complete block.
 function withoutFence(txt) {
   const { b, e } = fenceSpan(txt);
   if (e === -1) return null;
@@ -138,12 +138,12 @@ function copySkills(dstRoot, opts) {
   return written;
 }
 
-// Chisle-owned skill dirs present under dstRoot.
+// Puritanical-owned skill dirs present under dstRoot.
 function presentSkills(dstRoot) {
   return ownedSkillNames().filter(name => exists(path.join(dstRoot, name))); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
-// Removes only the skill dirs Chisle owns; foreign skills stay put. Returns
+// Removes only the skill dirs Puritanical owns; foreign skills stay put. Returns
 // the count removed (or that would be removed on a dry run).
 function pruneSkills(dstRoot, dryRun) {
   const present = presentSkills(dstRoot);

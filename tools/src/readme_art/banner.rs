@@ -81,7 +81,7 @@ pub(super) fn banner(t: &Theme, l: &Lang) -> String {
     let words: Vec<&str> = VERBOSE.split(' ').collect();
     banner_terminal(&mut o, t, l, &words);
     let label = format!(
-        "Chisle: fewer tokens in, fewer tokens out, same answers. Animated: a {}-word AI answer is chiselled down to \"structuredClone(config), built in, no dependency\".",
+        "Puritanical: fewer tokens in, fewer tokens out, same answers. Animated: a {}-word AI answer is chiselled down to \"structuredClone(config), built in, no dependency\".",
         words.len()
     );
     svg(t, w, h, &label, &o, &defs)
@@ -103,7 +103,7 @@ fn banner_pitch(o: &mut Vec<String>, t: &Theme, l: &Lang) {
         ),
         format!("<text x=\"93\" y=\"77.5\"{} fill=\"{}\">{}</text>", mono(13.0), t.muted, esc(l.pill)),
         format!(
-            "<text x=\"58\" y=\"196\"{} font-weight=\"800\" letter-spacing=\"-2\" fill=\"{}\">chisle</text>",
+            "<text x=\"58\" y=\"196\"{} font-weight=\"800\" letter-spacing=\"-2\" fill=\"{}\">puritanical</text>",
             mono(96.0),
             t.text
         ),
@@ -126,7 +126,7 @@ fn banner_pitch(o: &mut Vec<String>, t: &Theme, l: &Lang) {
         ),
         format!("<rect x=\"64\" y=\"330\" width=\"176\" height=\"44\" rx=\"10\" fill=\"{}\" stroke=\"{}\"/>", t.card, t.border),
         format!(
-            "<text x=\"84\" y=\"358.5\"{}><tspan fill=\"{}\">$</tspan><tspan fill=\"{}\"> npx chisle</tspan></text>",
+            "<text x=\"84\" y=\"358.5\"{}><tspan fill=\"{}\">$</tspan><tspan fill=\"{}\"> npx github:yungSNAT/Puritanical</tspan></text>",
             mono(18.0),
             t.faint,
             t.text

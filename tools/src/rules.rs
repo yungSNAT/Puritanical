@@ -9,8 +9,8 @@ use std::path::Path;
 
 /// The canonical rule body for the per-agent copies. Edit here, then run
 /// `npm run build:rules`. This is a condensed manual mirror of
-/// `skills/chisle/SKILL.md`: editing `SKILL.md` alone does not propagate here.
-pub const BODY: &str = r#"Chisle: maximum-efficiency dev mode. Two compressions, always active together.
+/// `skills/puritanical/SKILL.md`: editing `SKILL.md` alone does not propagate here.
+pub const BODY: &str = r#"Puritanical: maximum-efficiency dev mode. Two compressions, always active together.
 
 **Prose:** Default to fragments. Drop articles, filler (just/really/basically/
 actually), pleasantries (sure/certainly/happy to), hedging, linking verbs where
@@ -49,34 +49,34 @@ you're about to edit: diet trims transport, not understanding.
 **Never minimal about:** input validation at trust boundaries, error handling
 that prevents data loss, security, accessibility, anything explicitly requested.
 
-Always on once installed. Deactivate: "stop chisle" / "normal mode"."#;
+Always on once installed. Deactivate: "stop puritanical" / "normal mode"."#;
 
 /// Target file and its frontmatter (empty for none).
 pub const TARGETS: [(&str, &str); 6] = [
     (
-        ".cursor/rules/chisle.mdc",
-        "---\ndescription: Chisle, zero-fluff prose + YAGNI-first code\nalwaysApply: true\n---\n\n",
+        ".cursor/rules/puritanical.mdc",
+        "---\ndescription: Puritanical, zero-fluff prose + YAGNI-first code\nalwaysApply: true\n---\n\n",
     ),
     (
-        ".windsurf/rules/chisle.md",
+        ".windsurf/rules/puritanical.md",
         "---\ntrigger: always_on\n---\n\n",
     ),
-    (".clinerules/chisle.md", ""),
+    (".clinerules/puritanical.md", ""),
     (
-        ".kiro/steering/chisle.md",
+        ".kiro/steering/puritanical.md",
         "---\ninclusion: always\n---\n\n",
     ),
     (".github/copilot-instructions.md", ""),
     // Antigravity: workspace rules need a `trigger`; legacy .agent/rules also loads.
     (
-        ".agents/rules/chisle.md",
-        "---\ntrigger: always_on\ndescription: Chisle, zero-fluff prose + YAGNI-first code\n---\n\n",
+        ".agents/rules/puritanical.md",
+        "---\ntrigger: always_on\ndescription: Puritanical, zero-fluff prose + YAGNI-first code\n---\n\n",
     ),
 ];
 
 #[must_use]
 pub fn render(frontmatter: &str) -> String {
-    format!("{frontmatter}# Chisle\n\n{BODY}\n")
+    format!("{frontmatter}# Puritanical\n\n{BODY}\n")
 }
 
 /// Writes every rule copy, or with `check` reports the ones that drifted.

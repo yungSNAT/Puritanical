@@ -1,5 +1,5 @@
 {
-  "name": "chisle",
+  "name": "puritanical",
   "version": "3.14.2",
   "description": "Fewer tokens than caveman and ponytail, no accuracy lost. Zero-fluff prose, YAGNI-first code, and safe tool-output compression for 13 AI coding agents.",
   "keywords": [
@@ -51,7 +51,7 @@
     "url": "https://github.com/yungSNAT/Puritanical/issues"
   },
   "bin": {
-    "chisle": "bin/install.js"
+    "puritanical": "bin/install.js"
   },
   "engines": {
     "node": ">=18"

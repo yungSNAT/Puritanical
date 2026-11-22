@@ -1,5 +1,5 @@
 /* global module, process, require -- Node.js runtime */
-// chisle — JSONC-tolerant settings.json read/write + defensive hook validation.
+// puritanical — JSONC-tolerant settings.json read/write + defensive hook validation.
 //
 // Claude Code applies strict Zod to settings.json: one malformed hook silently
 // discards the WHOLE file. So every mutation validates before write, and reads
@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { readSettingsText } = require('../../hooks/chisle-config');
+const { readSettingsText } = require('../../hooks/puritanical-config');
 
 // ── stripJsonComments ──────────────────────────────────────────────────────
 // Scanner that copies quoted strings whole (backslash escapes included) so a
@@ -75,18 +75,18 @@ function readSettings(p) {
   try { raw = readSettingsText(p); }
   catch (error) {
     if (error.code === 'ENOENT') return {};
-    process.stderr.write(`chisle: cannot read ${p}: ${error.message}\n`);
+    process.stderr.write(`puritanical: cannot read ${p}: ${error.message}\n`);
     return null;
   }
   if (raw === null) {
-    process.stderr.write(`chisle: cannot read ${p}: expected a bounded, regular file\n`);
+    process.stderr.write(`puritanical: cannot read ${p}: expected a bounded, regular file\n`);
     return null;
   }
   if (!raw.trim()) return {};
   try { return JSON.parse(raw.replace(/^\uFEFF/, '')); } catch {}
   try { return JSON.parse(stripJsonComments(raw.replace(/^\uFEFF/, ''))); }
   catch (e) {
-    process.stderr.write(`chisle: warning — ${p} is not valid JSON/JSONC: ${e.message}\n`);
+    process.stderr.write(`puritanical: warning — ${p} is not valid JSON/JSONC: ${e.message}\n`);
     return null;
   }
 }

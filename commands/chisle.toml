@@ -1,7 +1,0 @@
-# chisle slash command
-# Maximum-efficiency dev mode
-# Usage: /chisle  ·  /chisle off
-
-[command]
-name = "chisle"
-description = "Activate chisle: zero-fluff prose + YAGNI ladder code decisions. /chisle off to stop."

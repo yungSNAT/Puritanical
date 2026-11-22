@@ -14,7 +14,7 @@
 //   chisle-trim = chisle plus the deny list `npx chisle tools trim` writes for
 //   tools a coding loop never calls (TRIM_TOOLS overrides the list)
 //   PONYTAIL_SKILL=path              ponytail SKILL.md (default: installed plugin cache)
-//   CHISLE_SKILL=path                candidate ruleset for the chisle arms (default: skills/chisle/SKILL.md)
+//   CHISLE_SKILL=path                candidate ruleset for the chisle arms (default: skills/puritanical/SKILL.md)
 //   FIXTURES=noisylog,reuse          run only these fixtures (default: all)
 //   RAW_DIR=path                     where cells go (default: ./raw); use a fresh
 //                                    dir when the ruleset changes, or old cells
@@ -45,8 +45,8 @@ fs.mkdirSync(RAW, { recursive: true }); // nosemgrep: javascript_pathtraversal_r
 
 const ISO = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-agentic-'));
 fs.copyFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), path.join(ISO, '.credentials.json'));
-// eslint-disable-next-line security/detect-non-literal-fs-filename -- CHISLE_SKILL from the environment or this repo's skills/chisle/SKILL.md.
-const skill = fs.readFileSync(process.env.CHISLE_SKILL || path.join(HERE, '..', '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- CHISLE_SKILL from the environment or this repo's skills/puritanical/SKILL.md.
+const skill = fs.readFileSync(process.env.CHISLE_SKILL || path.join(HERE, '..', '..', 'skills', 'puritanical', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 const body = skill.split(/^---\s*$/m).slice(2).join('---').trim();
 if (!body) { console.error('empty chisle system prompt'); process.exit(1); }
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- The prompt file in the private temporary config directory.
@@ -162,7 +162,7 @@ function recordRun(rec, stdout) {
 function recordCompression(rec, cfg) {
   let stats = {};
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- The hook's stats file in the cell's temporary config directory.
-  try { stats = JSON.parse(fs.readFileSync(path.join(cfg, '.chisle-compress-stats.json'), 'utf8')); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  try { stats = JSON.parse(fs.readFileSync(path.join(cfg, '.puritanical-compress-stats.json'), 'utf8')); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   rec.compressed_chars = stats.savedChars || 0;
   rec.compress_events = stats.events || 0;
 }
@@ -227,7 +227,7 @@ function runCell(c) {
       fs.mkdirSync(cfg); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
       fs.copyFileSync(path.join(ISO, '.credentials.json'), path.join(cfg, '.credentials.json')); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- The hook's on flag in the cell's temporary config directory.
-      fs.writeFileSync(path.join(cfg, '.chisle-active'), 'on'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+      fs.writeFileSync(path.join(cfg, '.puritanical-active'), 'on'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
       args.push('--settings', c.arm === 'rtk-chisle-hook' ? RTK_HOOK_SETTINGS : HOOK_SETTINGS);
     }
 

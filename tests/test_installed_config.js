@@ -9,7 +9,7 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const installer = path.resolve(__dirname, '../bin/install.js');
-const activate = path.resolve(__dirname, '../hooks/chisle-activate.js');
+const activate = path.resolve(__dirname, '../hooks/puritanical-activate.js');
 
 // Each test file has its own Node process. Relative fixture paths stay inside a
 // fresh working directory, including when the installer's config path has spaces.
@@ -24,7 +24,7 @@ function isolatedConfig(t) {
   fs.mkdirSync('empty-bin');
   fs.mkdirSync('claude');
   return {
-    HOME: root, USERPROFILE: root, CHISLE_HOME: root,
+    HOME: root, USERPROFILE: root, PURITANICAL_HOME: root,
     PATH: path.resolve('empty-bin'), CLAUDE_CONFIG_DIR: path.resolve('claude'),
     XDG_CONFIG_HOME: path.resolve('xdg'), COPILOT_HOME: path.resolve('copilot'),
     SystemRoot: process.env.SystemRoot, CI: 'true',
@@ -42,13 +42,13 @@ test('update refreshes installed agents and preserves user rules and absent inte
 
   const installedAgents = ['--only', 'claude', '--only', 'codex', '--only', 'hermes'];
   run(...installedAgents);
-  fs.writeFileSync('.hermes/skills/chisle/SKILL.md', 'outdated');
+  fs.writeFileSync('.hermes/skills/puritanical/SKILL.md', 'outdated');
   run('--update', ...installedAgents, '--only', 'copilot-cli', '--only', 'gemini', '--only', 'opencode');
 
-  assert.match(fs.readFileSync('.hermes/skills/chisle/SKILL.md', 'utf8'), /name: chisle/);
+  assert.match(fs.readFileSync('.hermes/skills/puritanical/SKILL.md', 'utf8'), /name: puritanical/);
   const rules = fs.readFileSync('.codex/AGENTS.md', 'utf8');
   assert.ok(rules.startsWith('Local instructions\n'));
-  assert.equal(rules.split('<!-- chisle-begin -->').length, 2);
+  assert.equal(rules.split('<!-- puritanical-begin -->').length, 2);
   assert.equal(fs.existsSync('copilot'), false);
   assert.equal(fs.existsSync('xdg/opencode'), false);
   assert.equal(fs.existsSync('.gemini'), false);
@@ -57,8 +57,8 @@ test('update refreshes installed agents and preserves user rules and absent inte
 
   run('--uninstall', ...installedAgents);
   assert.equal(fs.readFileSync('.codex/AGENTS.md', 'utf8').trim(), 'Local instructions');
-  assert.equal(fs.existsSync('claude/chisle-hooks'), false);
-  assert.equal(fs.existsSync('.hermes/skills/chisle'), false);
+  assert.equal(fs.existsSync('claude/puritanical-hooks'), false);
+  assert.equal(fs.existsSync('.hermes/skills/puritanical'), false);
 });
 
 test('tools reports empty sessions and rejects invalid options without writing configuration', t => {
@@ -78,17 +78,17 @@ test('tools reports empty sessions and rejects invalid options without writing c
 test('startup uses a cached major update offline and respects the configured statusline', t => {
   const env = isolatedConfig(t);
   fs.writeFileSync('claude/settings.json', JSON.stringify({ statusLine: { type: 'command', command: 'my-status' } }));
-  fs.writeFileSync('claude/.chisle-update-check.json', JSON.stringify({ latest: '99.0.0', checkedAt: Date.now() }));
+  fs.writeFileSync('claude/.puritanical-update-check.json', JSON.stringify({ latest: '99.0.0', checkedAt: Date.now() }));
   fs.writeFileSync('offline.cjs', 'globalThis.fetch = () => { throw Error("offline fixture"); };\n');
   const run = mode => execFileSync(process.execPath, ['--require', './offline.cjs', activate], {
-    env: { ...env, CHISLE_DEFAULT_MODE: mode }, input: '{"source":"startup"}', encoding: 'utf8', timeout: 5000,
+    env: { ...env, PURITANICAL_DEFAULT_MODE: mode }, input: '{"source":"startup"}', encoding: 'utf8', timeout: 5000,
   });
   const output = run('on');
   assert.match(output, /UPDATE AVAILABLE: v99\.0\.0/);
   assert.doesNotMatch(output, /STATUSLINE SETUP NEEDED/);
-  assert.equal(fs.readFileSync('claude/.chisle-active', 'utf8'), 'on');
+  assert.equal(fs.readFileSync('claude/.puritanical-active', 'utf8'), 'on');
   assert.equal(run('off'), 'OK');
-  assert.equal(fs.existsSync('claude/.chisle-active'), false);
+  assert.equal(fs.existsSync('claude/.puritanical-active'), false);
 });
 
 function interactiveInstaller(t) {
@@ -105,9 +105,9 @@ function interactiveInstaller(t) {
 
 test('interactive installation remembers a refusal and asks again after a deferral', t => {
   const install = interactiveInstaller(t);
-  fs.mkdirSync('xdg/chisle', { recursive: true });
-  fs.writeFileSync('xdg/chisle/config.json', '{"sections":{"prose":false}}');
-  const config = () => JSON.parse(fs.readFileSync('xdg/chisle/config.json', 'utf8'));
+  fs.mkdirSync('xdg/puritanical', { recursive: true });
+  fs.writeFileSync('xdg/puritanical/config.json', '{"sections":{"prose":false}}');
+  const config = () => JSON.parse(fs.readFileSync('xdg/puritanical/config.json', 'utf8'));
 
   assert.match(install('cursor', ''), /ask again next time/);
   assert.deepEqual(config(), { sections: { prose: false } });
@@ -135,11 +135,11 @@ test('a yes stars and follows this fork through the gh on the PATH', { skip: pro
 
 test('interactive installation prints manual links offline and preserves unreadable settings', t => {
   const install = interactiveInstaller(t);
-  fs.mkdirSync('xdg/chisle', { recursive: true });
-  fs.writeFileSync('xdg/chisle/config.json', '{"mode":');
+  fs.mkdirSync('xdg/puritanical', { recursive: true });
+  fs.writeFileSync('xdg/puritanical/config.json', '{"mode":');
   const output = install('cursor', 'yes');
   assert.match(output, /Couldn't star through gh\. Star it here: https:\/\/github\.com\//);
   assert.match(output, /Follow here: https:\/\/github\.com\//);
   assert.doesNotMatch(output, /Starred/);
-  assert.equal(fs.readFileSync('xdg/chisle/config.json', 'utf8'), '{"mode":');
+  assert.equal(fs.readFileSync('xdg/puritanical/config.json', 'utf8'), '{"mode":');
 });

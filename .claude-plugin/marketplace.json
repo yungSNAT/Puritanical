@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "chisle",
+  "name": "puritanical",
   "description": "Maximum-efficiency dev mode for Claude Code. Zero-fluff prose and YAGNI-first code decisions, always active simultaneously.",
   "owner": {
     "name": "yungSNAT",
@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "chisle",
+      "name": "puritanical",
       "description": "Maximum signal. Minimum noise. Write less. Ship less. Mean more.",
       "source": "./",
       "category": "productivity"

@@ -1,5 +1,5 @@
 /* global module, process, require -- Node.js runtime */
-// chisle installer: Claude Code. Plugin (marketplace add + install) first,
+// puritanical installer: Claude Code. Plugin (marketplace add + install) first,
 // standalone hooks + settings.json merge + statusline badge as the fallback.
 // Every path is under the Claude config dir (--config-dir, CLAUDE_CONFIG_DIR
 // or ~/.claude) or this package's hooks/.
@@ -12,37 +12,37 @@ const SETTINGS = require('./settings');
 const ENV = require('./env');
 const FENCE = require('./fence');
 
-const HOOK_FILES = ['package.json', 'chisle-config.js', 'chisle-activate.js',
-  'chisle-mode.js', 'chisle-mode-tracker.js', 'chisle-compress-output.js', 'chisle-command-filters.js',
-  'chisle-run.js', 'chisle-statusline.sh', 'chisle-statusline.ps1'];
+const HOOK_FILES = ['package.json', 'puritanical-config.js', 'puritanical-activate.js',
+  'puritanical-mode.js', 'puritanical-mode-tracker.js', 'puritanical-compress-output.js', 'puritanical-command-filters.js',
+  'puritanical-run.js', 'puritanical-statusline.sh', 'puritanical-statusline.ps1'];
 
 function settingsPathFor(opts) { return path.join(ENV.claudeDir(opts), 'settings.json'); } // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 
-function hasChisleHookCommand(settings) {
+function hasPuritanicalHookCommand(settings) {
   const hooks = (settings && settings.hooks) || {};
   const list = v => (Array.isArray(v) ? v : []);
   return Object.values(hooks).some(entries => list(entries).some(entry =>
-    list(entry && entry.hooks).some(h => h && typeof h.command === 'string' && h.command.includes('chisle-'))));
+    list(entry && entry.hooks).some(h => h && typeof h.command === 'string' && h.command.includes('puritanical-'))));
 }
 
 function claudeInstalled(opts) {
-  if (ENV.hasCmd('claude') && ENV.listsChisle('claude', ['plugin', 'list'])) return true;
-  return hasChisleHookCommand(SETTINGS.readSettings(settingsPathFor(opts)));
+  if (ENV.hasCmd('claude') && ENV.listsPuritanical('claude', ['plugin', 'list'])) return true;
+  return hasPuritanicalHookCommand(SETTINGS.readSettings(settingsPathFor(opts)));
 }
 
 // Returns true when the plugin is installed (already, or by this run).
 function installPlugin(ctx) {
   const { note, warn, opts, results } = ctx;
-  if (!opts.force && ENV.listsChisle('claude', ['plugin', 'list'])) {
-    note('  chisle plugin already installed (use --force to reinstall)');
+  if (!opts.force && ENV.listsPuritanical('claude', ['plugin', 'list'])) {
+    note('  puritanical plugin already installed (use --force to reinstall)');
     results.skipped.push(['claude', 'plugin already installed']);
     return true;
   }
   // `plugin install` is a no-op for an already-installed plugin, so an
   // upgrade (--update / --force) has to go through `plugin update`.
-  const present = opts.force && /chisle/i.test(ENV.capture('claude', ['plugin', 'list']).stdout || '');
+  const present = opts.force && /puritanical/i.test(ENV.capture('claude', ['plugin', 'list']).stdout || '');
   const r1 = ENV.run('claude', ['plugin', 'marketplace', 'add', ENV.REPO], opts.dryRun);
-  const r2 = ENV.run('claude', ['plugin', present ? 'update' : 'install', 'chisle@chisle'], opts.dryRun);
+  const r2 = ENV.run('claude', ['plugin', present ? 'update' : 'install', 'puritanical@puritanical'], opts.dryRun);
   if (ENV.ranOk(r1) && ENV.ranOk(r2)) { results.installed.push('claude'); return true; }
   warn('  claude plugin install failed, falling back to standalone hooks');
   return false;
@@ -56,7 +56,7 @@ function dropStandaloneHooks(ctx) {
   note('  hooks: plugin manifest handles SessionStart + UserPromptSubmit + PreToolUse + PostToolUse');
   const settingsPath = settingsPathFor(opts);
   const settings = SETTINGS.readSettings(settingsPath);
-  if (!settings || SETTINGS.removeHooks(settings, 'chisle-') === 0) return;
+  if (!settings || SETTINGS.removeHooks(settings, 'puritanical-') === 0) return;
   if (!opts.dryRun) {
     SETTINGS.validateHookFields(settings);
     SETTINGS.writeSettings(settingsPath, settings);
@@ -89,7 +89,7 @@ function copyHookFiles(hooksDst) {
     if (FENCE.exists(s)) FENCE.copyFile(s, path.join(hooksDst, f)); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   }
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- The statusline script just copied into the Claude config directory.
-  try { fs.chmodSync(path.join(hooksDst, 'chisle-statusline.sh'), 0o700); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  try { fs.chmodSync(path.join(hooksDst, 'puritanical-statusline.sh'), 0o700); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 function backupSettings(settingsPath) {
@@ -101,22 +101,22 @@ function wireHooks(settings, hooksDst) {
   const node = process.execPath;
   const hook = name => `"${node}" "${path.join(hooksDst, name)}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   SETTINGS.addCommandHook(settings, 'SessionStart',
-    { command: hook('chisle-activate.js'), marker: 'chisle-activate', timeout: 5, statusMessage: 'Loading chisle mode...' });
+    { command: hook('puritanical-activate.js'), marker: 'puritanical-activate', timeout: 5, statusMessage: 'Loading puritanical mode...' });
   SETTINGS.addCommandHook(settings, 'UserPromptSubmit',
-    { command: hook('chisle-mode-tracker.js'), marker: 'chisle-mode-tracker', timeout: 5, statusMessage: 'Tracking chisle mode...' });
+    { command: hook('puritanical-mode-tracker.js'), marker: 'puritanical-mode-tracker', timeout: 5, statusMessage: 'Tracking puritanical mode...' });
   if (!ENV.IS_WIN) {
     SETTINGS.addCommandHook(settings, 'PreToolUse',
-      { command: hook('chisle-run.js'), marker: 'chisle-run', timeout: 5, matcher: 'Bash' });
+      { command: hook('puritanical-run.js'), marker: 'puritanical-run', timeout: 5, matcher: 'Bash' });
   }
   SETTINGS.addCommandHook(settings, 'PostToolUse',
-    { command: hook('chisle-compress-output.js'), marker: 'chisle-compress-output', timeout: 10,
+    { command: hook('puritanical-compress-output.js'), marker: 'puritanical-compress-output', timeout: 10,
       matcher: 'Bash|Agent|WebFetch|WebSearch|Grep|Glob|mcp__.*', statusMessage: 'Compressing tool output...' });
 }
 
 function statusLineCommand(hooksDst) {
-  if (!ENV.IS_WIN) return `bash "${path.join(hooksDst, 'chisle-statusline.sh')}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  if (!ENV.IS_WIN) return `bash "${path.join(hooksDst, 'puritanical-statusline.sh')}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   const psHost = ENV.hasCmd('pwsh') ? 'pwsh' : 'powershell';
-  return `${psHost} -NoProfile -ExecutionPolicy Bypass -File "${path.join(hooksDst, 'chisle-statusline.ps1')}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  return `${psHost} -NoProfile -ExecutionPolicy Bypass -File "${path.join(hooksDst, 'puritanical-statusline.ps1')}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 }
 
 function configureStatusLine(settings, hooksDst) {
@@ -126,16 +126,16 @@ function configureStatusLine(settings, hooksDst) {
     return;
   }
   const existing = typeof settings.statusLine === 'string' ? settings.statusLine : (settings.statusLine.command || '');
-  if (existing.includes('chisle-statusline')) process.stdout.write('  statusline badge already configured.\n');
-  else process.stdout.write('  NOTE: existing statusline detected, CHISLE badge NOT added (see docs/install-windows.md).\n');
+  if (existing.includes('puritanical-statusline')) process.stdout.write('  statusline badge already configured.\n');
+  else process.stdout.write('  NOTE: existing statusline detected, PURITANICAL badge NOT added (see docs/install-windows.md).\n');
 }
 
-// Standalone wiring: copy hooks into <configDir>/chisle-hooks/ and merge
+// Standalone wiring: copy hooks into <configDir>/puritanical-hooks/ and merge
 // settings.json. Used when the plugin path is unavailable.
 function installClaudeHooks(ctx) {
   const { opts, warn, note } = ctx;
   const cfg = ENV.claudeDir(opts);
-  const hooksDst = path.join(cfg, 'chisle-hooks'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const hooksDst = path.join(cfg, 'puritanical-hooks'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   const settingsPath = path.join(cfg, 'settings.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 
   if (opts.dryRun) {

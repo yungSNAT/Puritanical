@@ -13,7 +13,7 @@ const os = require('os');
 const crypto = require('crypto');
 const {
   duplicateMarker, extractText, transform, limitsFor, toolAllowed,
-} = require('../hooks/chisle-compress-output');
+} = require('../hooks/puritanical-compress-output');
 const { piToolAllowed } = require('../pi-extension');
 
 const args = process.argv.slice(2);
@@ -73,7 +73,7 @@ function account(name, text, lastHash, allowDedup, failed, command) {
     return;
   }
 
-  if (allowDedup && process.env.CHISLE_COMPRESS_DEDUP !== '0' && size >= 2048) {
+  if (allowDedup && process.env.PURITANICAL_COMPRESS_DEDUP !== '0' && size >= 2048) {
     const hash = crypto.createHash('sha256').update(text).digest('hex');
     // eslint-disable-next-line security/detect-possible-timing-attacks, security-node/detect-possible-timing-attacks -- Compares digests of tool output for deduplication; nothing secret.
     if (lastHash.get(name) === hash) { // nosemgrep: rules_lgpl_javascript_crypto_rule-node-timing-attack

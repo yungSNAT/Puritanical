@@ -16,7 +16,7 @@ const ENV_PATH = repoPath('bin', 'lib', 'env.js');
 const SETTINGS = require('../bin/lib/settings');
 const TOOLS = require('../bin/lib/tools');
 
-function tempDir(t, prefix = 'chisle-coverage-a-') {
+function tempDir(t, prefix = 'puritanical-coverage-a-') {
   return tempRoot(t, prefix);
 }
 
@@ -26,7 +26,7 @@ function isolatedEnv(home, extra = {}) {
     HOME: home,
     USERPROFILE: home,
     XDG_CONFIG_HOME: under(home, 'xdg'),
-    CHISLE_HOME: home,
+    PURITANICAL_HOME: home,
     CLAUDE_CONFIG_DIR: '',
     COPILOT_HOME: '',
     OPENCODE_CONFIG_DIR: '',
@@ -144,7 +144,7 @@ test('default Claude directory uses the isolated home and foreign hooks are not 
     HOME: home,
     USERPROFILE: home,
     XDG_CONFIG_HOME: under(home, 'xdg'),
-    CHISLE_HOME: undefined,
+    PURITANICAL_HOME: undefined,
     CLAUDE_CONFIG_DIR: undefined,
     PATH: emptyPath,
   }, () => {
@@ -152,7 +152,7 @@ test('default Claude directory uses the isolated home and foreign hooks are not 
     assert.equal(installer.installedFor(claude, {}), false);
     writeJson(settingsPath, {
       hooks: {
-        SessionStart: [{ hooks: [{ type: 'command', command: 'node chisle-activate.js' }] }],
+        SessionStart: [{ hooks: [{ type: 'command', command: 'node puritanical-activate.js' }] }],
       },
     });
     assert.equal(installer.installedFor(claude, {}), true);
@@ -198,12 +198,12 @@ test('failed Claude plugin installation warns and falls back to working standalo
   assert.match(result.out, /installed:\s+claude-hooks/);
   const calls = readText(log);
   assert.match(calls, /plugin marketplace add yungSNAT\/Puritanical/);
-  assert.match(calls, /plugin install chisle@chisle/);
+  assert.match(calls, /plugin install puritanical@puritanical/);
 
   const settings = readJson(under(cfg, 'settings.json'));
   assert.ok(settings.hooks.SessionStart);
   assert.ok(settings.hooks.PostToolUse);
-  assert.ok(exists(under(cfg, 'chisle-hooks', 'chisle-compress-output.js')));
+  assert.ok(exists(under(cfg, 'puritanical-hooks', 'puritanical-compress-output.js')));
 });
 
 test('unparseable Claude settings produce a failed install and preserve the original file', (t) => {
@@ -228,7 +228,7 @@ test('unparseable Claude settings produce a failed install and preserve the orig
   assert.equal(readText(settingsPath), invalid);
 });
 
-test('existing non-Chisle statusline is preserved and reported instead of overwritten', (t) => {
+test('existing non-Puritanical statusline is preserved and reported instead of overwritten', (t) => {
   const root = tempDir(t);
   const home = under(root, 'home');
   const cfg = under(root, 'claude-config');
@@ -247,7 +247,7 @@ test('existing non-Chisle statusline is preserved and reported instead of overwr
     env: isolatedEnv(home, { PATH: emptyPath }),
   });
   assert.equal(result.status, 0, result.out);
-  assert.match(result.out, /existing statusline detected, CHISLE badge NOT added/);
+  assert.match(result.out, /existing statusline detected, PURITANICAL badge NOT added/);
   const settings = readJson(settingsPath);
   assert.deepEqual(settings.statusLine, {
     type: 'command',
@@ -264,11 +264,11 @@ test('Gemini reports an existing extension as skipped and does not reinstall it'
   makeDir(home);
   writeFakeCommand(bin, 'gemini', [
     'echo "$@" >> "$FAKE_LOG"',
-    'if [ "$1" = "extensions" ] && [ "$2" = "list" ]; then echo chisle; fi',
+    'if [ "$1" = "extensions" ] && [ "$2" = "list" ]; then echo puritanical; fi',
     'exit 0',
   ].join('\n'), [
     'echo %*>>"%FAKE_LOG%"',
-    'if "%1 %2"=="extensions list" echo chisle',
+    'if "%1 %2"=="extensions list" echo puritanical',
     'exit /b 0',
   ].join('\n'));
 
@@ -280,7 +280,7 @@ test('Gemini reports an existing extension as skipped and does not reinstall it'
     }),
   });
   assert.equal(result.status, 0, result.out);
-  assert.match(result.out, /chisle extension already installed/);
+  assert.match(result.out, /puritanical extension already installed/);
   assert.match(result.out, /skipped:\s+gemini/);
   const calls = readText(log);
   assert.match(calls, /extensions list/);
@@ -298,8 +298,8 @@ test('Codex installation separates an unterminated user file from the fenced rul
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /installed:/);
   const written = readText(target);
-  assert.ok(written.startsWith('user instructions without newline\n\n<!-- chisle-begin -->\n'));
-  assert.match(written, /<!-- chisle-end -->\n$/);
+  assert.ok(written.startsWith('user instructions without newline\n\n<!-- puritanical-begin -->\n'));
+  assert.match(written, /<!-- puritanical-end -->\n$/);
 });
 
 test('Copilot CLI dry-run describes all files and writes nothing', (t) => {
@@ -313,7 +313,7 @@ test('Copilot CLI dry-run describes all files and writes nothing', (t) => {
     env: isolatedEnv(home, { COPILOT_HOME: copilot }),
   });
   assert.equal(result.status, 0, result.out);
-  assert.match(result.out, /would write chisle ruleset to/);
+  assert.match(result.out, /would write puritanical ruleset to/);
   assert.match(result.out, /would copy compressor to/);
   assert.match(result.out, /would write postToolUse hook/);
   assert.match(result.out, /installed:\s+copilot-cli/);
@@ -323,11 +323,11 @@ test('Copilot CLI dry-run describes all files and writes nothing', (t) => {
 test('Claude uninstall removes an installed plugin through the Claude CLI', (t) => {
   const { root, home, cfg, bin, log } = fakeClaude(t, 'claude-uninstall.log', [
     'echo "$@" >> "$FAKE_LOG"',
-    'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo chisle; fi',
+    'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo puritanical; fi',
     'exit 0',
   ], [
     'echo %*>>"%FAKE_LOG%"',
-    'if "%1 %2"=="plugin list" echo chisle',
+    'if "%1 %2"=="plugin list" echo puritanical',
     'exit /b 0',
   ]);
 
@@ -342,7 +342,7 @@ test('Claude uninstall removes an installed plugin through the Claude CLI', (t) 
   assert.match(result.out, /Uninstalled\. 1 item\(s\) cleaned/);
   const calls = readText(log);
   assert.match(calls, /plugin list/);
-  assert.match(calls, /plugin uninstall chisle@chisle/);
+  assert.match(calls, /plugin uninstall puritanical@puritanical/);
 });
 
 test('hook validation drops unsupported hook types while retaining valid commands', () => {
@@ -366,16 +366,16 @@ test('hook validation drops unsupported hook types while retaining valid command
 });
 
 test('tools rejects unknown arguments with its usage message', (t) => {
-  const dir = tempDir(t, 'chisle-tools-coverage-');
+  const dir = tempDir(t, 'puritanical-tools-coverage-');
   assert.throws(
     () => TOOLS.main(['--unknown-option'], dir, () => {}),
-    /usage: npx chisle tools/,
+    /usage: npx github:yungSNAT\/Puritanical tools/,
   );
   assert.deepEqual(listDir(dir), []);
 });
 
 test('tools report prints an apply command including requested additional tools without changing files', (t) => {
-  const dir = tempDir(t, 'chisle-tools-coverage-');
+  const dir = tempDir(t, 'puritanical-tools-coverage-');
   const project = under(dir, 'projects', 'project-a');
   makeDir(project, { recursive: true });
 
@@ -402,9 +402,9 @@ test('tools report prints an apply command including requested additional tools 
   assert.match(rendered, /Artifact.*unused → deny/);
   assert.match(
     rendered,
-    /apply with: npx chisle tools trim --also Artifact\s+\(undo: npx chisle tools restore\)/,
+    /apply with: npx github:yungSNAT\/Puritanical tools trim --also Artifact\s+\(undo: npx github:yungSNAT\/Puritanical tools restore\)/,
   );
   assert.equal(exists(under(dir, 'settings.json')), false);
-  assert.equal(exists(under(dir, '.chisle-trimmed-tools.json')), false);
+  assert.equal(exists(under(dir, '.puritanical-trimmed-tools.json')), false);
   assert.equal(readText(transcriptPath), before);
 });

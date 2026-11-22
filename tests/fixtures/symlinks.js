@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 
 function symlinksSupported() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-symlink-probe-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-symlink-probe-'));
   try {
     fs.symlinkSync(path.join(dir, 'target'), path.join(dir, 'link'));
     return true;

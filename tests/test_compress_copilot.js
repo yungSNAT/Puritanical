@@ -18,7 +18,7 @@ const { spawnSync } = require('child_process');
 
 const {
   isCopilotPayload, copilotToolAllowed, processPayload, SAFE_TOOLS_COPILOT,
-} = require('../hooks/chisle-compress-output');
+} = require('../hooks/puritanical-compress-output');
 
 function bigOutput(lines, prefix) {
   return Array.from({ length: lines }, (_, i) => `${prefix || 'line'} ${i} ${'x'.repeat(80)}`).join('\n');
@@ -56,22 +56,22 @@ test('Copilot: bash/powershell/grep/glob/web_fetch/web_search/task are compressi
   for (const t of SAFE_TOOLS_COPILOT) assert.equal(copilotToolAllowed(t), true);
 });
 
-test('Copilot: CHISLE_COMPRESS_TOOLS overrides the Copilot allowlist too', () => {
-  process.env.CHISLE_COMPRESS_TOOLS = 'bash';
+test('Copilot: PURITANICAL_COMPRESS_TOOLS overrides the Copilot allowlist too', () => {
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'bash';
   assert.equal(copilotToolAllowed('grep'), false);
   assert.equal(copilotToolAllowed('bash'), true);
-  delete process.env.CHISLE_COMPRESS_TOOLS;
+  delete process.env.PURITANICAL_COMPRESS_TOOLS;
 });
 
 // ── processPayload — Copilot branch of the full pipeline ────────────────────
 
 test('processPayload compresses a big Copilot bash output', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-copilot-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-copilot-'));
   const saved = process.env.COPILOT_HOME;
   process.env.COPILOT_HOME = dir;
   try {
     const out = processPayload(copilotPayload(), 'on');
-    assert.ok(out && out.includes('[chisle: elided'));
+    assert.ok(out && out.includes('[puritanical: elided'));
   } finally {
     if (saved !== undefined) process.env.COPILOT_HOME = saved; else delete process.env.COPILOT_HOME;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -89,7 +89,7 @@ test('processPayload never touches view/create/edit for Copilot', () => {
 });
 
 test('Copilot dedup: identical consecutive output becomes a marker, isolated per state dir', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-copilot-dedup-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-copilot-dedup-'));
   const saved = process.env.COPILOT_HOME;
   process.env.COPILOT_HOME = dir;
   try {
@@ -111,7 +111,7 @@ test('Copilot dedup: identical consecutive output becomes a marker, isolated per
 });
 
 test('Copilot dedup is skipped silently when sessionId is absent', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-copilot-nosess-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-copilot-nosess-'));
   const saved = process.env.COPILOT_HOME;
   process.env.COPILOT_HOME = dir;
   try {
@@ -127,10 +127,10 @@ test('Copilot dedup is skipped silently when sessionId is absent', () => {
   }
 });
 
-test('CHISLE_COMPRESS=0 kill switch also applies to the Copilot branch', () => {
-  process.env.CHISLE_COMPRESS = '0';
+test('PURITANICAL_COMPRESS=0 kill switch also applies to the Copilot branch', () => {
+  process.env.PURITANICAL_COMPRESS = '0';
   assert.equal(processPayload(copilotPayload(), 'on'), null);
-  delete process.env.CHISLE_COMPRESS;
+  delete process.env.PURITANICAL_COMPRESS;
 });
 
 // ── main() end-to-end: Copilot's own modifiedResult output shape ────────────
@@ -140,9 +140,9 @@ test('CHISLE_COMPRESS=0 kill switch also applies to the Copilot branch', () => {
 // script as Copilot CLI itself would: JSON on stdin, JSON on stdout.
 
 test('main(): Copilot payload on stdin produces modifiedResult on stdout', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-copilot-main-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-copilot-main-'));
   try {
-    const scriptPath = path.join(__dirname, '..', 'hooks', 'chisle-compress-output.js');
+    const scriptPath = path.join(__dirname, '..', 'hooks', 'puritanical-compress-output.js');
     const payload = copilotPayload();
     const r = spawnSync(process.execPath, [scriptPath], {
       input: JSON.stringify(payload),
@@ -152,7 +152,7 @@ test('main(): Copilot payload on stdin produces modifiedResult on stdout', () =>
     assert.equal(r.status, 0);
     const out = JSON.parse(r.stdout);
     assert.equal(out.modifiedResult.resultType, 'success');
-    assert.ok(out.modifiedResult.textResultForLlm.includes('[chisle: elided'));
+    assert.ok(out.modifiedResult.textResultForLlm.includes('[puritanical: elided'));
     assert.equal(out.hookSpecificOutput, undefined); // never the Claude/Pi shape
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -160,9 +160,9 @@ test('main(): Copilot payload on stdin produces modifiedResult on stdout', () =>
 });
 
 test('main(): small Copilot output produces no stdout at all', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-copilot-main-noop-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-copilot-main-noop-'));
   try {
-    const scriptPath = path.join(__dirname, '..', 'hooks', 'chisle-compress-output.js');
+    const scriptPath = path.join(__dirname, '..', 'hooks', 'puritanical-compress-output.js');
     const payload = copilotPayload({ toolResult: { resultType: 'success', textResultForLlm: 'tiny' } });
     const r = spawnSync(process.execPath, [scriptPath], {
       input: JSON.stringify(payload),
@@ -177,9 +177,9 @@ test('main(): small Copilot output produces no stdout at all', () => {
 });
 
 test('main(): a failed tool call keeps its resultType through compression', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-copilot-main-err-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'puritanical-copilot-main-err-'));
   try {
-    const scriptPath = path.join(__dirname, '..', 'hooks', 'chisle-compress-output.js');
+    const scriptPath = path.join(__dirname, '..', 'hooks', 'puritanical-compress-output.js');
     const payload = copilotPayload({
       toolResult: { resultType: 'error', textResultForLlm: bigOutput(500) },
     });
@@ -191,7 +191,7 @@ test('main(): a failed tool call keeps its resultType through compression', () =
     assert.equal(r.status, 0);
     const out = JSON.parse(r.stdout);
     assert.equal(out.modifiedResult.resultType, 'error'); // not relabeled 'success'
-    assert.ok(out.modifiedResult.textResultForLlm.includes('[chisle: elided'));
+    assert.ok(out.modifiedResult.textResultForLlm.includes('[puritanical: elided'));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -200,27 +200,27 @@ test('main(): a failed tool call keeps its resultType through compression', () =
 // Same invariant as the Claude path: the allowlist override must not be able to
 // re-enable Copilot's Read/Edit/Write equivalents. Their output feeds
 // exact-match edits.
-test('Copilot: CHISLE_COMPRESS_TOOLS cannot re-enable view/create/edit', () => {
-  const saved = process.env.CHISLE_COMPRESS_TOOLS;
-  process.env.CHISLE_COMPRESS_TOOLS = 'bash,view,create,edit,str_replace';
+test('Copilot: PURITANICAL_COMPRESS_TOOLS cannot re-enable view/create/edit', () => {
+  const saved = process.env.PURITANICAL_COMPRESS_TOOLS;
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'bash,view,create,edit,str_replace';
   try {
     for (const t of ['view', 'create', 'edit', 'str_replace']) {
       assert.equal(copilotToolAllowed(t), false, `${t} must stay excluded`);
     }
     assert.equal(copilotToolAllowed('bash'), true, 'the override itself must still work');
   } finally {
-    if (saved !== undefined) process.env.CHISLE_COMPRESS_TOOLS = saved;
-    else delete process.env.CHISLE_COMPRESS_TOOLS;
+    if (saved !== undefined) process.env.PURITANICAL_COMPRESS_TOOLS = saved;
+    else delete process.env.PURITANICAL_COMPRESS_TOOLS;
   }
 });
 
 test('Copilot: processPayload never compresses a view payload, override or not', () => {
-  const saved = process.env.CHISLE_COMPRESS_TOOLS;
-  process.env.CHISLE_COMPRESS_TOOLS = 'view';
+  const saved = process.env.PURITANICAL_COMPRESS_TOOLS;
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'view';
   try {
     assert.equal(processPayload(copilotPayload({ toolName: 'view' }), 'on'), null);
   } finally {
-    if (saved !== undefined) process.env.CHISLE_COMPRESS_TOOLS = saved;
-    else delete process.env.CHISLE_COMPRESS_TOOLS;
+    if (saved !== undefined) process.env.PURITANICAL_COMPRESS_TOOLS = saved;
+    else delete process.env.PURITANICAL_COMPRESS_TOOLS;
   }
 });
