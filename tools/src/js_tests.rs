@@ -71,6 +71,9 @@ fn escaped_lone_surrogates_parse_and_print_back() {
         "each lone surrogate is one unit"
     );
     assert_eq!(lossy(v["t"].as_str().unwrap()), "a\u{fffd}b\u{fffd}");
+    let ordinary = r#""\u00e9""#;
+    assert_eq!(keep_lone(ordinary).as_deref(), Some(ordinary));
+    assert_eq!(parse(ordinary), "é");
     assert_eq!(
         keep_lone("\"\u{10f800}\""),
         None,
