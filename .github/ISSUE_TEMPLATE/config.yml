@@ -10,7 +10,7 @@ blank_issues_enabled: true
 contact_links:
   - name: Question or install help
     url: https://github.com/JayPokale/Chisle/discussions/categories/q-a
-    about: Not sure why Chisle isn't firing for your agent, or how to configure it? Ask here — answers get marked and stay findable.
+    about: Not sure why Puritanical isn't firing for your agent, or how to configure it? Ask here — answers get marked and stay findable.
   - name: Idea or feature discussion
     url: https://github.com/JayPokale/Chisle/discussions/categories/ideas
     about: Float an idea before it's a concrete request. Well-formed proposals can still go straight to a feature request issue.

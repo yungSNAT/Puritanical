@@ -38,8 +38,8 @@ each cell is one answer. Score with `puritanical-tools pooled` (pooled ratio of 
 95% bootstrap).
 
 ```bash
-node benchmarks/run-ablation.js <dir> 2 4 vanilla caveman=<SKILL.md> ponytail=<SKILL.md> chisle=skills/chisle/SKILL.md
-MODEL=claude-sonnet-5-5 node benchmarks/run-ablation.js <dir> 2 4 vanilla chisle=skills/chisle/SKILL.md
+node benchmarks/run-ablation.js <dir> 2 4 vanilla caveman=<SKILL.md> ponytail=<SKILL.md> chisle=skills/puritanical/SKILL.md
+MODEL=claude-sonnet-5-5 node benchmarks/run-ablation.js <dir> 2 4 vanilla chisle=skills/puritanical/SKILL.md
 bash benchmarks/run-live.sh claude-haiku-4-5-20251001 benchmarks/results/<dir>/default-s1
 ARMS=vanilla,caveman,ponytail,chisle cargo run --quiet --locked --manifest-path tools/Cargo.toml -- pooled benchmarks/results/raw-nov/*/
 ```

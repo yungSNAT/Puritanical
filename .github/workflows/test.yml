@@ -52,7 +52,7 @@ jobs:
           path: coverage.lcov
           if-no-files-found: error
       - name: Lint shell scripts
-        run: bash -n hooks/chisle-statusline.sh && bash -n install.sh
+        run: bash -n hooks/puritanical-statusline.sh && bash -n install.sh
       - name: Installer smoke test
         run: node bin/install.js --list && node bin/install.js --help
       # The required gate for the generated files. rustup installs the
@@ -91,7 +91,7 @@ jobs:
           name: node-coverage
       - name: Check the report contains production lines
         run: |
-          for source in bin/install.js hooks/chisle-activate.js pi-extension/index.js .opencode/plugins/chisle.mjs; do
+          for source in bin/install.js hooks/puritanical-activate.js pi-extension/index.js .opencode/plugins/puritanical.mjs; do
             grep -Fx "SF:$source" coverage.lcov
           done
 

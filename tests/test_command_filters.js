@@ -7,8 +7,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { filterCommand, kindsFor } = require('../hooks/chisle-command-filters');
-const { processPayload, commandOf } = require('../hooks/chisle-compress-output');
+const { filterCommand, kindsFor } = require('../hooks/puritanical-command-filters');
+const { processPayload, commandOf } = require('../hooks/puritanical-compress-output');
 
 const GIT_STATUS = `On branch main
 Changes not staged for commit:
@@ -315,14 +315,14 @@ test('no filtering: unknown commands, rtk, and pipes into anything but head/tail
 });
 
 test('hook: small Bash output is filtered via tool_input.command', () => {
-  const prev = process.env.CHISLE_COMPRESS_FILTERS;
-  delete process.env.CHISLE_COMPRESS_FILTERS;
+  const prev = process.env.PURITANICAL_COMPRESS_FILTERS;
+  delete process.env.PURITANICAL_COMPRESS_FILTERS;
   const payload = { tool_name: 'Bash', tool_input: { command: 'git status' }, tool_response: { stdout: GIT_STATUS, stderr: '' } };
   const out = processPayload(payload, 'on');
   assert.ok(GIT_STATUS.length < 1024 && out && !out.includes('(use "git') && out.includes('?? src/b.js'));
-  process.env.CHISLE_COMPRESS_FILTERS = '0';
+  process.env.PURITANICAL_COMPRESS_FILTERS = '0';
   assert.equal(processPayload(payload, 'on'), null);
-  if (prev === undefined) delete process.env.CHISLE_COMPRESS_FILTERS; else process.env.CHISLE_COMPRESS_FILTERS = prev;
+  if (prev === undefined) delete process.env.PURITANICAL_COMPRESS_FILTERS; else process.env.PURITANICAL_COMPRESS_FILTERS = prev;
 });
 
 test('commandOf reads object and JSON-string args, rejects junk', () => {

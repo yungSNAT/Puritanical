@@ -11,7 +11,7 @@ const {
 const fs = require('fs');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
 
-const { VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText, getDefaultMode } = require('../hooks/chisle-config');
+const { VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readSettingsText, getDefaultMode } = require('../hooks/puritanical-config');
 const { symlinkSkip } = require('./fixtures/symlinks');
 
 isolateWorkingDirectory();
@@ -38,7 +38,7 @@ test('VALID_MODES contains on and off', () => {
 test('safeWriteFlag writes and readFlag reads back', () => {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const flagPath = under(dir, '.chisle-active');
+  const flagPath = under(dir, '.puritanical-active');
   safeWriteFlag(flagPath, 'on');
   assert.equal(readFlag(flagPath), 'on');
 });
@@ -50,7 +50,7 @@ test('readFlag returns null for missing file', () => {
 test('readFlag returns null for unknown mode', () => {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const flagPath = under(dir, '.chisle-active');
+  const flagPath = under(dir, '.puritanical-active');
   writeText(flagPath, 'wenyan-ultra', { mode: 0o600 });
   assert.equal(readFlag(flagPath), null);
 });
@@ -58,7 +58,7 @@ test('readFlag returns null for unknown mode', () => {
 test('readFlag returns null for symlink', { skip: symlinkSkip }, () => {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const flagPath = under(dir, '.chisle-active');
+  const flagPath = under(dir, '.puritanical-active');
   const target = under(dir, 'target');
   writeText(target, 'on', { mode: 0o600 });
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
@@ -69,7 +69,7 @@ test('readFlag returns null for symlink', { skip: symlinkSkip }, () => {
 test('readFlag returns null for oversized file', () => {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const flagPath = under(dir, '.chisle-active');
+  const flagPath = under(dir, '.puritanical-active');
   writeText(flagPath, 'on' + 'x'.repeat(100), { mode: 0o600 });
   assert.equal(readFlag(flagPath), null);
 });
@@ -77,7 +77,7 @@ test('readFlag returns null for oversized file', () => {
 test('safeWriteFlag refuses to overwrite a symlink', { skip: symlinkSkip }, () => {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const flagPath = under(dir, '.chisle-active');
+  const flagPath = under(dir, '.puritanical-active');
   const target = under(dir, 'target');
   writeText(target, '', { mode: 0o600 });
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
@@ -114,13 +114,13 @@ test('settings reads accept user-managed dotfile links', { skip: symlinkSkip }, 
 test('flag writes accept a configured directory link to a user-owned directory', { skip: symlinkSkip }, () => {
   makeDir('state');
   fs.symlinkSync('state', 'linked-state', 'dir');
-  const flag = absolutePath('linked-state', '.chisle-active');
+  const flag = absolutePath('linked-state', '.puritanical-active');
   // Windows accepts linked state only under the configured home.
   const previous = process.env.USERPROFILE;
   try {
     if (process.platform === 'win32') process.env.USERPROFILE = process.cwd();
     safeWriteFlag(flag, 'on');
-    assert.equal(readText('state/.chisle-active'), 'on');
+    assert.equal(readText('state/.puritanical-active'), 'on');
   } finally {
     if (previous === undefined) delete process.env.USERPROFILE;
     else process.env.USERPROFILE = previous;
@@ -133,49 +133,49 @@ test('systems without a user ID limit linked state directories to the home', { s
   fs.symlinkSync('home', 'in-home', 'dir');
   fs.symlinkSync('outside', 'out-of-home', 'dir');
   // Exercise the platform fallback in a child, without changing the test runner.
-  const config = require.resolve('../hooks/chisle-config');
+  const config = require.resolve('../hooks/puritanical-config');
   const script = [
     'Object.defineProperty(process, "getuid", { value: undefined });',
     'const { safeWriteFlag } = require(process.argv[1]);',
-    'safeWriteFlag("in-home/.chisle-active", "on");',
-    'safeWriteFlag("out-of-home/.chisle-active", "off");',
+    'safeWriteFlag("in-home/.puritanical-active", "on");',
+    'safeWriteFlag("out-of-home/.puritanical-active", "off");',
   ].join('\n');
   execFileSync(process.execPath, ['-e', script, config], {
     env: { ...process.env, HOME: absolutePath('home'), USERPROFILE: absolutePath('home') },
   });
-  assert.equal(readText('home/.chisle-active'), 'on');
-  assert.equal(exists('outside/.chisle-active'), false);
+  assert.equal(readText('home/.puritanical-active'), 'on');
+  assert.equal(exists('outside/.puritanical-active'), false);
 });
 
 // ── getDefaultMode ───────────────────────────────────────────────────────────
 
 test('getDefaultMode returns on by default', () => {
-  const saved = process.env.CHISLE_DEFAULT_MODE;
-  delete process.env.CHISLE_DEFAULT_MODE;
+  const saved = process.env.PURITANICAL_DEFAULT_MODE;
+  delete process.env.PURITANICAL_DEFAULT_MODE;
   // Only validates when no user config file exists (CI / clean env)
   const mode = getDefaultMode();
   assert.ok(VALID_MODES.includes(mode));
-  if (saved !== undefined) process.env.CHISLE_DEFAULT_MODE = saved;
+  if (saved !== undefined) process.env.PURITANICAL_DEFAULT_MODE = saved;
 });
 
-test('getDefaultMode respects CHISLE_DEFAULT_MODE env var', () => {
-  process.env.CHISLE_DEFAULT_MODE = 'off';
+test('getDefaultMode respects PURITANICAL_DEFAULT_MODE env var', () => {
+  process.env.PURITANICAL_DEFAULT_MODE = 'off';
   assert.equal(getDefaultMode(), 'off');
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   assert.equal(getDefaultMode(), 'on');
-  delete process.env.CHISLE_DEFAULT_MODE;
+  delete process.env.PURITANICAL_DEFAULT_MODE;
 });
 
-test('getDefaultMode ignores invalid CHISLE_DEFAULT_MODE', () => {
-  process.env.CHISLE_DEFAULT_MODE = 'wenyan-ultra';
+test('getDefaultMode ignores invalid PURITANICAL_DEFAULT_MODE', () => {
+  process.env.PURITANICAL_DEFAULT_MODE = 'wenyan-ultra';
   const mode = getDefaultMode();
   assert.ok(VALID_MODES.includes(mode));
-  delete process.env.CHISLE_DEFAULT_MODE;
+  delete process.env.PURITANICAL_DEFAULT_MODE;
 });
 
 // ── major-version update notice ──────────────────────────────────────────────
 
-const { majorOf, majorUpdateNotice, latestVersion } = require('../hooks/chisle-activate');
+const { majorOf, majorUpdateNotice, latestVersion } = require('../hooks/puritanical-activate');
 
 test('update lookup refreshes stale cache and reuses a fresh result offline', async (t) => {
   const dir = absolutePath('hook');
@@ -183,7 +183,7 @@ test('update lookup refreshes stale cache and reuses a fresh result offline', as
   const cache = under(dir, 'update.json');
   safeWriteFlag(cache, JSON.stringify({ checkedAt: 0, latest: '1.0.0' }));
   const fetchMock = t.mock.method(globalThis, 'fetch', async () => ({
-    ok: true, json: async () => ({ version: '4.0.0' }),
+    ok: true, json: async () => ({ tag_name: 'v4.0.0' }),
   }));
   assert.equal(await latestVersion(cache), '4.0.0');
   assert.equal(readJsonFile(cache).latest, '4.0.0');
@@ -202,7 +202,7 @@ test('update lookup bounds the response body and preserves cache on failure', as
   fetchMock.mock.mockImplementation(async (_url, { signal }) => ({
     ok: true,
     json: () => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => resolve({ version: '99.0.0' }), 3000);
+      const timer = setTimeout(() => resolve({ tag_name: 'v99.0.0' }), 3000);
       signal.addEventListener('abort', () => {
         clearTimeout(timer);
         reject(signal.reason);
@@ -232,7 +232,7 @@ test('notice fires only on a major jump', () => {
   assert.match(majorUpdateNotice('1.0.0', '4.0.0-rc.1'), /4\.0\.0-rc\.1/);
 });
 
-test('requiring chisle-activate has no side effects', () => {
+test('requiring puritanical-activate has no side effects', () => {
   // If the require.main guard is broken this test file would have already
   // emitted the ruleset or called process.exit before reaching here.
   assert.ok(true);
@@ -244,7 +244,7 @@ test('requiring chisle-activate has no side effects', () => {
 // most of what the compressor saved.
 
 const { execFileSync } = require('child_process');
-const ACTIVATE = under(__dirname, '..', 'hooks', 'chisle-activate.js');
+const ACTIVATE = under(__dirname, '..', 'hooks', 'puritanical-activate.js');
 
 function activate(stdin, extraEnv = {}) {
   const dir = absolutePath('hook');
@@ -252,7 +252,7 @@ function activate(stdin, extraEnv = {}) {
   try {
     return execFileSync(process.execPath, [ACTIVATE], {
       input: stdin,
-      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: 'on', CHISLE_UPDATE_CHECK: '0', ...extraEnv },
+      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, PURITANICAL_DEFAULT_MODE: 'on', PURITANICAL_UPDATE_CHECK: '0', ...extraEnv },
       encoding: 'utf8',
       timeout: 5000,
     });
@@ -264,12 +264,12 @@ function activate(stdin, extraEnv = {}) {
 test('REGRESSION #2: startup gets the full ruleset', () => {
   const out = activate(JSON.stringify({ source: 'startup' }));
   assert.ok(out.length > 2000, `expected full ruleset, got ${out.length} chars`);
-  assert.match(out, /CHISLE ACTIVE/);
+  assert.match(out, /PURITANICAL ACTIVE/);
 });
 
 test('startup honours disabled mode and explains a legacy intensity setting', () => {
-  assert.equal(activate('{}', { CHISLE_DEFAULT_MODE: 'off' }), 'OK');
-  assert.match(activate('{}', { CHISLE_DEFAULT_MODE: 'lite' }), /CHISLE NOTE: .*lite.*CHISLE_DEFAULT_MODE/);
+  assert.equal(activate('{}', { PURITANICAL_DEFAULT_MODE: 'off' }), 'OK');
+  assert.match(activate('{}', { PURITANICAL_DEFAULT_MODE: 'lite' }), /PURITANICAL NOTE: .*lite.*PURITANICAL_DEFAULT_MODE/);
 });
 
 test('REGRESSION #2: resume/clear/compact do not re-inject the ruleset', () => {
@@ -277,7 +277,7 @@ test('REGRESSION #2: resume/clear/compact do not re-inject the ruleset', () => {
     const out = activate(JSON.stringify({ source }));
     assert.ok(out.length < 400, `${source} re-injected ${out.length} chars`);
     // still has to announce the mode, or the session silently loses it
-    assert.match(out, /CHISLE ACTIVE/);
+    assert.match(out, /PURITANICAL ACTIVE/);
   }
 });
 
@@ -318,28 +318,28 @@ test('the changelog documents the shipped version', () => {
 // A lite/full/ultra setting from before 3.0.0 must not break anything, and must
 // not be ignored in silence either.
 
-const { legacySetting } = require('../hooks/chisle-config');
+const { legacySetting } = require('../hooks/puritanical-config');
 
 test('a legacy level setting still resolves to on, not off', () => {
   for (const stale of ['lite', 'full', 'ultra']) {
-    process.env.CHISLE_DEFAULT_MODE = stale;
+    process.env.PURITANICAL_DEFAULT_MODE = stale;
     assert.equal(getDefaultMode(), 'on', `${stale} should fall through to on`);
   }
-  delete process.env.CHISLE_DEFAULT_MODE;
+  delete process.env.PURITANICAL_DEFAULT_MODE;
 });
 
 test('a legacy level setting is detected so it can be reported', () => {
-  process.env.CHISLE_DEFAULT_MODE = 'ultra';
+  process.env.PURITANICAL_DEFAULT_MODE = 'ultra';
   const l = legacySetting();
   assert.equal(l.value, 'ultra');
-  assert.equal(l.source, 'CHISLE_DEFAULT_MODE');
-  delete process.env.CHISLE_DEFAULT_MODE;
+  assert.equal(l.source, 'PURITANICAL_DEFAULT_MODE');
+  delete process.env.PURITANICAL_DEFAULT_MODE;
 });
 
 test('a current setting reports no legacy value', () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   assert.equal(legacySetting(), null);
-  delete process.env.CHISLE_DEFAULT_MODE;
+  delete process.env.PURITANICAL_DEFAULT_MODE;
 });
 
 // ── sections config: getSections / filterSections ────────────────────────────
@@ -347,15 +347,15 @@ test('a current setting reports no legacy value', () => {
 // keeping code rules (and vice versa). Config-file only, no env override.
 // Absent/malformed/non-boolean always falls back to enabled; never throws.
 
-const { getSections, filterSections, PROSE_HEADINGS, CODE_HEADINGS } = require('../hooks/chisle-config');
+const { getSections, filterSections, PROSE_HEADINGS, CODE_HEADINGS } = require('../hooks/puritanical-config');
 
 function withSectionsConfig(sectionsValue, fn) {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const chisleDir = under(dir, 'chisle');
-  makeDir(chisleDir, { recursive: true });
+  const puritanicalDir = under(dir, 'puritanical');
+  makeDir(puritanicalDir, { recursive: true });
   if (sectionsValue !== undefined) {
-    writeText(under(chisleDir, 'config.json'), JSON.stringify({ defaultMode: 'on', sections: sectionsValue }));
+    writeText(under(puritanicalDir, 'config.json'), JSON.stringify({ defaultMode: 'on', sections: sectionsValue }));
   }
   const saved = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = dir;
@@ -403,9 +403,9 @@ test('getSections: malformed sections values fall back to enabled, never throw',
 test('getSections: malformed config.json (invalid JSON) falls back to enabled, never throws', () => {
   const dir = absolutePath('hook');
   makeDir('hook');
-  const chisleDir = under(dir, 'chisle');
-  makeDir(chisleDir, { recursive: true });
-  writeText(under(chisleDir, 'config.json'), '{ not json');
+  const puritanicalDir = under(dir, 'puritanical');
+  makeDir(puritanicalDir, { recursive: true });
+  writeText(under(puritanicalDir, 'config.json'), '{ not json');
   const saved = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = dir;
   try {
@@ -417,7 +417,7 @@ test('getSections: malformed config.json (invalid JSON) falls back to enabled, n
   }
 });
 
-const SKILL_BODY = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md')).replace(/^---[\s\S]*?---\s*/, '');
+const SKILL_BODY = readText(under(__dirname, '..', 'skills', 'puritanical', 'SKILL.md')).replace(/^---[\s\S]*?---\s*/, '');
 const ALWAYS_ON_HEADINGS = [
   'Persistence', 'Thinking Is Billed Too', 'Auto-Clarity', 'When NOT to be lazy', 'Boundaries',
 ];
@@ -470,9 +470,9 @@ test('activate: no config file → full ruleset, all headings present (default u
 test('activate: config file present but no sections key → full ruleset (default unchanged)', () => {
   const dir = absolutePath('xdg');
   makeDir('xdg');
-  const chisleDir = under(dir, 'chisle');
-  makeDir(chisleDir, { recursive: true });
-  writeText(under(chisleDir, 'config.json'), JSON.stringify({ defaultMode: 'on' }));
+  const puritanicalDir = under(dir, 'puritanical');
+  makeDir(puritanicalDir, { recursive: true });
+  writeText(under(puritanicalDir, 'config.json'), JSON.stringify({ defaultMode: 'on' }));
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) {
@@ -486,9 +486,9 @@ test('activate: config file present but no sections key → full ruleset (defaul
 test('activate: sections.prose false → emitted ruleset drops prose headings only', () => {
   const dir = absolutePath('xdg');
   makeDir('xdg');
-  const chisleDir = under(dir, 'chisle');
-  makeDir(chisleDir, { recursive: true });
-  writeText(under(chisleDir, 'config.json'), JSON.stringify({ sections: { prose: false } }));
+  const puritanicalDir = under(dir, 'puritanical');
+  makeDir(puritanicalDir, { recursive: true });
+  writeText(under(puritanicalDir, 'config.json'), JSON.stringify({ sections: { prose: false } }));
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of PROSE_HEADINGS) assert.ok(!out.includes(`## ${h}`), `still has ${h}`);
@@ -501,9 +501,9 @@ test('activate: sections.prose false → emitted ruleset drops prose headings on
 test('activate: malformed sections value falls back to enabled, does not throw', () => {
   const dir = absolutePath('xdg');
   makeDir('xdg');
-  const chisleDir = under(dir, 'chisle');
-  makeDir(chisleDir, { recursive: true });
-  writeText(under(chisleDir, 'config.json'), JSON.stringify({ sections: 'nope' }));
+  const puritanicalDir = under(dir, 'puritanical');
+  makeDir(puritanicalDir, { recursive: true });
+  writeText(under(puritanicalDir, 'config.json'), JSON.stringify({ sections: 'nope' }));
   try {
     const out = activate(JSON.stringify({ source: 'startup' }), { XDG_CONFIG_HOME: dir });
     for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON_HEADINGS]) {
@@ -521,7 +521,7 @@ test('activate: malformed sections value falls back to enabled, does not throw',
 // it — the section just keeps shipping, with no error and no failing assertion,
 // because every other test checks "is it absent" against the same stale string.
 test('every PROSE/CODE heading constant still exists in SKILL.md', () => {
-  const md = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md'));
+  const md = readText(under(__dirname, '..', 'skills', 'puritanical', 'SKILL.md'));
   const present = [...md.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
   for (const h of [...PROSE_HEADINGS, ...CODE_HEADINGS]) {
     assert.ok(present.includes(h),
@@ -537,7 +537,7 @@ test('every SKILL.md heading is classified: prose, code, or deliberately always-
     'Persistence', 'Thinking Is Billed Too', 'Auto-Clarity',
     'When NOT to be lazy', 'Boundaries',
   ];
-  const md = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md'));
+  const md = readText(under(__dirname, '..', 'skills', 'puritanical', 'SKILL.md'));
   const classified = new Set([...PROSE_HEADINGS, ...CODE_HEADINGS, ...ALWAYS_ON]);
   for (const m of md.matchAll(/^## (.+)$/gm)) {
     const h = m[1].trim();
@@ -549,7 +549,7 @@ test('every SKILL.md heading is classified: prose, code, or deliberately always-
 // filterSections splits on /^## /m, so a "## " line inside a fenced code block
 // would cut the fence in half and emit broken markdown into the model's context.
 test('no SKILL.md heading-like line hides inside a fenced code block', () => {
-  const md = readText(under(__dirname, '..', 'skills', 'chisle', 'SKILL.md'));
+  const md = readText(under(__dirname, '..', 'skills', 'puritanical', 'SKILL.md'));
   let inFence = false;
   md.split('\n').forEach((line, i) => {
     if (line.trim().startsWith('```')) { inFence = !inFence; return; }
@@ -561,11 +561,11 @@ test('no SKILL.md heading-like line hides inside a fenced code block', () => {
 
 // ── Automatic output-style detection (#17) ──────────────────────────────────
 // Claude Code's output styles govern prose structure, so an active style and
-// Chisle's prose section contradict each other (#15). `outputStyle` is a
+// Puritanical's prose section contradict each other (#15). `outputStyle` is a
 // documented settings key and `/output-style` persists it to
 // .claude/settings.local.json, so the active style is readable even though the
 // SessionStart payload does not carry it.
-const { getActiveOutputStyle, resolveSections } = require('../hooks/chisle-config');
+const { getActiveOutputStyle, resolveSections } = require('../hooks/puritanical-config');
 
 function settingsText(value) {
   return typeof value === 'string' ? value : JSON.stringify(value);
@@ -576,7 +576,7 @@ function styleFixture() {
   makeDir('style');
   makeDir(under(root, 'proj', '.claude'), { recursive: true });
   makeDir(under(root, 'home', '.claude'), { recursive: true });
-  makeDir(under(root, 'cfg', 'chisle'), { recursive: true });
+  makeDir(under(root, 'cfg', 'puritanical'), { recursive: true });
   return {
     root,
     cwd: under(root, 'proj'),
@@ -651,18 +651,18 @@ test('resolveSections: an explicit sections.prose always beats detection', () =>
     const r = () => resolveSections({ cwd: f.cwd, claudeDir: f.claudeDir });
 
     // The important one: a user who asked for prose rules keeps them.
-    writeText('style/cfg/chisle/config.json', settingsText({ sections: { prose: true } }));
+    writeText('style/cfg/puritanical/config.json', settingsText({ sections: { prose: true } }));
     assert.equal(r().prose, true, 'explicit true must survive an active style');
 
-    writeText('style/cfg/chisle/config.json', settingsText({ sections: { prose: false } }));
+    writeText('style/cfg/puritanical/config.json', settingsText({ sections: { prose: false } }));
     assert.equal(r().prose, false);
 
     // Only `code` set: prose is still unset, so detection applies.
-    writeText('style/cfg/chisle/config.json', settingsText({ sections: { code: false } }));
+    writeText('style/cfg/puritanical/config.json', settingsText({ sections: { code: false } }));
     assert.deepEqual(r(), { prose: false, code: false, outputStyle: 'Explanatory' });
 
     // Non-boolean is not "explicit" — it falls back and detection applies.
-    writeText('style/cfg/chisle/config.json', settingsText({ sections: { prose: 'yes' } }));
+    writeText('style/cfg/puritanical/config.json', settingsText({ sections: { prose: 'yes' } }));
     assert.equal(r().prose, false);
   } finally {
     if (saved === undefined) delete process.env.XDG_CONFIG_HOME;

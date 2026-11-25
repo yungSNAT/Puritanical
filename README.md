@@ -37,7 +37,7 @@ For one Claude Code session, run `claude --plugin-dir .` from the clone. For a p
 
 Ask the agent to ‘fix pagination dropping the first item on page 2’. If the reported case and nearby page boundaries already work, it should explain what it checked and leave the files alone. If the bug persists, it should fix the calculation shared by the affected callers. Review the evidence and the diff.
 
-The Claude Code plugin keeps its upstream command names. Use `/chisle off` to pause it and `/chisle` to resume. Its review skill looks for unnecessary code in a diff. [Commands and configuration](docs/usage.md#usage) · [Review skill](skills/chisle-review/SKILL.md)
+Use `/puritanical off` to pause the Claude Code plugin and `/puritanical` to resume it. Its review skill looks for unnecessary code in a diff. [Commands and configuration](docs/usage.md#usage) · [Review skill](skills/puritanical-review/SKILL.md)
 
 ## The rules
 
@@ -46,7 +46,7 @@ The Claude Code plugin keeps its upstream command names. Use `/chisle off` to pa
 3. Follow the caller’s error policy. A best-effort CSV import can keep valid rows and report skips. An atomic inventory update must reject an invalid batch before changing any stock.
 4. Keep input validation, security, accessibility and error handling that prevents data loss. Keep the explanation short enough to read and complete enough to act on.
 
-[Full coding rules](skills/chisle/SKILL.md)
+[Full coding rules](skills/puritanical/SKILL.md)
 
 ## Benchmarks
 
@@ -64,7 +64,7 @@ The difference in passes came from the already-fixed pagination task. Puritanica
 
 ## Development
 
-Edit the [canonical skill](skills/chisle/SKILL.md), then run `npm run build:rules` to regenerate its copies. Run the following checks from the clone.
+Edit the [canonical skill](skills/puritanical/SKILL.md), then run `npm run build:rules` to regenerate its copies. Run the following checks from the clone.
 
 ```powershell
 npm test

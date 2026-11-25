@@ -5,7 +5,7 @@ ruleset changes how often the model is **right**, because "44% of the tokens" is
 only interesting if the answer still lands.
 
 Two arms, one variable. Both get a byte-identical prompt and model; `chisle`
-additionally gets `skills/chisle/SKILL.md` (frontmatter stripped) appended as a
+additionally gets `skills/puritanical/SKILL.md` (frontmatter stripped) appended as a
 system prompt — exactly what the shipped skill injects. Personal config, plugins
 and `CLAUDE.md` are neutralised via an isolated `HOME` + config dir holding only
 credentials.

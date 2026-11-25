@@ -1,0 +1,797 @@
+#!/usr/bin/env node
+/* global module, process, require -- Node.js runtime */
+// puritanical — PostToolUse hook: tool-output compression (the input axis).
+//
+// Prompt-side rules shrink what the agent WRITES; this shrinks what it READS.
+// Oversized tool results (Bash dumps, subagent reports, web fetches) get their
+// repetitive middle elided — head kept (command context), tail kept (results/
+// errors), error-looking lines salvaged from the cut — and the trimmed version
+// replaces what the model sees. Deterministic, zero LLM, zero network. Small
+// outputs pass through untouched.
+//
+// Two harnesses call into this same core:
+//   - Claude Code / Pi: `updatedToolOutput`, snake_case payload
+//     (tool_name, tool_response, session_id, tool_use_id), gated behind the
+//     /puritanical on/off flag file (see puritanical-config.js: getDefaultMode/readFlag).
+//   - GitHub Copilot CLI: `modifiedResult.textResultForLlm`, camelCase flat
+//     payload (toolName, toolResult.textResultForLlm, sessionId). Copilot has
+//     no /puritanical-equivalent mode toggle (no UserPromptSubmit-driven flag), so
+//     compression is always-on for Copilot once the hook is installed —
+//     exactly like the static ruleset Copilot already gets unconditionally
+//     (see README: "the always-on ruleset still ships to every other agent").
+//     PURITANICAL_COMPRESS=0 is still honored as the one kill switch for both.
+//
+// Correctness guardrails (why this never touches Read/Edit/Write):
+//   - Read output feeds later Edit old_string matching — eliding it makes the
+//     model edit against text it never saw. Allowlist below, never a blocklist.
+//   - Error lines in the elided middle are salvaged, capped, and kept verbatim.
+//   - If compression doesn't shrink the output, the original is kept.
+//   - Never throws: a broken hook must not break the tool pipeline.
+//
+// Two tiers, applied in order:
+//   scrub  (output > 1k)  — strip ANSI escapes, minify pretty-printed JSON,
+//                           collapse blank-line runs, collapse ≥4 identical
+//                           consecutive lines to one + "[repeated N×]" (all
+//                           lossless), and collapse ≥6 consecutive passing-test
+//                           or progress lines to first 2 + count + last 1. The
+//                           last drops only which tests passed; failures and
+//                           error-like lines always break a run.
+//   elide  (output > threshold) — head + tail + error salvage, as above.
+// Plus dedup: a tool output byte-identical to that tool's immediately previous
+// output is replaced by a short marker — the content is already in context.
+//
+// Compression follows the /puritanical flag for Claude/Pi (off → untouched); it is
+// unconditional for Copilot (see above). Tunables via env, shared across all
+// three harnesses:
+//   PURITANICAL_COMPRESS=0                 — kill switch
+//   PURITANICAL_COMPRESS_SCRUB=0           — disable the lossless scrub tier
+//   PURITANICAL_COMPRESS_DEDUP=0           — disable duplicate-output markers
+//   PURITANICAL_COMPRESS_MAX_CHARS         — outputs at/under this size are not elided
+//   PURITANICAL_COMPRESS_HEAD_LINES        — lines kept from the top
+//   PURITANICAL_COMPRESS_TAIL_LINES        — lines kept from the bottom
+//   PURITANICAL_COMPRESS_TOOLS=Bash,Grep   — override the tool allowlist (both harnesses)
+//   PURITANICAL_COMPRESS_SPILL=0           — elide without writing the recovery copy
+//   PURITANICAL_COMPRESS_FILTERS=0         — disable command-aware filters
+//
+// Command-aware filters (puritanical-command-filters.js) run first, at any size,
+// when the shell command is known: git hints, passing tests, install progress.
+// On Claude Code, puritanical-run.js runs the same pipeline inside a PreToolUse
+// wrapper so failed commands are filtered too (PURITANICAL_COMPRESS_WRAP).
+//
+// Savings accrue in <stateDir>/.puritanical-compress-stats.json for the statusline
+// (Claude/Pi: <claudeDir>; Copilot: <copilotDir>, see puritanical-config.js).
+// Elided originals spill to <stateDir>/puritanical-spill/ so the dropped middle can
+// be grepped back instead of re-running the command; the newest 40 are kept.
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { getClaudeDir, getCopilotDir, getOpencodeStateDir, readFlag, readRegularFile, getDefaultMode,
+  secureDirectory, safeAtomicWrite } = require('./puritanical-config');
+const { filterCommand, ANSI_RE } = require('./puritanical-command-filters');
+
+// One threshold. Env overrides all.
+// These are the values the old 'full' level used — the default,
+// and the only one the published benchmarks ever ran at.
+const THRESHOLDS = { maxChars: 8000, headLines: 60, tailLines: 40 };
+
+// Tools whose output is safe to elide. Read/Edit/Write are absent on purpose:
+// their output feeds exact-match edits. mcp__* tools are allowed unless
+// unsafeToolName() marks them as file or source readers.
+const SAFE_TOOLS = ['Bash', 'Agent', 'WebFetch', 'WebSearch', 'Grep', 'Glob'];
+
+// The correctness invariant, enforced rather than merely defaulted: these tools'
+// output feeds later exact-match edits, so eliding it makes the model edit text
+// it never saw. PURITANICAL_COMPRESS_TOOLS is an override for the *allowlist*, not a
+// way to switch this off — the Pi extension (NEVER_COMPRESS) and the OpenCode
+// path (UNSAFE_TOOLS_OPENCODE) have always checked it first, and this is the
+// same guard for the Claude/Pi hook payloads.
+const NEVER_COMPRESS = ['read', 'edit', 'write', 'multiedit', 'notebookedit', 'notebookread'];
+
+// Copilot CLI's own runtime tool names (lowercase, no mcp__ prefix scheme).
+// Same allowlist rule as SAFE_TOOLS: Copilot's Read/Edit/Write equivalents
+// are `view`/`create`/`edit` and are deliberately absent here too. Verified
+// against Copilot CLI's real tool set, not guessed — see the accompanying PR
+// description for the live-verification evidence (Beyin puritanical-port project).
+const SAFE_TOOLS_COPILOT = ['bash', 'powershell', 'grep', 'glob', 'web_fetch', 'web_search', 'task'];
+// Copilot's Read/Edit/Write family, hard-blocked for the same reason as
+// NEVER_COMPRESS above — not merely absent from the allowlist.
+const NEVER_COMPRESS_COPILOT = ['view', 'create', 'edit', 'str_replace', 'insert'];
+
+// MCP and other non-built-in tool names whose output is file or source content
+// the model may quote back or edit against: file readers, LSP tools and
+// code-host file and code-search tools (get_file_contents, search_code).
+// Matched anywhere in the name, server part included, so it errs towards not
+// compressing. One guard for every path: the Claude/Pi hook's mcp__ tools, the
+// stdio MCP proxy, and names allowlisted by PURITANICAL_COMPRESS_TOOLS (Copilot,
+// OpenCode), which cannot override it.
+const UNSAFE_TOOL_NAME_RE = /read|view|file|edit|write|patch|replace|insert|lsp|symbol|definition|declaration|implementation|reference|hover|content|source|blob|search_code/i;
+
+const unsafeToolName = name => UNSAFE_TOOL_NAME_RE.test(name);
+
+// Letter/digit boundaries, not \b: `_` is a word char, so \b missed severities
+// inside codes like FATAL_MEMORY_PROBE / APP_ERROR_CODE (#38), and `err!` then
+// a space has no trailing \b at all.
+const SALVAGE_RE = /(?<![A-Za-z0-9])(?:err!|(?:error|fail(ed|ure|ing)?|exception|traceback|panic|fatal|denied|refused|timed?[ _-]?out|assert(ion)?|segfault|npe|undefined reference|cannot find|not found|warning)(?![A-Za-z0-9]))/i;
+const MAX_SALVAGED = 12;      // error lines rescued from the elided middle
+const MAX_SALVAGE_LINE = 300; // per-line char cap on salvaged lines
+
+function splitsSurrogatePair(text, index) {
+  if (index <= 0 || index >= text.length) return false;
+  const before = text.charCodeAt(index - 1);
+  const after = text.charCodeAt(index);
+  return before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF;
+}
+
+function safePrefix(text, maxChars) {
+  let end = Math.max(0, Math.min(text.length, maxChars));
+  if (splitsSurrogatePair(text, end)) end -= 1;
+  return text.slice(0, end);
+}
+
+function safeSuffix(text, maxChars) {
+  let start = Math.max(0, text.length - Math.max(0, maxChars));
+  if (splitsSurrogatePair(text, start)) start += 1;
+  return text.slice(start);
+}
+
+function safeSlice(text, start, end) {
+  let safeStart = Math.max(0, Math.min(text.length, start));
+  let safeEnd = Math.max(safeStart, Math.min(text.length, end));
+  if (splitsSurrogatePair(text, safeStart)) safeStart += 1;
+  if (splitsSurrogatePair(text, safeEnd)) safeEnd -= 1;
+  return text.slice(safeStart, Math.max(safeStart, safeEnd));
+}
+
+function salvageLine(line) {
+  const match = SALVAGE_RE.exec(line.replace(/error-like/gi, 'diagnostic'));
+  if (!match) return null;
+  if (line.length <= MAX_SALVAGE_LINE) return line;
+  const contentLimit = MAX_SALVAGE_LINE - 2;
+  const start = Math.max(0, Math.min(
+    match.index - Math.floor((contentLimit - match[0].length) / 2),
+    line.length - contentLimit,
+  ));
+  const end = start + contentLimit;
+  return (start > 0 ? '…' : '') + safeSlice(line, start, end) + (end < line.length ? '…' : '');
+}
+
+function toolAllowed(name) {
+  if (!name || typeof name !== 'string') return false;
+  if (NEVER_COMPRESS.includes(name.toLowerCase()) || unsafeToolName(name)) return false;
+  const list = process.env.PURITANICAL_COMPRESS_TOOLS
+    ? process.env.PURITANICAL_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean)
+    : SAFE_TOOLS;
+  return list.includes(name) || (!process.env.PURITANICAL_COMPRESS_TOOLS && name.startsWith('mcp__'));
+}
+
+// Same override semantics as toolAllowed, against Copilot's tool-name scheme.
+function copilotToolAllowed(name) {
+  if (!name || typeof name !== 'string') return false;
+  if (NEVER_COMPRESS_COPILOT.includes(name.toLowerCase()) || unsafeToolName(name)) return false;
+  const list = process.env.PURITANICAL_COMPRESS_TOOLS
+    ? process.env.PURITANICAL_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean)
+    : SAFE_TOOLS_COPILOT;
+  return list.includes(name);
+}
+
+// OpenCode runtime tool names are lowercase (bash, grep, glob, webfetch, ...).
+// MCP tools use `server_tool`, not Claude's mcp__ prefix; their names do not
+// establish read-only safety, so they require explicit allowlisting.
+// read/edit/write/patch are excluded on purpose: their output feeds exact-match
+// edits, exactly as SAFE_TOOLS omits Read/Edit/Write.
+const SAFE_TOOLS_OPENCODE = ['bash', 'shell', 'grep', 'glob', 'webfetch', 'websearch', 'list'];
+const UNSAFE_TOOLS_OPENCODE = [
+  'read', 'edit', 'write', 'patch', 'apply_patch', 'multiedit',
+  'notebookedit', 'notebookread', 'notebook_write', 'notebook_edit',
+  'create', 'str_replace', 'insert', 'todowrite', 'todoread',
+];
+
+function opencodeToolAllowed(name) {
+  if (!name || typeof name !== 'string') return false;
+  const lower = name.toLowerCase();
+  // Source-bearing and mutating tools are never compressed, even via
+  // PURITANICAL_COMPRESS_TOOLS: their output feeds exact-match edits, an invariant
+  // INSTALL.md promises rather than an overridable default.
+  if (UNSAFE_TOOLS_OPENCODE.includes(lower) || unsafeToolName(name)) return false;
+  if (process.env.PURITANICAL_COMPRESS_TOOLS) {
+    return process.env.PURITANICAL_COMPRESS_TOOLS
+      .split(',').map(s => s.trim()).filter(Boolean).includes(name);
+  }
+  return SAFE_TOOLS_OPENCODE.includes(lower);
+}
+
+function boundForOpencode(text, spillPath, maxChars) {
+  const outputLimit = maxChars || THRESHOLDS.maxChars;
+  if (text.length <= outputLimit) return text;
+  if (outputLimit < 7) return safePrefix(text, outputLimit);
+  const recover = spillPath ? ' Full output: ' + spillPath + ' (grep it, do not re-run)' : '';
+  let marker = '... [puritanical: rebound compressed output to ' +
+    outputLimit.toLocaleString('en-US') + ' chars.' + recover + '] ...';
+  if (marker.length > outputLimit - 2) marker = safePrefix(marker, outputLimit - 7) + '] ...';
+  const middle = [marker];
+  // Keep head/tail context without excluding diagnostics under small bounds.
+  const contextReserve = Math.min(2050, Math.floor(outputLimit / 4));
+  for (const line of text.split('\n')) {
+    if (middle.length > MAX_SALVAGED) break;
+    const candidate = salvageLine(line);
+    if (!candidate) continue;
+    if (middle.join('\n').length + candidate.length + 1 > outputLimit - contextReserve) break;
+    if (!middle.includes(candidate)) middle.push(candidate);
+  }
+  const center = middle.join('\n');
+  const remaining = Math.max(0, outputLimit - center.length - 2);
+  const headChars = Math.ceil(remaining / 2);
+  return safePrefix(text, headChars) + '\n' + center + '\n' + safeSuffix(text, Math.floor(remaining / 2));
+}
+
+// One OpenCode tool_result → replacement string, or null to keep the original.
+// The plugin passes output.output (already a plain string), so no extractText/
+// rebuild dance is needed — just gate on mode/kill-switch/allowlist and reuse
+// the shared scrub+elide core. stateDir keeps spill/recovery beside OpenCode's
+// config (PURITANICAL_STATE_DIR overrides, used by tests).
+//
+// Fires for the common case: outputs under OpenCode's own on-disk store limits
+// (~50 KB / 2000 lines) arrive here FULL, both in tool.execute.after (whose
+// mutation persists to the tool part's state.output) and again, request-time,
+// in experimental.chat.messages.transform. Larger outputs arrive as OpenCode's
+// notice plus a retained tail; the tail still compresses here.
+function opencodeEligible(toolName, text, opts) {
+  return opts.mode !== 'off' && process.env.PURITANICAL_COMPRESS !== '0' && opencodeToolAllowed(toolName) &&
+    typeof text === 'string' && !!text;
+}
+
+// Scrub, then elide when there are more lines than head + tail keep.
+function scrubAndElide(text, limits, spillPath) {
+  let updated = text;
+  if (updated.length > SCRUB_MIN && process.env.PURITANICAL_COMPRESS_SCRUB !== '0') updated = scrub(updated);
+  if (updated.length > limits.maxChars && updated.split('\n').length > limits.headLines + limits.tailLines) {
+    const elided = compress(updated, limits, spillPath);
+    if (elided != null) updated = elided;
+  }
+  return updated;
+}
+
+function compressForOpencode(toolName, text, opts) {
+  opts = opts || {};
+  if (!opencodeEligible(toolName, text, opts)) return null;
+  const stateDir = opts.stateDir || getOpencodeStateDir();
+  const limits = limitsFor();
+  const dup = dedupCheck(toolName, text, opts.sessionId, opts.callId, stateDir, true);
+  if (dup != null && dup.length < text.length) return boundForOpencode(dup, null, limits.maxChars);
+  const filtered = commandFilter(opts.command, text);
+  if (filtered == null && text.length <= SCRUB_MIN && text.length <= limits.maxChars) return null;
+  const spillPath = text.length > limits.maxChars && toolName ? spill(text, toolName, stateDir) : null;
+  const updated = boundForOpencode(scrubAndElide(filtered || text, limits, spillPath), spillPath, limits.maxChars);
+  if (text.length > limits.maxChars) return updated;
+  return text.length - updated.length >= MIN_WIN ? updated : null;
+}
+
+// Copilot CLI's postToolUse payload is flat and camelCase:
+//   { sessionId, timestamp, cwd, toolName, toolArgs,
+//     toolResult: { resultType: "success", textResultForLlm: string } }
+// Detected structurally (no explicit "harness" field exists on either
+// payload shape), by the presence of toolResult.textResultForLlm together
+// with the camelCase toolName — Claude/Pi payloads use tool_name/tool_response
+// and never carry this shape.
+function isCopilotPayload(payload) {
+  return !!(payload && typeof payload.toolName === 'string' &&
+    payload.toolResult && typeof payload.toolResult.textResultForLlm === 'string');
+}
+
+function envInt(value, fallback) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function limitsFor() {
+  const base = THRESHOLDS;
+  return {
+    maxChars: envInt(process.env.PURITANICAL_COMPRESS_MAX_CHARS, base.maxChars),
+    headLines: envInt(process.env.PURITANICAL_COMPRESS_HEAD_LINES, base.headLines),
+    tailLines: envInt(process.env.PURITANICAL_COMPRESS_TAIL_LINES, base.tailLines),
+  };
+}
+
+// Pull a plain-text payload out of tool_response, whatever its shape.
+// Also handles Copilot's already-flat textResultForLlm string unchanged.
+function extractText(response) {
+  if (response == null) return null;
+  if (typeof response === 'string') return response;
+  if (Array.isArray(response)) {
+    const parts = response.map(b => (b && typeof b.text === 'string') ? b.text : extractText(b && b.content)).filter(Boolean);
+    return parts.length ? parts.join('\n') : null;
+  }
+  if (typeof response === 'object') {
+    const parts = [];
+    const { stdout, stderr, output, content, text, result } = response;
+    for (const val of [stdout, stderr, output, content, text, result]) {
+      if (typeof val === 'string' && val) parts.push(val);
+      else if (val && typeof val === 'object') { const t = extractText(val); if (t) parts.push(t); }
+    }
+    if (parts.length) return parts.join('\n');
+    try { return JSON.stringify(response); } catch { return null; }
+  }
+  return String(response);
+}
+
+// ── Tier 1: lossless scrub ───────────────────────────────────────────────────
+// ANSI/OSC escapes are invisible to the model; blank runs and identical
+// consecutive lines carry their information in one copy.
+const SCRUB_MIN = 1024;      // below this, not worth a hook round-trip
+const REPEAT_MIN = 4;        // identical consecutive lines before collapsing
+const MIN_WIN = 64;          // emit updated output only if it saves this much
+
+// Status lines that differ only in names and numbers: passing tests and
+// progress output. Deliberately narrow, since a generic "similar lines" rule
+// would swallow CSV rows or log data the model was asked to read.
+const NOISE_RE = /^\s*(?:[✓✔√]\s|PASS\s|ok \d+\b|\[PASS\])|\sPASSED\b|^\s*(?:Downloading|Downloaded|Fetching|Resolving|Receiving objects|Compiling|Installing|Extracting|Unpacking|Progress)\b/;
+const NOISE_MIN = 6;         // consecutive status lines before collapsing
+
+// Pretty-printed JSON → minified, by dropping whitespace outside strings.
+// Text-level on purpose: JSON.parse + stringify would round big integer IDs.
+function minifyJson(text) {
+  const s = text.trim();
+  if (!/^[[{]/.test(s) || !/\n\s/.test(s)) return text;
+  try { JSON.parse(s); } catch { return text; }
+  let out = '', inStr = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charAt(i);
+    if (inStr) {
+      out += c;
+      if (c === '\\') out += s[++i];
+      else if (c === '"') inStr = false;
+    } else if (c === '"') { inStr = true; out += c; }
+    else if (c !== ' ' && c !== '\n' && c !== '\r' && c !== '\t') out += c;
+  }
+  return out;
+}
+
+function scrub(text) {
+  let t = minifyJson(text.replace(ANSI_RE, ''));
+  t = t.replace(/[ \t]+$/gm, '');            // trailing whitespace
+  t = t.replace(/\n{3,}/g, '\n\n');          // blank-line runs → one blank
+  // Collapse runs of identical non-empty lines.
+  const lines = t.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; ) {
+    let j = i;
+    while (j < lines.length && lines.at(j) === lines.at(i)) j++;
+    const n = j - i;
+    if (n >= REPEAT_MIN && lines.at(i).trim()) {
+      out.push(lines.at(i), `... [puritanical: line repeated ${n}×] ...`);
+    } else {
+      for (let k = 0; k < n; k++) out.push(lines.at(i));
+    }
+    i = j;
+  }
+  // Collapse runs of passing-test / progress lines; error-like lines break a run.
+  const noisy = (l) => NOISE_RE.test(l) && !SALVAGE_RE.test(l);
+  const kept = [];
+  for (let i = 0; i < out.length; ) {
+    let j = i;
+    while (j < out.length && noisy(out.at(j))) j++;
+    if (j - i >= NOISE_MIN) {
+      kept.push(out.at(i), out[i + 1], `... [puritanical: ${j - i - 3} more passing/progress lines like these] ...`, out[j - 1]);
+    } else {
+      j = Math.max(j, i + 1);
+      for (let k = i; k < j; k++) kept.push(out.at(k));
+    }
+    i = j;
+  }
+  return kept.join('\n');
+}
+
+// ── Dedup: identical to this tool's previous output ─────────────────────────
+// The identical content is already in context verbatim, so a marker loses
+// nothing — but ONLY within the same session: a fresh session's context does
+// not contain the earlier copy, so state is keyed by session_id and dedup is
+// skipped when the payload carries none.
+const DEDUP_MIN = 2048;
+
+function duplicateMarker(toolName, text, reference = 'previous') {
+  const lines = text.split('\n');
+  const prior = reference === 'previous' ? 'the previous' : 'an earlier';
+  const preview = lines.slice(0, 5)
+    .map(l => l.length > MAX_SALVAGE_LINE ? safePrefix(l, MAX_SALVAGE_LINE - 1) + '…' : l);
+  return '[puritanical: output byte-identical to ' + prior + ' ' + toolName + ' result — ' +
+    text.length.toLocaleString('en-US') + ' chars / ' + lines.length +
+    ' lines, unchanged. First lines:]\n' + preview.join('\n');
+}
+
+const DEDUP_SESSION_KEEP = 20;
+const DEDUP_DIR = 'puritanical-dedup';
+const MAX_STATE_BYTES = 1024 * 1024;
+
+function safeReadText(p) {
+  try {
+    const text = readRegularFile(p, MAX_STATE_BYTES);
+    return { text, unsafe: text === null };
+  } catch (error) {
+    return { text: null, unsafe: error.code !== 'ENOENT' };
+  }
+}
+
+function readDedupFile(p) {
+  const { text, unsafe } = safeReadText(p);
+  if (text == null) return { state: null, unsafe };
+  try { return { state: JSON.parse(text) || null, unsafe: false }; }
+  catch { return { state: null, unsafe: false }; }
+}
+
+function dedupStateDir(stateDir) {
+  const root = stateDir || getClaudeDir();
+  const dir = path.join(root, DEDUP_DIR); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  return secureDirectory(dir, root) ? dir : null;
+}
+
+function writeDedupState(p, state, root) {
+  if (!safeAtomicWrite(p, JSON.stringify(state), root)) throw new Error('unsafe dedup state path');
+}
+
+function pruneDedupSessions(dir) {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The dedup folder under the hook's state directory, verified by secureDirectory.
+    const files = fs.readdirSync(dir) // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      .filter(name => /^[a-f0-9]{64}\.json$/.test(name))
+      .map(name => {
+        const p = path.join(dir, name); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- A hashed session file name inside the verified dedup folder; links are pruned, not followed.
+        const st = fs.lstatSync(p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+        return st.isFile() || st.isSymbolicLink() ? { p, t: st.mtimeMs } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.t - a.t || a.p.localeCompare(b.p));
+    for (const file of files.slice(DEDUP_SESSION_KEEP)) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes an old hashed session file from the verified dedup folder.
+      try { fs.unlinkSync(file.p); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    }
+  } catch {}
+}
+
+// `stateDir` defaults to getClaudeDir() so existing Claude/Pi callers keep
+// their prior storage path. Copilot passes getCopilotDir(); OpenCode passes
+// getOpencodeStateDir() and opts into per-session files for interleaved sessions.
+const sha256 = (text) => crypto.createHash('sha256').update(text).digest('hex');
+
+// This session's dedup state, reset when the file belongs to another session.
+function sessionState(state, sessionId) {
+  if (!state || state.session !== sessionId) state = { session: sessionId, tools: {} };
+  if (!state.tools || typeof state.tools !== 'object' || Array.isArray(state.tools)) state.tools = {};
+  return state;
+}
+
+// Store this tool's hash; true when it repeats the previous one.
+//
+// A second hook invocation for the SAME tool call is not the model seeing
+// the output twice. That happens whenever this hook is registered more than
+// once (plugin manifest + a leftover settings.json entry), because both
+// copies share this state file: copy A stores the hash, copy B matches it
+// and reports first-seen output as a duplicate of itself. Old string-valued
+// entries read through `rec`, so an existing state file needs no migration,
+// and a payload with no tool_use_id keeps today's exact behaviour.
+function recordToolHash(tools, toolName, hash, toolUseId) {
+  const prev = Object.getOwnPropertyDescriptor(tools, toolName)?.value;
+  const rec = (prev && typeof prev === 'object') ? prev : { hash: prev, id: null };
+  const sameCall = !!(toolUseId && rec.id && rec.id === toolUseId);
+  Object.defineProperty(tools, toolName, {
+    value: { hash, id: toolUseId || rec.id || null },
+    enumerable: true, writable: true, configurable: true,
+  });
+  return rec.hash === hash && !sameCall;
+}
+
+function dedupCheck(toolName, text, sessionId, toolUseId, stateDir, perSession) {
+  if (process.env.PURITANICAL_COMPRESS_DEDUP === '0') return null;
+  if (!sessionId || typeof sessionId !== 'string') return null;
+  if (text.length < DEDUP_MIN) return null;
+  try {
+    const dir = perSession ? dedupStateDir(stateDir) : stateDir || getClaudeDir();
+    if (!dir) return null;
+    const p = path.join(dir, perSession ? sha256(sessionId) + '.json' : '.puritanical-compress-last.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    const loaded = readDedupFile(p);
+    if (loaded.unsafe) return null;
+    const state = sessionState(loaded.state, sessionId);
+    const dup = recordToolHash(state.tools, toolName, sha256(text), toolUseId);
+    writeDedupState(p, state, stateDir || getClaudeDir());
+    if (perSession) pruneDedupSessions(dir);
+    return dup ? duplicateMarker(toolName, text) : null;
+  } catch { return null; }
+}
+
+// ── Tier 2: elision ──────────────────────────────────────────────────────────
+// Keep head + tail; salvage error-looking lines from the elided middle so the
+// one line that mattered in a 3000-line build log survives the cut.
+// ── recoverable elision ─────────────────────────────────────────────────────
+// Elision used to destroy the middle. If the agent then needed a line from it,
+// its only recourse was re-running the command: more expensive than the elision
+// saved, and wrong outright when the command is not idempotent (a test run, a
+// build, `git log` at a moment in time). So the full text spills to disk first
+// and the marker carries the path. Recovery becomes a targeted grep instead of
+// a re-run. Best-effort throughout: if the spill fails, the elision still
+// happens, it just loses the escape hatch.
+const SPILL_DIR = 'puritanical-spill';
+const SPILL_KEEP = 40;
+
+function spillDir(stateDir) {
+  return path.join(stateDir || getClaudeDir(), SPILL_DIR); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+}
+
+// Keep the directory bounded. Oldest-first by mtime; cheap enough at this size
+// and it runs at most once per elided output.
+function pruneSpill(dir) {
+  try {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The puritanical-spill folder under the hook's state directory, verified by secureDirectory.
+    const files = fs.readdirSync(dir) // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      .filter(f => f.endsWith('.txt'))
+      .map(f => {
+        const p = path.join(dir, f); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- A .txt spill file inside the verified spill folder; links are skipped.
+        const st = fs.lstatSync(p); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+        return st.isFile() && !st.isSymbolicLink() ? { p, t: st.mtimeMs } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.t - a.t);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes an old regular spill file from the verified spill folder.
+    for (const f of files.slice(SPILL_KEEP)) { try { fs.unlinkSync(f.p); } catch {} } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  } catch {}
+}
+
+// A spill file keeps the output verbatim on disk long after the session, so
+// output that carries a credential is never spilled; elision still happens,
+// without the recovery path. Patterns: PEM private keys, JWTs, AWS, GCP and
+// Azure keys, GitHub tokens and Authorization headers.
+const CREDENTIAL_RES = [
+  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/,
+  // AWS key IDs; GCP API keys, OAuth tokens and client secrets; GitHub tokens.
+  /\b(?:(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b|AIza[\w-]{35}|ya29\.[\w-]{20,}|GOCSPX-[\w-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{22,})/,
+  /aws_secret_access_key["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}/i,
+  /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
+  /[?&]sig=[A-Za-z0-9%+/]{20,}/,
+  /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
+];
+
+// Authorization header (any case, any scheme): a word in its first 200
+// characters is 24+ characters, or 8+ with a digit, symbol or inner capital,
+// so prose such as 'Authorization: token required' stays clean.
+const AUTH_HEADER_RE = /authorization["']?[ \t]*[:=]([^\r\n]{0,200})/gi;
+const authWord = word => word.length >= 24 || (word.length >= 8 && /[0-9=+/_.~-]|.[A-Z]/.test(word));
+const containsAuthHeader = text => Array.from(text.matchAll(AUTH_HEADER_RE)).some(m => m[1].split(/[\s"',;]+/).some(authWord));
+
+// JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
+// not a regex: '-' is a segment character, so a regex restarts at every
+// 'eyJ' in a long run and rescans it to the end (quadratic).
+const containsJwt = text => text.split(/[^\w.-]+/).some(token => token.split('.').some((part, i, parts) => {
+  const at = part.indexOf('eyJ');
+  return at !== -1 && part.length - at >= 13 && i + 2 < parts.length && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10;
+}));
+
+const containsCredential = text => CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text) || containsAuthHeader(text);
+
+function spill(text, toolName, stateDir) {
+  if (process.env.PURITANICAL_COMPRESS_SPILL === '0' || containsCredential(text)) return null;
+  try {
+    const root = stateDir || getClaudeDir();
+    const dir = spillDir(stateDir);
+    if (!secureDirectory(dir, root)) return null;
+    const hash = sha256(text).slice(0, 12);
+    const safeTool = String(toolName || 'tool').replace(/[^A-Za-z0-9_-]/g, '') || 'tool';
+    const file = path.join(dir, `${safeTool}-${hash}.txt`); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    // Same hash → same content (atomic writes never leave a partial file), so
+    // an existing regular file is reused. Re-reading to compare would also
+    // fail on lone surrogates, which UTF-8 cannot round-trip.
+    let st = null;
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Spill file named from a sanitised tool name and content hash in the verified spill folder.
+    try { st = fs.lstatSync(file); } catch (e) { if (e.code !== 'ENOENT') return null; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    if (st ? st.isSymbolicLink() || !st.isFile() : !safeAtomicWrite(file, text, root)) return null;
+    pruneSpill(dir);
+    return file;
+  } catch { return null; }
+}
+
+function compress(text, limits, spillPath) {
+  const { maxChars, headLines, tailLines } = limits;
+  const lines = text.split('\n');
+  const recover = spillPath ? ' Full output: ' + spillPath + ' (grep it, do not re-run)' : '';
+
+  if (lines.length <= headLines + tailLines) {
+    // Big in bytes, few lines (one giant line): hard char cut.
+    const keep = Math.floor(maxChars / 2);
+    const elided = text.length - 2 * keep;
+    if (elided <= 0) return null;
+    return safePrefix(text, keep) +
+      '\n... [puritanical: elided ' + elided.toLocaleString('en-US') + ' chars from the middle.' + recover + '] ...\n' +
+      safeSuffix(text, keep);
+  }
+
+  const head = lines.slice(0, headLines);
+  const tail = lines.slice(-tailLines);
+  const middle = lines.slice(headLines, lines.length - tailLines);
+
+  const salvaged = [];
+  for (const line of middle) {
+    if (salvaged.length >= MAX_SALVAGED) break;
+    const candidate = salvageLine(line);
+    if (candidate) salvaged.push(candidate);
+  }
+
+  const marker = '... [puritanical: elided ' + middle.length.toLocaleString('en-US') +
+    ' lines, kept first ' + headLines + ', last ' + tailLines +
+    (salvaged.length ? ', and ' + salvaged.length + ' error-like line(s) below' : '') +
+    '.' + recover + '] ...';
+
+  const out = head.concat([marker], salvaged, tail).join('\n');
+  return out.length < text.length ? out : null;
+}
+
+// Best-effort savings ledger. Races between parallel tool calls can drop a
+// count — stats only, never worth a lock file.
+function recordSavings(saved, stateDir) {
+  try {
+    const root = stateDir || getClaudeDir();
+    if (!secureDirectory(root, root)) return;
+    const p = path.join(root, '.puritanical-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    const current = safeReadText(p);
+    if (current.unsafe) return;
+    let stats = { savedChars: 0, events: 0 };
+    try {
+      const parsed = JSON.parse(current.text);
+      if (parsed && Number.isFinite(parsed.savedChars) && Number.isFinite(parsed.events)) stats = parsed;
+    } catch {}
+    stats.savedChars += saved;
+    stats.events += 1;
+    safeAtomicWrite(p, JSON.stringify(stats), root);
+  } catch {}
+}
+
+// Scrub + elide on plain text → transformed text, or null if no meaningful
+// win. Stateless (aside from the spill side-effect) — this is what the
+// replay benchmark measures for Claude/Pi.
+function commandFilter(command, text) {
+  return process.env.PURITANICAL_COMPRESS_FILTERS === '0' ? null : filterCommand(command, text);
+}
+
+// Copilot sends toolArgs as an object or a JSON string; Claude/Pi/OpenCode as objects.
+function commandOf(args) {
+  if (typeof args === 'string') { try { args = JSON.parse(args); } catch { return null; } }
+  return args && typeof args.command === 'string' ? args.command : null;
+}
+
+function transform(text, limits, toolName, stateDir, command) {
+  if (!text) return null;
+  let t = commandFilter(command, text) || text;
+  if (t === text && text.length <= SCRUB_MIN) return null;
+  // A command filter's win counts at any size; MIN_WIN gates the generic tiers.
+  const filtered = t.length < text.length;
+  if (t.length > SCRUB_MIN && process.env.PURITANICAL_COMPRESS_SCRUB !== '0') t = scrub(t);
+  if (t.length > limits.maxChars) {
+    const elided = compress(t, limits, toolName ? spill(text, toolName, stateDir) : null);
+    if (elided != null) t = elided;
+  }
+  return text.length - t.length >= MIN_WIN || (filtered && t.length < text.length) ? t : null;
+}
+
+// Put the compressed text back into the ORIGINAL response shape.
+//
+// Claude Code validates updatedToolOutput against the tool's own output schema
+// before applying it. Bash results are objects ({stdout, stderr, ...}), so
+// handing back a bare string is rejected on every call — the hook appears to
+// work, logs savings, and the model still receives the full output. Returning
+// null (skip) is always safer than emitting a shape the harness will refuse.
+// Reported with the transcript evidence by @sovdchains (#3).
+//
+// Not used for Copilot: its toolResult.textResultForLlm is already a flat
+// string, so main() builds { modifiedResult: { textResultForLlm } } directly
+// and never calls this function for a Copilot-shaped payload.
+function rebuildResponse(response, updated) {
+  if (response == null || typeof response === 'string') return updated;
+  if (typeof response === 'object' && !Array.isArray(response)) {
+    const { stdout, output, content, text, result } = response;
+    for (const [key, val] of [['stdout', stdout], ['output', output], ['content', content], ['text', text], ['result', result]]) {
+      if (typeof val === 'string') {
+        const out = { ...response, [key]: updated };
+        // extractText already folded stderr into the compressed text; leaving
+        // the original stderr in place would duplicate it.
+        if (key === 'stdout' && typeof response.stderr === 'string') out.stderr = '';
+        return out;
+      }
+    }
+  }
+  // Unrecognized shape (e.g. MCP content-block arrays). Skip rather than guess:
+  // a wrong shape is silently rejected, which is the bug this function fixes.
+  return null;
+}
+
+// Full pipeline on one hook payload → updated output string, or null to keep
+// the original. Pure given (payload, mode, env) except dedup/spill/stats state.
+//
+// `mode` keeps meaning "off disables everything" for Claude/Pi, exactly as
+// before. For a Copilot-shaped payload the caller (main()) always passes
+// 'on' — Copilot has no /puritanical toggle to read a flag file for — so this
+// function's Copilot branch below never actually sees 'off' in practice, but
+// still honors it if a future caller passes it explicitly.
+function processPayload(payload, mode) {
+  if (!payload || typeof payload !== 'object') return null;
+  if (!mode || mode === 'off') return null;
+  if (process.env.PURITANICAL_COMPRESS === '0') return null;
+
+  if (isCopilotPayload(payload)) {
+    const toolName = payload.toolName;
+    if (!copilotToolAllowed(toolName)) return null;
+    const text = payload.toolResult.textResultForLlm;
+    if (!text) return null;
+    const stateDir = getCopilotDir();
+    const dup = dedupCheck(toolName, text, payload.sessionId, null, stateDir);
+    if (dup != null && dup.length < text.length) return dup;
+    return transform(text, limitsFor(), toolName, stateDir, commandOf(payload.toolArgs));
+  }
+
+  if (!toolAllowed(payload.tool_name)) return null;
+  const text = extractText(payload.tool_response != null ? payload.tool_response : payload.tool_output);
+  if (!text) return null;
+  const dup = dedupCheck(payload.tool_name, text, payload.session_id, payload.tool_use_id, getClaudeDir());
+  if (dup != null && dup.length < text.length) return dup;
+  return transform(text, limitsFor(), payload.tool_name, getClaudeDir(), commandOf(payload.tool_input));
+}
+
+function main() {
+  let input = '';
+  process.stdin.on('data', chunk => { input += chunk; });
+  process.stdin.on('end', () => {
+    try {
+      const payload = JSON.parse(input.replace(/^\uFEFF/, ''));
+      const copilot = isCopilotPayload(payload);
+
+      // Copilot has no /puritanical mode-toggle mechanism (no UserPromptSubmit
+      // hook wired for it yet, so there is nothing to flip a flag file with):
+      // it follows the default mode (PURITANICAL_DEFAULT_MODE or the shared
+      // config, 'on' when unset), like OpenCode. Claude/Pi keep reading the
+      // real flag file exactly as before.
+      const mode = copilot ? getDefaultMode() : readFlag(path.join(getClaudeDir(), '.puritanical-active'));
+
+      const updated = processPayload(payload, mode);
+      if (updated == null) return;
+
+      if (copilot) {
+        const original = payload.toolResult.textResultForLlm;
+        recordSavings(original.length - updated.length, getCopilotDir());
+        // Echo back the result type we were handed. Hard-coding 'success'
+        // would relabel a failed tool call as a successful one on its way to
+        // the model — the compressor only ever rewrites text, never status.
+        const resultType = payload.toolResult.resultType || 'success';
+        process.stdout.write(JSON.stringify({
+          modifiedResult: { resultType, textResultForLlm: updated },
+        }));
+        return;
+      }
+
+      const response = payload.tool_response != null ? payload.tool_response : payload.tool_output;
+      const rebuilt = rebuildResponse(response, updated);
+      // Shape we can't safely rebuild — emit nothing and count nothing.
+      if (rebuilt == null) return;
+      const original = extractText(response);
+      // Only after we know a replacement is actually going out, so the stats
+      // file stops crediting savings the harness never applied.
+      recordSavings(original.length - updated.length, getClaudeDir());
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUse',
+          updatedToolOutput: rebuilt,
+        },
+      }));
+    } catch {} // silent — never break the tool pipeline
+  });
+}
+
+if (require.main === module) main();
+
+module.exports = {
+  extractText, rebuildResponse, scrub, compress, transform, limitsFor, toolAllowed, processPayload, commandOf,
+  duplicateMarker, THRESHOLDS, SAFE_TOOLS, NEVER_COMPRESS, unsafeToolName, containsCredential,
+  // Copilot-specific additions (see PR description for rationale):
+  isCopilotPayload, copilotToolAllowed, SAFE_TOOLS_COPILOT, NEVER_COMPRESS_COPILOT,
+  // OpenCode-specific additions (plugin uses tool.execute.after +
+  // experimental.chat.messages.transform):
+  opencodeToolAllowed, compressForOpencode, SAFE_TOOLS_OPENCODE, UNSAFE_TOOLS_OPENCODE,
+  boundForOpencode, recordSavings,
+};

@@ -25,7 +25,7 @@
 #   SUITE=sonnet re-runs the 2026-06-29 Sonnet cross-check (reconstructed prompts):
 #   SUITE=sonnet bash benchmarks/run-live.sh claude-sonnet-4-6 results/raw-sonnet-2
 #   ARMS="vanilla chisle" runs a subset of arms; CHISLE_SKILL=<file> measures a
-#   candidate ruleset instead of skills/chisle/SKILL.md.
+#   candidate ruleset instead of skills/puritanical/SKILL.md.
 set -uo pipefail
 
 HARNESS="${HARNESS:-claude}"
@@ -63,7 +63,7 @@ find_skill() {  # $1 = tool name → path to its SKILL.md, or empty
 }
 CAVEMAN_SKILL="$(find_skill caveman)"
 PONYTAIL_SKILL="$(find_skill ponytail)"
-CHISLE_SKILL="${CHISLE_SKILL:-$HERE/../skills/chisle/SKILL.md}"
+CHISLE_SKILL="${CHISLE_SKILL:-$HERE/../skills/puritanical/SKILL.md}"
 
 strip_fm() { awk 'BEGIN{n=0} /^---[[:space:]]*$/{n++; next} n>=2{print} n<2 && !/^---/ && n==1{print}' "$1" 2>/dev/null || cat "$1"; }
 for f in "$CAVEMAN_SKILL" "$PONYTAIL_SKILL" "$CHISLE_SKILL"; do [ -f "$f" ] || { echo "missing skill: $f"; exit 1; }; done

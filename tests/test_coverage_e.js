@@ -14,7 +14,7 @@ const REPLAY = repoPath('benchmarks', 'replay-compress.js');
 const PI_EXTENSION = repoPath('pi-extension', 'index.js');
 
 test('Pi loadRules returns section-filtered fallback rules when SKILL.md cannot be read', (t) => {
-  const home = tempRoot(t, 'chisle-cov-pi-rules-');
+  const home = tempRoot(t, 'puritanical-cov-pi-rules-');
   const configRoot = under(home, 'xdg');
   const envKeys = ['HOME', 'USERPROFILE', 'XDG_CONFIG_HOME'];
   const savedEnv = saveEnvironment(envKeys);
@@ -25,10 +25,10 @@ test('Pi loadRules returns section-filtered fallback rules when SKILL.md cannot 
   process.env.USERPROFILE = home;
   process.env.XDG_CONFIG_HOME = configRoot;
 
-  makeDir(under(configRoot, 'chisle'), { recursive: true });
-  writeJson(under(configRoot, 'chisle', 'config.json'), { sections: { code: false } });
+  makeDir(under(configRoot, 'puritanical'), { recursive: true });
+  writeJson(under(configRoot, 'puritanical', 'config.json'), { sections: { code: false } });
 
-  const skillSuffix = under('skills', 'chisle', 'SKILL.md');
+  const skillSuffix = under('skills', 'puritanical', 'SKILL.md');
   fs.readFileSync = function failOnlyForSkill(file, ...args) {
     if (String(file).endsWith(skillSuffix)) {
       attemptedSkillRead = true;
@@ -44,7 +44,7 @@ test('Pi loadRules returns section-filtered fallback rules when SKILL.md cannot 
     const rules = loadRules();
 
     assert.equal(attemptedSkillRead, true);
-    assert.match(rules, /^CHISLE ACTIVE/);
+    assert.match(rules, /^PURITANICAL ACTIVE/);
     assert.match(rules, /## Prose/);
     assert.match(rules, /Drop articles, filler, pleasantries/);
     assert.doesNotMatch(rules, /## Code/);
@@ -78,22 +78,22 @@ test('Pi sessionEntries returns an empty list for an unknown reader method', () 
 });
 
 test('Pi tool-result hook fails open when reading an event throws', async (t) => {
-  const home = tempRoot(t, 'chisle-cov-pi-catch-');
+  const home = tempRoot(t, 'puritanical-cov-pi-catch-');
   const envKeys = [
-    'HOME', 'USERPROFILE', 'XDG_CONFIG_HOME', 'CHISLE_DEFAULT_MODE',
-    'CHISLE_COMPRESS', 'CHISLE_COMPRESS_TOOLS',
+    'HOME', 'USERPROFILE', 'XDG_CONFIG_HOME', 'PURITANICAL_DEFAULT_MODE',
+    'PURITANICAL_COMPRESS', 'PURITANICAL_COMPRESS_TOOLS',
   ];
   const savedEnv = saveEnvironment(envKeys);
 
   process.env.HOME = home;
   process.env.USERPROFILE = home;
   process.env.XDG_CONFIG_HOME = under(home, 'xdg');
-  process.env.CHISLE_DEFAULT_MODE = 'on';
-  delete process.env.CHISLE_COMPRESS;
-  delete process.env.CHISLE_COMPRESS_TOOLS;
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
+  delete process.env.PURITANICAL_COMPRESS;
+  delete process.env.PURITANICAL_COMPRESS_TOOLS;
 
   try {
-    const chisleExtension = loadFresh(PI_EXTENSION);
+    const puritanicalExtension = loadFresh(PI_EXTENSION);
     const handlers = new Map();
     const pi = {
       on(name, handler) {
@@ -108,7 +108,7 @@ test('Pi tool-result hook fails open when reading an event throws', async (t) =>
         emit() {},
       },
     };
-    chisleExtension(pi);
+    puritanicalExtension(pi);
 
     let getterRead = false;
     const event = {};
@@ -129,7 +129,7 @@ test('Pi tool-result hook fails open when reading an event throws', async (t) =>
 });
 
 test('Pi replay resolves default roots and counts every persisted content shape', (t) => {
-  const home = tempRoot(t, 'chisle-cov-replay-pi-');
+  const home = tempRoot(t, 'puritanical-cov-replay-pi-');
 
   const agentDir = under(home, 'agent');
   const sessions = under(agentDir, 'sessions');

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* global __dirname, process, require -- Node.js runtime */
-// chisle-run.js: the PreToolUse rewrite (what gets wrapped, what never does)
+// puritanical-run.js: the PreToolUse rewrite (what gets wrapped, what never does)
 // and the runner (filtered output, the command's own exit status).
 // Run: node --test tests/test_run.js
 
@@ -11,9 +11,9 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
 
-const { rewriteCommand, guardedPrograms } = require('../hooks/chisle-run');
+const { rewriteCommand, guardedPrograms } = require('../hooks/puritanical-run');
 
-const RUNNER = path.join(__dirname, '..', 'hooks', 'chisle-run.js');
+const RUNNER = path.join(__dirname, '..', 'hooks', 'puritanical-run.js');
 const P = 'RUN ';
 isolateWorkingDirectory();
 
@@ -57,22 +57,22 @@ test('rewrite: programs named by deny/ask Bash rules are never wrapped', () => {
 function hook(payload, env = {}) {
   const r = spawnSync(process.execPath, [RUNNER], {
     input: JSON.stringify(payload), encoding: 'utf8',
-    env: { ...process.env, CHISLE_DEFAULT_MODE: 'on', CHISLE_COMPRESS_WRAP: '', ...env },
+    env: { ...process.env, PURITANICAL_DEFAULT_MODE: 'on', PURITANICAL_COMPRESS_WRAP: '', ...env },
   });
   return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.updatedInput.command : null;
 }
 
-test('hook: wraps only in bypassPermissions mode unless CHISLE_COMPRESS_WRAP=1', { skip: process.platform === 'win32' }, () => {
+test('hook: wraps only in bypassPermissions mode unless PURITANICAL_COMPRESS_WRAP=1', { skip: process.platform === 'win32' }, () => {
   const dir = process.cwd();
   const env = { CLAUDE_CONFIG_DIR: dir };
-  assert.equal(hook({ tool_name: 'Bash', cwd: dir, permission_mode: 'bypassPermissions', tool_input: { command: 'npm test' } }, env), null, 'no flag file: chisle off');
-  fs.writeFileSync('.chisle-active', 'on');
+  assert.equal(hook({ tool_name: 'Bash', cwd: dir, permission_mode: 'bypassPermissions', tool_input: { command: 'npm test' } }, env), null, 'no flag file: puritanical off');
+  fs.writeFileSync('.puritanical-active', 'on');
   const base = { tool_name: 'Bash', cwd: dir, tool_input: { command: 'npm test', description: 'd' } };
   const out = hook({ ...base, permission_mode: 'bypassPermissions' }, env);
-  assert.ok(out && out.endsWith(' -- npm test') && out.includes('chisle-run.js'), out);
+  assert.ok(out && out.endsWith(' -- npm test') && out.includes('puritanical-run.js'), out);
   assert.equal(hook({ ...base, permission_mode: 'default' }, env), null);
-  assert.ok(hook({ ...base, permission_mode: 'default' }, { ...env, CHISLE_COMPRESS_WRAP: '1' }));
-  assert.equal(hook({ ...base, permission_mode: 'bypassPermissions' }, { ...env, CHISLE_COMPRESS_WRAP: '0' }), null);
+  assert.ok(hook({ ...base, permission_mode: 'default' }, { ...env, PURITANICAL_COMPRESS_WRAP: '1' }));
+  assert.equal(hook({ ...base, permission_mode: 'bypassPermissions' }, { ...env, PURITANICAL_COMPRESS_WRAP: '0' }), null);
   assert.equal(hook({ ...base, tool_name: 'Read', permission_mode: 'bypassPermissions' }, env), null);
 });
 
@@ -98,7 +98,7 @@ process.stderr.write('warn: flaky\\n'); process.exit(3);`);
   });
   assert.equal(both.status, 1);
   assert.equal(both.stdout, 'out-1\nERR-2\nout-3\n');
-  const missing = spawnSync(process.execPath, [RUNNER, '--', 'chisle-no-such-cmd'], { encoding: 'utf8' });
+  const missing = spawnSync(process.execPath, [RUNNER, '--', 'puritanical-no-such-cmd'], { encoding: 'utf8' });
   assert.equal(missing.status, 127);
-  assert.match(missing.stderr, /chisle-no-such-cmd: command not found/);
+  assert.match(missing.stderr, /puritanical-no-such-cmd: command not found/);
 });

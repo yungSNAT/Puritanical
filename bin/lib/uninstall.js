@@ -1,5 +1,5 @@
 /* global module, require -- Node.js runtime */
-// chisle installer: `--uninstall`. Each agent step removes only what Chisle
+// puritanical installer: `--uninstall`. Each agent step removes only what Puritanical
 // installed under that agent's config root and returns the items it cleaned.
 
 'use strict';
@@ -11,6 +11,13 @@ const MCP = require('./mcp');
 const TOOLS = require('./tools');
 const ENV = require('./env');
 const FENCE = require('./fence');
+const CLAUDE = require('./claude');
+const { NAME, OLD_NAME, isOwnedStatusLine } = require('../../hooks/puritanical-config');
+
+// Entry names under both the current name and the one installs before 4.0.0 used.
+function bothNames(names) {
+  return names.concat(names.map(name => name.replace(NAME, OLD_NAME)));
+}
 
 // Removes each existing fixed entry under root; returns the count.
 function removeEntries(ctx, root, names, remove = FENCE.removeTree) {
@@ -26,18 +33,20 @@ function removeEntries(ctx, root, names, remove = FENCE.removeTree) {
 }
 
 function unlinkQuietly(p) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed Chisle state files in the Claude config directory.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed Puritanical state files in the Claude config directory.
   try { fs.unlinkSync(p); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 }
 
+// The plugin under both names, then each marketplace once nothing from it is
+// left installed.
 function uninstallClaudePlugin(ctx) {
-  if (!ENV.hasCmd('claude') || ctx.opts.dryRun || !ENV.listsChisle('claude', ['plugin', 'list'])) return 0;
-  ENV.run('claude', ['plugin', 'uninstall', 'chisle@chisle'], ctx.opts.dryRun);
-  return 1;
-}
-
-function isChisleStatusLine(sl) {
-  return !!sl && typeof sl.command === 'string' && sl.command.includes('chisle-statusline');
+  if (!ENV.hasCmd('claude') || ctx.opts.dryRun) return 0;
+  let n = 0;
+  for (const [id, listed] of [['puritanical@puritanical', /puritanical/i], [ENV.OLD_PLUGIN, ENV.OLD_LISTED]]) {
+    const { removed, left } = CLAUDE.uninstallPlugin(ctx, id, listed);
+    n += removed + (removed > 0 && left === 0 ? CLAUDE.removeMarketplace(ctx, id.split('@')[1]) : 0);
+  }
+  return n;
 }
 
 // Standalone hooks + statusline in settings.json.
@@ -45,8 +54,8 @@ function uninstallClaudeSettings(ctx, cfg) {
   const settingsPath = path.join(cfg, 'settings.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   const settings = SETTINGS.readSettings(settingsPath);
   if (!settings) return 0;
-  const removed = SETTINGS.removeHooks(settings, 'chisle-');
-  const slRemoved = isChisleStatusLine(settings.statusLine);
+  const removed = SETTINGS.removeHooks(settings, 'puritanical-') + SETTINGS.removeHooks(settings, OLD_NAME + '-');
+  const slRemoved = isOwnedStatusLine(settings.statusLine);
   if (slRemoved) delete settings.statusLine;
   if (removed === 0 && !slRemoved) return 0;
   if (!ctx.opts.dryRun) { SETTINGS.validateHookFields(settings); SETTINGS.writeSettings(settingsPath, settings); }
@@ -54,12 +63,12 @@ function uninstallClaudeSettings(ctx, cfg) {
   return 1;
 }
 
-// Tool schemas denied by `npx chisle tools trim`: remove exactly those entries.
+// Tool schemas denied by `npx github:yungSNAT/Puritanical tools trim`: remove exactly those entries.
 function uninstallClaudeTools(ctx, cfg) {
   try {
     const restored = TOOLS.restore(cfg, { dryRun: ctx.opts.dryRun });
     if (!restored.length) return 0;
-    ctx.note(`  removed tool deny entries added by chisle: ${restored.join(', ')}`);
+    ctx.note(`  removed tool deny entries added by puritanical: ${restored.join(', ')}`);
     return 1;
   } catch (e) { ctx.warn('  ' + e.message); return 0; }
 }
@@ -69,9 +78,9 @@ function uninstallClaude(ctx) {
   return uninstallClaudePlugin(ctx)
     + uninstallClaudeSettings(ctx, cfg)
     + uninstallClaudeTools(ctx, cfg)
-    + removeEntries(ctx, cfg, ['chisle-hooks', 'chisle-spill'])
-    + removeEntries(ctx, cfg, ['.chisle-active', '.chisle-session-turns', '.chisle-statusline-suffix',
-      '.chisle-compress-stats.json', '.chisle-compress-last.json', '.chisle-update-check.json'], unlinkQuietly);
+    + removeEntries(ctx, cfg, bothNames(['puritanical-hooks', 'puritanical-spill']))
+    + removeEntries(ctx, cfg, bothNames(['.puritanical-active', '.puritanical-session-turns', '.puritanical-statusline-suffix',
+      '.puritanical-compress-stats.json', '.puritanical-compress-last.json', '.puritanical-update-check.json']), unlinkQuietly);
 }
 
 function uninstallPi(ctx) {
@@ -88,18 +97,18 @@ function uninstallPi(ctx) {
 function uninstallCodex(ctx) {
   const codexMd = path.join(ENV.homeDir(), '.codex', 'AGENTS.md');
   if (!FENCE.exists(codexMd)) return 0;
-  const txt = FENCE.readText(codexMd);
-  const { b, e } = FENCE.fenceSpan(txt);
+  const txt = FENCE.withoutOldFence(FENCE.readText(codexMd));
+  const { b, e, end: after } = FENCE.fenceSpan(txt);
   if (b === -1) return 0;
   let stripped = txt;
   if (e !== -1) {
     const start = b > 0 && txt.charAt(b - 1) === '\n' ? b - 1 : b;
-    let end = e + FENCE.FENCE_END.length;
+    let end = after;
     if (txt.charAt(end) === '\n') end++;
     stripped = txt.slice(0, start) + '\n' + txt.slice(end);
   }
   if (!ctx.opts.dryRun) FENCE.writeText(codexMd, stripped.replace(/\n{3,}/g, '\n\n'));
-  ctx.note(`  removed chisle block from ${codexMd}`);
+  ctx.note(`  removed puritanical block from ${codexMd}`);
   return 1;
 }
 
@@ -107,24 +116,24 @@ function uninstallCodex(ctx) {
 // trailing blank run to one newline (Copilot CLI).
 function removeFencedBlock(ctx, file, { warnUnclosed, trimEnd }) {
   if (!FENCE.exists(file)) return 0;
-  const txt = FENCE.readText(file);
+  const txt = FENCE.withoutOldFence(FENCE.readText(file));
   const { b, e } = FENCE.fenceSpan(txt);
   if (b === -1) return 0;
   if (e === -1) {
-    if (warnUnclosed) ctx.note('  ' + file + ' has a chisle-begin marker with no chisle-end; leaving it alone');
+    if (warnUnclosed) ctx.note('  ' + file + ' has a puritanical-begin marker with no puritanical-end; leaving it alone');
     return 0;
   }
   let stripped = FENCE.withoutFence(txt);
   if (trimEnd) stripped = stripped.replace(/\n{2,}$/, '\n');
   if (!ctx.opts.dryRun) FENCE.writeText(file, stripped);
-  ctx.note('  removed chisle block from ' + file);
+  ctx.note('  removed puritanical block from ' + file);
   return 1;
 }
 
 function uninstallSkills(ctx, skillsDir) {
   const gone = FENCE.pruneSkills(skillsDir, ctx.opts.dryRun);
   if (gone === 0) return 0;
-  ctx.note('  removed ' + gone + ' chisle skill dir(s) from ' + skillsDir);
+  ctx.note('  removed ' + gone + ' puritanical skill dir(s) from ' + skillsDir);
   return 1;
 }
 
@@ -132,9 +141,9 @@ function uninstallOpencode(ctx) {
   const root = ENV.opencodeDir();
   return removeFencedBlock(ctx, path.join(root, 'AGENTS.md'), { warnUnclosed: true, trimEnd: false })
     + uninstallSkills(ctx, path.join(root, 'skills'))
-    + removeEntries(ctx, path.join(root, 'plugins'), ['chisle.js', 'chisle-hooks', 'chisle'])
+    + removeEntries(ctx, path.join(root, 'plugins'), bothNames(['puritanical.js', 'puritanical-hooks', 'puritanical']))
     + removeEntries(ctx, ENV.opencodeStateDir(),
-      ['chisle-spill', 'chisle-dedup', '.chisle-compress-stats.json', '.chisle-compress-last.json']);
+      bothNames(['puritanical-spill', 'puritanical-dedup', '.puritanical-compress-stats.json', '.puritanical-compress-last.json']));
 }
 
 function uninstallHermes(ctx) {
@@ -144,18 +153,19 @@ function uninstallHermes(ctx) {
 function uninstallCopilotCli(ctx) {
   const root = ENV.copilotDir();
   return removeFencedBlock(ctx, path.join(root, 'copilot-instructions.md'), { warnUnclosed: false, trimEnd: true })
-    + removeEntries(ctx, root, [path.join('hooks', 'chisle.json'), 'chisle-hooks', 'chisle-spill', 'chisle-dedup',
-      '.chisle-compress-stats.json']);
+    + removeEntries(ctx, root, bothNames([path.join('hooks', 'puritanical.json'), 'puritanical-hooks', 'puritanical-spill',
+      'puritanical-dedup', '.puritanical-compress-stats.json']));
 }
 
-// MCP servers routed through the proxy by `npx chisle mcp wrap`: restore
+// MCP servers routed through the proxy by `npx github:yungSNAT/Puritanical mcp wrap`: restore
 // their original commands before anything else could remove the proxy.
 function uninstallMcp(ctx) {
   let n = 0;
   const r = MCP.run(['unwrap'].concat(ctx.opts.dryRun ? ['--dry-run'] : []), () => {});
-  if (r.changed) { ctx.note('  restored ' + r.changed + ' MCP server command(s) wrapped by `chisle mcp wrap`'); n++; }
-  const pd = MCP.proxyDir();
-  if (FENCE.exists(pd)) { if (!ctx.opts.dryRun) FENCE.removeTree(pd); ctx.note('  removed ' + pd); n++; }
+  if (r.changed) { ctx.note('  restored ' + r.changed + ' MCP server command(s) wrapped by `puritanical mcp wrap`'); n++; }
+  for (const pd of [MCP.proxyDir(), MCP.oldProxyDir()]) {
+    if (FENCE.exists(pd)) { if (!ctx.opts.dryRun) FENCE.removeTree(pd); ctx.note('  removed ' + pd); n++; }
+  }
   return n;
 }
 
@@ -170,7 +180,7 @@ const STEPS = [
 
 function uninstall(ctx, providers) {
   const { say, note, opts, c } = ctx;
-  say(c.orange('Chisle uninstall'));
+  say(c.orange('Puritanical uninstall'));
   const wants = id => !opts.only.length || opts.only.includes(id);
   let touched = 0;
   for (const [id, step] of STEPS) if (wants(id)) touched += step(ctx);
@@ -188,7 +198,7 @@ function uninstall(ctx, providers) {
 function piSources(output) {
   // `pi list` may print more after the source (`npm:chisle@3.0.0 (user)`).
   return String(output || '').split('\n').map(line => line.trim().split(/\s+/)[0])
-    .filter(line => /^npm:chisle(?:@|$)/i.test(line) || /^git:(?:https:\/\/|http:\/\/|git\+https:\/\/|ssh:\/\/git@|git@)?github\.com[/:]JayPokale\/Chisle(?:@|$)/i.test(line))
+    .filter(line => /^npm:chisle(?:@|$)/i.test(line) || /^git:(?:https:\/\/|http:\/\/|git\+https:\/\/|ssh:\/\/git@|git@)?github\.com[/:](?:JayPokale\/Chisle|yungSNAT\/Puritanical)(?:@|$)/i.test(line))
     // The source is passed to `pi remove` through cmd.exe on Windows: refuse
     // anything beyond package-spec characters.
     .filter(line => /^[\w.:@/~+-]+$/.test(line))

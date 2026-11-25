@@ -12,7 +12,7 @@ const {
 const {
   extractText, rebuildResponse, scrub, compress, transform, limitsFor, toolAllowed, processPayload, THRESHOLDS,
   unsafeToolName, containsCredential,
-} = require('../hooks/chisle-compress-output');
+} = require('../hooks/puritanical-compress-output');
 
 const FULL = THRESHOLDS;
 
@@ -38,7 +38,7 @@ test('compress keeps head and tail, elides middle', () => {
   assert.ok(out.startsWith('line 0 '));
   assert.ok(out.trimEnd().endsWith('x'.repeat(80)));
   assert.ok(out.includes('line 499 '));         // tail survived
-  assert.ok(out.includes('[chisle: elided'));      // marker present
+  assert.ok(out.includes('[puritanical: elided'));      // marker present
   assert.ok(!out.includes('line 250 '));        // middle gone
 });
 
@@ -87,7 +87,7 @@ test('scrub strips ANSI escapes', () => {
 test('scrub collapses identical consecutive lines', () => {
   const out = scrub(Array(10).fill('WARN: retrying connection').join('\n'));
   assert.ok(out.includes('WARN: retrying connection'));
-  assert.ok(out.includes('[chisle: line repeated 10×]'));
+  assert.ok(out.includes('[puritanical: line repeated 10×]'));
   assert.equal(out.split('\n').length, 2);
 });
 
@@ -107,7 +107,7 @@ test('scrub collapses passing-test runs but keeps every failure', () => {
   assert.ok(out.includes('FAIL  test/price.test.js'));
   assert.ok(out.includes('✕ applyDiscount rounds half-cents up'));
   assert.ok(out.includes('1 failed, 80 passed'));
-  assert.ok(out.includes('[chisle: 37 more passing/progress lines like these]'));
+  assert.ok(out.includes('[puritanical: 37 more passing/progress lines like these]'));
   assert.ok(out.split('\n').length < 15);
 });
 
@@ -138,13 +138,13 @@ test('transform returns null when the win is trivial', () => {
 
 test('transform still elides oversized outputs after scrubbing', () => {
   const out = transform(bigOutput(500), THRESHOLDS);
-  assert.ok(out.includes('[chisle: elided'));
+  assert.ok(out.includes('[puritanical: elided'));
 });
 
 // ── dedup ────────────────────────────────────────────────────────────────────
 
 test('identical consecutive tool output becomes a marker (isolated config dir)', () => {
-  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'chisle-dedup-'));
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'puritanical-dedup-'));
   const saved = process.env.CLAUDE_CONFIG_DIR;
   process.env.CLAUDE_CONFIG_DIR = dir;
   try {
@@ -171,7 +171,7 @@ test('identical consecutive tool output becomes a marker (isolated config dir)',
 });
 
 test('REGRESSION: two hook copies on ONE tool call must not dedup each other', () => {
-  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'chisle-dupreg-'));
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'puritanical-dupreg-'));
   const saved = process.env.CLAUDE_CONFIG_DIR;
   process.env.CLAUDE_CONFIG_DIR = dir;
   try {
@@ -205,9 +205,9 @@ test('one threshold set, no levels', () => {
 });
 
 test('env vars override thresholds', () => {
-  process.env.CHISLE_COMPRESS_MAX_CHARS = '1234';
+  process.env.PURITANICAL_COMPRESS_MAX_CHARS = '1234';
   assert.equal(limitsFor().maxChars, 1234);
-  delete process.env.CHISLE_COMPRESS_MAX_CHARS;
+  delete process.env.PURITANICAL_COMPRESS_MAX_CHARS;
 });
 
 // ── toolAllowed — the correctness allowlist ──────────────────────────────────
@@ -228,7 +228,7 @@ test('Bash, Agent, mcp__ tools are compressible', () => {
 
 // File readers, LSP tools and code-host file tools return content the model
 // quotes back or edits against, so the shared name guard keeps them whole,
-// even when CHISLE_COMPRESS_TOOLS names them.
+// even when PURITANICAL_COMPRESS_TOOLS names them.
 const UNSAFE_MCP = [
   'mcp__tokensave__tokensave_read', 'mcp__filesystem__read_text_file', 'mcp__github__get_file_contents',
   'mcp__github__search_code', 'mcp__ide__lsp_hover', 'mcp__serena__find_symbol', 'mcp__lsp__goto_definition',
@@ -238,16 +238,16 @@ const UNSAFE_MCP = [
 
 test('MCP file, source and LSP tools are never compressed (Claude/Pi)', () => {
   for (const t of UNSAFE_MCP) assert.equal(toolAllowed(t), false, t);
-  process.env.CHISLE_COMPRESS_TOOLS = UNSAFE_MCP.join(',');
+  process.env.PURITANICAL_COMPRESS_TOOLS = UNSAFE_MCP.join(',');
   try {
     for (const t of UNSAFE_MCP) assert.equal(toolAllowed(t), false, `${t} via override`);
-  } finally { delete process.env.CHISLE_COMPRESS_TOOLS; }
+  } finally { delete process.env.PURITANICAL_COMPRESS_TOOLS; }
 });
 
 test('unsafeToolName is the one guard the proxy, Pi, Copilot and OpenCode share', () => {
-  const { mcpToolAllowed } = require('../hooks/chisle-mcp-proxy');
+  const { mcpToolAllowed } = require('../hooks/puritanical-mcp-proxy');
   const { piToolAllowed } = require('../pi-extension/index.js');
-  const { copilotToolAllowed, opencodeToolAllowed } = require('../hooks/chisle-compress-output');
+  const { copilotToolAllowed, opencodeToolAllowed } = require('../hooks/puritanical-compress-output');
   for (const t of ['get_file_contents', 'search_code', 'lsp_references', 'find_symbol', 'read_resource', 'hover',
     'find_references', 'goto_implementation']) {
     assert.equal(unsafeToolName(t), true, t);
@@ -256,30 +256,30 @@ test('unsafeToolName is the one guard the proxy, Pi, Copilot and OpenCode share'
   assert.equal(mcpToolAllowed('run_logs'), true);
   assert.equal(piToolAllowed('mcp__github__get_file_contents'), false);
   assert.equal(piToolAllowed('mcp__github__list_issues'), true);
-  process.env.CHISLE_COMPRESS_TOOLS = 'bash,github_get_file_contents,github-tools_search_code';
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'bash,github_get_file_contents,github-tools_search_code';
   try {
     assert.equal(copilotToolAllowed('github_get_file_contents'), false);
     assert.equal(opencodeToolAllowed('github-tools_search_code'), false);
     assert.equal(opencodeToolAllowed('bash'), true);
-  } finally { delete process.env.CHISLE_COMPRESS_TOOLS; }
+  } finally { delete process.env.PURITANICAL_COMPRESS_TOOLS; }
   for (const t of ['Bash', 'Agent', 'WebFetch', 'WebSearch', 'Grep', 'Glob', 'powershell', 'web_fetch', 'task', 'shell', 'list']) {
     assert.equal(unsafeToolName(t), false, `built-in ${t} must stay compressible`);
   }
 });
 
-test('CHISLE_COMPRESS_TOOLS overrides the allowlist', () => {
-  process.env.CHISLE_COMPRESS_TOOLS = 'Grep';
+test('PURITANICAL_COMPRESS_TOOLS overrides the allowlist', () => {
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'Grep';
   assert.equal(toolAllowed('Bash'), false);
   assert.equal(toolAllowed('Grep'), true);
   assert.equal(toolAllowed('mcp__x__y'), false); // override disables mcp__ default
-  delete process.env.CHISLE_COMPRESS_TOOLS;
+  delete process.env.PURITANICAL_COMPRESS_TOOLS;
 });
 
 // ── processPayload — full pipeline ───────────────────────────────────────────
 
 test('processPayload compresses a big Bash output', () => {
   const out = processPayload({ tool_name: 'Bash', tool_response: { stdout: bigOutput(500) } }, 'on');
-  assert.ok(out && out.includes('[chisle: elided'));
+  assert.ok(out && out.includes('[puritanical: elided'));
 });
 
 test('processPayload passes small outputs through (null)', () => {
@@ -292,10 +292,10 @@ test('processPayload does nothing when mode is off or missing', () => {
   assert.equal(processPayload(payload, null), null);
 });
 
-test('CHISLE_COMPRESS=0 is a kill switch', () => {
-  process.env.CHISLE_COMPRESS = '0';
+test('PURITANICAL_COMPRESS=0 is a kill switch', () => {
+  process.env.PURITANICAL_COMPRESS = '0';
   assert.equal(processPayload({ tool_name: 'Bash', tool_response: bigOutput(500) }, 'on'), null);
-  delete process.env.CHISLE_COMPRESS;
+  delete process.env.PURITANICAL_COMPRESS;
 });
 
 test('processPayload never throws on garbage', () => {
@@ -352,7 +352,7 @@ test('unknown shapes are skipped, never guessed', () => {
 const fs = require('fs');
 
 function withSpillDir(fn) {
-  const dir = makeTempDir('chisle-spill-test-');
+  const dir = makeTempDir('puritanical-spill-test-');
   const prev = process.env.CLAUDE_CONFIG_DIR;
   process.env.CLAUDE_CONFIG_DIR = dir;
   try { return fn(dir); }
@@ -368,7 +368,7 @@ test('an elided output spills in full and the marker points at it', () => {
     const text = bigOutput(500);
     const out = transform(text, FULL, 'Bash');
 
-    const marker = out.split('\n').find(l => l.includes('chisle:'));
+    const marker = out.split('\n').find(l => l.includes('puritanical:'));
     const m = marker.match(/Full output: (\S+)/);
     assert.ok(m, `marker carries no path: ${marker}`);
 
@@ -389,26 +389,26 @@ test('spilling is off for callers that pass no tool name', () => {
   withSpillDir((dir) => {
     const out = transform(bigOutput(500), FULL);
     assert.doesNotMatch(out, /Full output:/);
-    assert.ok(!exists(under(dir, 'chisle-spill')), 'replay path wrote spill files');
+    assert.ok(!exists(under(dir, 'puritanical-spill')), 'replay path wrote spill files');
   });
 });
 
-test('CHISLE_COMPRESS_SPILL=0 elides without the escape hatch', () => {
+test('PURITANICAL_COMPRESS_SPILL=0 elides without the escape hatch', () => {
   withSpillDir((dir) => {
-    process.env.CHISLE_COMPRESS_SPILL = '0';
+    process.env.PURITANICAL_COMPRESS_SPILL = '0';
     try {
       const out = transform(bigOutput(500), FULL, 'Bash');
       assert.ok(out.length < bigOutput(500).length, 'still must compress');
       assert.doesNotMatch(out, /Full output:/);
-      assert.ok(!exists(under(dir, 'chisle-spill')));
-    } finally { delete process.env.CHISLE_COMPRESS_SPILL; }
+      assert.ok(!exists(under(dir, 'puritanical-spill')));
+    } finally { delete process.env.PURITANICAL_COMPRESS_SPILL; }
   });
 });
 
 test('the spill directory stays bounded', () => {
   withSpillDir((dir) => {
     for (let i = 0; i < 55; i++) transform(bigOutput(500, `run${i}`), FULL, 'Bash');
-    const files = listDir(under(dir, 'chisle-spill'));
+    const files = listDir(under(dir, 'puritanical-spill'));
     assert.ok(files.length <= 41, `spill dir grew to ${files.length} files`);
   });
 });
@@ -473,7 +473,7 @@ test('output carrying a credential is elided but never spilled', () => {
       const out = transform(text, FULL, 'Bash');
       assert.ok(out && out.length < text.length, `${name}: still must compress`);
       assert.doesNotMatch(out, /Full output:/, name);
-      assert.ok(!exists(under(dir, 'chisle-spill')), `${name}: spilled to disk`);
+      assert.ok(!exists(under(dir, 'puritanical-spill')), `${name}: spilled to disk`);
     });
   }
 });
@@ -485,14 +485,14 @@ test('clean output that only mentions credentials still spills', () => {
     const m = out.match(/Full output: (\S+)/);
     assert.ok(m, 'clean output lost its spill');
     assert.equal(readText(m[1]), text);
-    assert.equal(listDir(under(dir, 'chisle-spill')).length, 1);
+    assert.equal(listDir(under(dir, 'puritanical-spill')).length, 1);
   });
 });
 
 test('a broken spill target still compresses', () => {
   withSpillDir((dir) => {
     // a file where the directory should be: mkdir fails, elision must not
-    writeText(under(dir, 'chisle-spill'), 'not a directory');
+    writeText(under(dir, 'puritanical-spill'), 'not a directory');
     const text = bigOutput(500);
     const out = transform(text, FULL, 'Bash');
     assert.ok(out && out.length < text.length, 'a failed spill broke compression');
@@ -500,31 +500,31 @@ test('a broken spill target still compresses', () => {
   });
 });
 
-// CHISLE_COMPRESS_TOOLS overrides the allowlist; it must not be able to switch
+// PURITANICAL_COMPRESS_TOOLS overrides the allowlist; it must not be able to switch
 // off the Read/Edit/Write exclusion. That exclusion is the one thing standing
 // between the compressor and a corrupted edit: Read output feeds Edit's
 // old_string, so eliding it makes the model edit text it never saw. The Pi
 // extension (NEVER_COMPRESS) and the OpenCode path (UNSAFE_TOOLS_OPENCODE)
 // always enforced this; the Claude and Copilot paths used to let the env var
 // through.
-test('CHISLE_COMPRESS_TOOLS cannot re-enable Read/Edit/Write (Claude)', () => {
-  const saved = process.env.CHISLE_COMPRESS_TOOLS;
-  process.env.CHISLE_COMPRESS_TOOLS = 'Bash,Read,Edit,Write,NotebookEdit';
+test('PURITANICAL_COMPRESS_TOOLS cannot re-enable Read/Edit/Write (Claude)', () => {
+  const saved = process.env.PURITANICAL_COMPRESS_TOOLS;
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'Bash,Read,Edit,Write,NotebookEdit';
   try {
     for (const t of ['Read', 'Edit', 'Write', 'NotebookEdit']) {
       assert.equal(toolAllowed(t), false, `${t} must stay excluded`);
     }
     assert.equal(toolAllowed('Bash'), true, 'the override itself must still work');
   } finally {
-    if (saved !== undefined) process.env.CHISLE_COMPRESS_TOOLS = saved;
-    else delete process.env.CHISLE_COMPRESS_TOOLS;
+    if (saved !== undefined) process.env.PURITANICAL_COMPRESS_TOOLS = saved;
+    else delete process.env.PURITANICAL_COMPRESS_TOOLS;
   }
 });
 
 test('the exclusion is case-insensitive and survives an empty override', () => {
-  const saved = process.env.CHISLE_COMPRESS_TOOLS;
+  const saved = process.env.PURITANICAL_COMPRESS_TOOLS;
   try {
-    delete process.env.CHISLE_COMPRESS_TOOLS;
+    delete process.env.PURITANICAL_COMPRESS_TOOLS;
     for (const t of ['read', 'READ', 'ReAd', 'write', 'edit']) {
       assert.equal(toolAllowed(t), false, `${t} must stay excluded`);
     }
@@ -532,6 +532,6 @@ test('the exclusion is case-insensitive and survives an empty override', () => {
     assert.equal(toolAllowed('Bash'), true);
     assert.equal(toolAllowed('mcp__server__tool'), true);
   } finally {
-    if (saved !== undefined) process.env.CHISLE_COMPRESS_TOOLS = saved;
+    if (saved !== undefined) process.env.PURITANICAL_COMPRESS_TOOLS = saved;
   }
 });

@@ -1,7 +1,7 @@
 {
-  "name": "chisle",
-  "version": "3.14.2",
-  "description": "Fewer tokens than caveman and ponytail, no accuracy lost. Zero-fluff prose, YAGNI-first code, and safe tool-output compression for 13 AI coding agents.",
+  "name": "puritanical",
+  "version": "4.0.0",
+  "description": "Fewer tokens than comparable compression tools, no accuracy lost. Zero-fluff prose, YAGNI-first code, and safe tool-output compression for 13 AI coding agents.",
   "keywords": [
     "claude-code",
     "claude-code-plugin",
@@ -32,26 +32,16 @@
     "name": "Jay Pokale",
     "url": "https://github.com/JayPokale"
   },
-  "contributors": [
-    {
-      "name": "Claude (Anthropic)",
-      "url": "https://claude.com/claude-code"
-    },
-    {
-      "name": "Codex (OpenAI)",
-      "url": "https://openai.com/codex/"
-    }
-  ],
-  "homepage": "https://chisle.jaypokale.me",
+  "homepage": "https://github.com/yungSNAT/Puritanical#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JayPokale/Chisle.git"
+    "url": "git+https://github.com/yungSNAT/Puritanical.git"
   },
   "bugs": {
-    "url": "https://github.com/JayPokale/Chisle/issues"
+    "url": "https://github.com/yungSNAT/Puritanical/issues"
   },
   "bin": {
-    "chisle": "bin/install.js"
+    "puritanical": "bin/install.js"
   },
   "engines": {
     "node": ">=18"

@@ -14,8 +14,8 @@ const isolateWorkingDirectory = require('./fixtures/working-directory');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { readSettings } = require('../bin/lib/settings');
-const { readFlag } = require('../hooks/chisle-config');
-const { recordSavings } = require('../hooks/chisle-compress-output');
+const { readFlag } = require('../hooks/puritanical-config');
+const { recordSavings } = require('../hooks/puritanical-compress-output');
 
 const CLI = under(__dirname, '..', 'bin', 'install.js');
 
@@ -63,7 +63,7 @@ test('project rule install writes into CWD, is idempotent, --force overwrites', 
 
   // First install
   let r = runCLI(['--only', 'cursor'], { cwd: proj });
-  const ruleFile = under(proj, '.cursor', 'rules', 'chisle.mdc');
+  const ruleFile = under(proj, '.cursor', 'rules', 'puritanical.mdc');
   assert.ok(exists(ruleFile), 'rule file created in project');
   assert.match(r.out, /installed:/);
 
@@ -81,7 +81,7 @@ test('Antigravity rule lands in .agents/rules as an always-on workspace rule', (
   const proj = absolutePath('project');
   makeDir('project');
   const r = runCLI(['--only', 'antigravity'], { cwd: proj });
-  const ruleFile = under(proj, '.agents', 'rules', 'chisle.md');
+  const ruleFile = under(proj, '.agents', 'rules', 'puritanical.md');
   assert.match(r.out, /installed:/);
   // Antigravity ignores a workspace rule without a `trigger` in its frontmatter.
   assert.match(readText(ruleFile), /^---\ntrigger: always_on\n/);
@@ -137,11 +137,11 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
 
   let result = runCLI(['--only', 'pi'], { env });
   assert.match(result.out, /Pi detected/);
-  assert.match(readText(log), /^list\ninstall npm:chisle\n$/);
+  assert.match(readText(log), /^list\ninstall git:github\.com\/yungSNAT\/Puritanical\n$/);
   assert.deepEqual(readJson(settings), { theme: 'dark', packages: ['npm:foreign'] },
     'installer edited Pi settings instead of delegating to Pi');
 
-  writeText(list, 'User packages:\n  npm:chisle@3.0.0\n');
+  writeText(list, 'User packages:\n  git:github.com/yungSNAT/Puritanical\n');
   writeText(log, '');
   result = runCLI(['--only', 'pi'], { env });
   assert.match(result.out, /already installed/);
@@ -150,7 +150,7 @@ test('Pi install, dry-run, and uninstall delegate settings changes to Pi', { ski
   writeText(list, '');
   writeText(log, '');
   result = runCLI(['--only', 'pi', '--dry-run'], { env });
-  assert.match(result.out, /would run: pi install npm:chisle/);
+  assert.match(result.out, /would run: pi install git:github\.com\/yungSNAT\/Puritanical/);
   assert.equal(readText(log), 'list\n', 'dry-run invoked mutating Pi command');
 
   writeText(log, '');
@@ -185,27 +185,27 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   assert.equal(runCLI(install, { env }).status, 0);
   const settingsPath = under(cfg, 'settings.json');
   const installed = readSettings(settingsPath);
-  const hookPath = under(cfg, 'chisle-hooks', 'chisle-activate.js');
+  const hookPath = under(cfg, 'puritanical-hooks', 'puritanical-activate.js');
   assert.equal(installed.hooks.SessionStart[0].hooks[0].command, `"${process.execPath}" "${hookPath}"`);
   const extension = process.platform === 'win32' ? 'ps1' : 'sh';
-  assert.ok(installed.statusLine.command.endsWith(`"${under(cfg, 'chisle-hooks', 'chisle-statusline.' + extension)}"`));
+  assert.ok(installed.statusLine.command.endsWith(`"${under(cfg, 'puritanical-hooks', 'puritanical-statusline.' + extension)}"`));
   assert.equal(runCLI([...install, '--update'], { env }).status, 0);
   assert.deepEqual(readSettings(settingsPath), installed);
   const startup = execFileSync(process.execPath, [hookPath], {
     input: '{}', encoding: 'utf8', timeout: 5000,
-    env: { ...process.env, ...env, CLAUDE_CONFIG_DIR: cfg, XDG_CONFIG_HOME: home, CHISLE_DEFAULT_MODE: 'on' },
+    env: { ...process.env, ...env, CLAUDE_CONFIG_DIR: cfg, XDG_CONFIG_HOME: home, PURITANICAL_DEFAULT_MODE: 'on' },
   });
-  assert.match(startup, /CHISLE ACTIVE/);
+  assert.match(startup, /PURITANICAL ACTIVE/);
   assert.doesNotMatch(startup, /STATUSLINE SETUP NEEDED/);
-  assert.equal(readFlag(under(cfg, '.chisle-active')), 'on');
+  assert.equal(readFlag(under(cfg, '.puritanical-active')), 'on');
   if (process.platform === 'win32') {
     recordSavings(4000, cfg);
     const powershell = under(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const badge = execFileSync(powershell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-      under(cfg, 'chisle-hooks', 'chisle-statusline.ps1')], {
+      under(cfg, 'puritanical-hooks', 'puritanical-statusline.ps1')], {
       encoding: 'utf8', timeout: 10000, env: { ...process.env, CLAUDE_CONFIG_DIR: cfg },
     });
-    assert.match(badge, /\[CHISLE\].*1k tok/);
+    assert.match(badge, /\[PURITANICAL\].*1k tok/);
     assert.doesNotMatch(badge, /[\r\n]/);
   }
 
@@ -215,7 +215,7 @@ test('standalone Claude hook wiring merges + uninstalls cleanly', () => {
   assert.equal(after.model, 'opus', 'foreign settings preserved through uninstall');
   assert.equal(after.statusLine, undefined);
   assert.equal(after.hooks, undefined);
-  assert.equal(exists('Claude config/chisle-hooks/chisle-activate.js'), false);
+  assert.equal(exists('Claude config/puritanical-hooks/puritanical-activate.js'), false);
 });
 
 test('star prompt: never asked, never written, never calls gh without a terminal', { skip: process.platform === 'win32' }, () => {
@@ -231,9 +231,9 @@ test('star prompt: never asked, never written, never calls gh without a terminal
   const { status, out } = runCLI(['--only', 'claude', '--config-dir', cfg], { env });
   assert.equal(status, 0);
   assert.doesNotMatch(out, /\[l\]ater/);
-  assert.match(out, /a star helps others find it: https:\/\/github\.com\/JayPokale\/Chisle/);
+  assert.match(out, /a star helps others find it: https:\/\/github\.com\/yungSNAT\/Puritanical/);
   assert.equal(exists(log), false, 'gh never called');
-  assert.equal(exists(under(home, 'xdg', 'chisle', 'config.json')), false, 'nothing saved');
+  assert.equal(exists(under(home, 'xdg', 'puritanical', 'config.json')), false, 'nothing saved');
 });
 
 // Regression for #4: the plugin path and the standalone path both registering
@@ -247,7 +247,7 @@ test('REGRESSION: plugin path removes leftover standalone hook entries', { skip:
   // A `claude` that reports the plugin as installed, so installClaude() takes
   // the plugin branch without shelling out to a real marketplace.
   const fake = under(binDir, 'claude');
-  writeText(fake, '#!/bin/sh\necho chisle\nexit 0\n', { mode: 0o755 });
+  writeText(fake, '#!/bin/sh\necho puritanical\nexit 0\n', { mode: 0o755 });
 
   // Seed the state an affected machine is in: standalone wiring plus a foreign
   // hook that must survive.
@@ -255,7 +255,7 @@ test('REGRESSION: plugin path removes leftover standalone hook entries', { skip:
     model: 'opus',
     hooks: {
       PostToolUse: [
-        { hooks: [{ type: 'command', command: 'node ~/.claude/chisle-hooks/chisle-compress-output.js' }] },
+        { hooks: [{ type: 'command', command: 'node ~/.claude/puritanical-hooks/puritanical-compress-output.js' }] },
         { hooks: [{ type: 'command', command: 'node ~/.claude/other/keep-me.js' }] },
       ],
     },
@@ -267,7 +267,7 @@ test('REGRESSION: plugin path removes leftover standalone hook entries', { skip:
   const after = readJson(under(cfg, 'settings.json'));
   const cmds = ((after.hooks && after.hooks.PostToolUse) || [])
     .flatMap(e => (e.hooks || []).map(h => h.command));
-  assert.ok(!cmds.some(c => c.includes('chisle-')), 'standalone chisle hook still registered');
+  assert.ok(!cmds.some(c => c.includes('puritanical-')), 'standalone puritanical hook still registered');
   assert.ok(cmds.some(c => c.includes('keep-me.js')), 'foreign hook removed');
   assert.equal(after.model, 'opus');
 });
@@ -279,7 +279,7 @@ test('REGRESSION: plugin path removes leftover standalone hook entries', { skip:
 test('--stats reports the ledger and changes nothing', () => {
   const cfg = absolutePath('config');
   makeDir('config');
-  const ledger = under(cfg, '.chisle-compress-stats.json');
+  const ledger = under(cfg, '.puritanical-compress-stats.json');
   writeText(ledger, JSON.stringify({ savedChars: 88967, events: 18 }));
   const before = readText(ledger);
 
@@ -305,7 +305,7 @@ test('--stats survives a corrupt or hostile ledger', () => {
   const cfg = absolutePath('config');
   makeDir('config');
   for (const junk of ['{', 'null', '{"savedChars":"lots","events":3}', '[]']) {
-    writeText(under(cfg, '.chisle-compress-stats.json'), junk);
+    writeText(under(cfg, '.puritanical-compress-stats.json'), junk);
     const r = runCLI(['--stats', '--config-dir', cfg]);
     assert.equal(r.status, 0, `crashed on ${junk}`);
     assert.match(r.out, /no compression recorded yet/, `trusted ${junk}`);
@@ -318,7 +318,7 @@ test('--stats refuses to follow a symlinked ledger', { skip: process.platform ==
   const real = under(cfg, 'elsewhere.json');
   writeText(real, JSON.stringify({ savedChars: 99999, events: 7 }));
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
-  fs.symlinkSync(real, under(cfg, '.chisle-compress-stats.json')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  fs.symlinkSync(real, under(cfg, '.puritanical-compress-stats.json')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
   const r = runCLI(['--stats', '--config-dir', cfg]);
   assert.equal(r.status, 0);
@@ -330,7 +330,7 @@ test('--help and --list advertise --stats', () => {
 });
 
 // ── --update ────────────────────────────────────────────────────────────────
-// The bug this flag exists for: `npx chisle` skips whatever is already there,
+// The bug this flag exists for: `npx github:yungSNAT/Puritanical` skips whatever is already there,
 // so the documented upgrade command reported success and changed nothing.
 
 function piUpdateFixture(installed) {
@@ -346,7 +346,7 @@ function piUpdateFixture(installed) {
 }
 
 test('--update refreshes an installed Pi package instead of skipping it', { skip: process.platform === 'win32' }, () => {
-  const env = piUpdateFixture('npm:chisle@3.0.0');
+  const env = piUpdateFixture('git:github.com/yungSNAT/Puritanical');
 
   // plain install: sees it, leaves it alone
   const plain = runCLI(['--only', 'pi'], { env });
@@ -355,9 +355,9 @@ test('--update refreshes an installed Pi package instead of skipping it', { skip
   // update: reinstalls the same agent
   writeText('home/pi.log', '');
   const upd = runCLI(['--only', 'pi', '--update'], { env });
-  assert.match(upd.out, /Chisle updater/);
+  assert.match(upd.out, /Puritanical updater/);
   assert.doesNotMatch(upd.out, /already installed/);
-  assert.match(readText('home/pi.log'), /install npm:chisle/, '--update did not reinstall');
+  assert.match(readText('home/pi.log'), /install git:github\.com\/yungSNAT\/Puritanical/, '--update did not reinstall');
 });
 
 test('--update installs nothing new and says why', { skip: process.platform === 'win32' }, () => {
@@ -371,14 +371,14 @@ test('--update installs nothing new and says why', { skip: process.platform === 
 test('--update refreshes a project rule file in place', () => {
   const proj = absolutePath('project');
   makeDir('project');
-  const rule = under(proj, '.clinerules', 'chisle.md');
+  const rule = under(proj, '.clinerules', 'puritanical.md');
 
   runCLI(['--only', 'cline'], { cwd: proj });
   assert.ok(exists(rule));
   writeText(rule, 'stale copy from an older release\n');
 
   const r = runCLI(['--only', 'cline', '--update'], { cwd: proj });
-  assert.match(r.out, /Chisle updater/);
+  assert.match(r.out, /Puritanical updater/);
   assert.doesNotMatch(readText(rule), /stale copy/, '--update left a stale rule file');
 });
 
@@ -386,7 +386,7 @@ test('--update is read-only under --dry-run', { skip: process.platform === 'win3
   const env = piUpdateFixture('npm:chisle@3.0.0');
 
   const r = runCLI(['--only', 'pi', '--update', '--dry-run'], { env });
-  assert.match(r.out, /would run: pi install npm:chisle/);
+  assert.match(r.out, /would run: pi install git:github\.com\/yungSNAT\/Puritanical/);
   assert.doesNotMatch(readText('home/pi.log'), /install/, 'dry-run mutated');
 });
 
@@ -394,11 +394,11 @@ test('--help advertises --update', () => {
   assert.match(runCLI(['--help']).out, /--update/);
 });
 // ── OpenCode + Hermes ────────────────────────────────────────────────────────
-// Global agents. CHISLE_HOME redirects the home dir so tests never touch
+// Global agents. PURITANICAL_HOME redirects the home dir so tests never touch
 // the real ~/.config/opencode or ~/.hermes. Runs on win32 too (no shell).
 
 function isolatedOpencodeEnv(home, extra) {
-  return { CHISLE_HOME: home, XDG_CONFIG_HOME: '', OPENCODE_CONFIG_DIR: '', ...extra };
+  return { PURITANICAL_HOME: home, XDG_CONFIG_HOME: '', OPENCODE_CONFIG_DIR: '', ...extra };
 }
 
 function readShippedSkills(directory) {
@@ -406,10 +406,10 @@ function readShippedSkills(directory) {
   process.chdir(directory);
   try {
     return {
-      chisle: readText('chisle/SKILL.md'),
-      audit: readText('chisle-audit/SKILL.md'),
-      help: readText('chisle-help/SKILL.md'),
-      review: readText('chisle-review/SKILL.md'),
+      puritanical: readText('puritanical/SKILL.md'),
+      audit: readText('puritanical-audit/SKILL.md'),
+      help: readText('puritanical-help/SKILL.md'),
+      review: readText('puritanical-review/SKILL.md'),
     };
   } finally {
     process.chdir(previous);
@@ -439,22 +439,22 @@ test('opencode v1 installation layout remains unchanged', () => {
   const home = absolutePath('home');
   makeDir('home');
   const env = isolatedOpencodeEnv(home, { PATH: fakeOpencode('1.19.5') });
-  makeDir('home/.config/opencode/plugins/chisle', { recursive: true });
-  writeText('home/.config/opencode/plugins/chisle/index.js', 'stale v2');
+  makeDir('home/.config/opencode/plugins/puritanical', { recursive: true });
+  writeText('home/.config/opencode/plugins/puritanical/index.js', 'stale v2');
   let result = runCLI(['--only', 'opencode'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.ok(exists('home/.config/opencode/plugins/chisle.js'));
-  assert.equal(exists('home/.config/opencode/plugins/chisle'), false);
-  assert.ok(exists('home/.config/opencode/plugins/chisle-hooks/chisle-compress-output.js'));
-  assert.equal(exists('home/.config/opencode/plugins/chisle'), false);
+  assert.ok(exists('home/.config/opencode/plugins/puritanical.js'));
+  assert.equal(exists('home/.config/opencode/plugins/puritanical'), false);
+  assert.ok(exists('home/.config/opencode/plugins/puritanical-hooks/puritanical-compress-output.js'));
+  assert.equal(exists('home/.config/opencode/plugins/puritanical'), false);
 
   result = runCLI(['--only', 'opencode', '--update'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.ok(exists('home/.config/opencode/plugins/chisle.js'));
+  assert.ok(exists('home/.config/opencode/plugins/puritanical.js'));
 
   result = runCLI(['--uninstall', '--only', 'opencode'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.equal(exists('home/.config/opencode/plugins/chisle.js'), false);
+  assert.equal(exists('home/.config/opencode/plugins/puritanical.js'), false);
 });
 
 test('opencode v2 install, update, dry-run, and uninstall use the v2 plugin directory', () => {
@@ -463,27 +463,27 @@ test('opencode v2 install, update, dry-run, and uninstall use the v2 plugin dire
   const env = isolatedOpencodeEnv(home, { PATH: fakeOpencode('2.2.2') });
   let result = runCLI(['--only', 'opencode', '--dry-run'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.match(result.out, /plugins.*chisle/);
+  assert.match(result.out, /plugins.*puritanical/);
   assert.deepEqual(listDir('home'), ['bin']);
 
-  makeDir('home/.config/opencode/plugins/chisle-hooks', { recursive: true });
-  writeText('home/.config/opencode/plugins/chisle.js', 'legacy');
+  makeDir('home/.config/opencode/plugins/puritanical-hooks', { recursive: true });
+  writeText('home/.config/opencode/plugins/puritanical.js', 'legacy');
   result = runCLI(['--only', 'opencode'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.ok(exists('home/.config/opencode/plugins/chisle/index.js'));
-  assert.equal(exists('home/.config/opencode/plugins/chisle.js'), false);
-  assert.equal(exists('home/.config/opencode/plugins/chisle-hooks'), false);
-  assert.ok(exists('home/.config/opencode/plugins/chisle/chisle-hooks/chisle-compress-output.js'));
-  assert.equal(exists('home/.config/opencode/plugins/chisle.js'), false);
+  assert.ok(exists('home/.config/opencode/plugins/puritanical/index.js'));
+  assert.equal(exists('home/.config/opencode/plugins/puritanical.js'), false);
+  assert.equal(exists('home/.config/opencode/plugins/puritanical-hooks'), false);
+  assert.ok(exists('home/.config/opencode/plugins/puritanical/puritanical-hooks/puritanical-compress-output.js'));
+  assert.equal(exists('home/.config/opencode/plugins/puritanical.js'), false);
 
-  writeText('home/.config/opencode/plugins/chisle/index.js', 'STALE');
+  writeText('home/.config/opencode/plugins/puritanical/index.js', 'STALE');
   result = runCLI(['--only', 'opencode', '--update'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.notEqual(readText('home/.config/opencode/plugins/chisle/index.js'), 'STALE');
+  assert.notEqual(readText('home/.config/opencode/plugins/puritanical/index.js'), 'STALE');
 
   result = runCLI(['--uninstall', '--only', 'opencode'], { env });
   assert.equal(result.status, 0, result.out);
-  assert.equal(exists('home/.config/opencode/plugins/chisle'), false);
+  assert.equal(exists('home/.config/opencode/plugins/puritanical'), false);
 });
 
 test('opencode install appends fenced ruleset, preserves user content, copies skills', () => {
@@ -499,30 +499,30 @@ test('opencode install appends fenced ruleset, preserves user content, copies sk
   assert.match(r.out, /installed:/);
   const txt = readText(agents);
   assert.ok(txt.startsWith('# my setup\n\nmy instructions.\n'), 'user instructions moved or clobbered');
-  assert.ok(txt.includes('<!-- chisle-begin -->') && txt.includes('<!-- chisle-end -->'));
-  assert.equal(txt.indexOf('<!-- chisle-begin -->'), txt.lastIndexOf('<!-- chisle-begin -->'), 'fence duplicated');
+  assert.ok(txt.includes('<!-- puritanical-begin -->') && txt.includes('<!-- puritanical-end -->'));
+  assert.equal(txt.indexOf('<!-- puritanical-begin -->'), txt.lastIndexOf('<!-- puritanical-begin -->'), 'fence duplicated');
   assert.deepEqual(readShippedSkills(skills), readShippedSkills(under(__dirname, '..', 'skills')));
 
   // Compression plugin + its zero-dep core land in plugins/.
   const plugins = under(home, '.config', 'opencode', 'plugins');
-  assert.ok(exists(under(plugins, 'chisle.js')), 'plugin not installed');
-  assert.ok(exists(under(plugins, 'chisle-hooks', 'chisle-compress-output.js')), 'compressor core not installed');
-  assert.ok(exists(under(plugins, 'chisle-hooks', 'chisle-config.js')), 'config core not installed');
+  assert.ok(exists(under(plugins, 'puritanical.js')), 'plugin not installed');
+  assert.ok(exists(under(plugins, 'puritanical-hooks', 'puritanical-compress-output.js')), 'compressor core not installed');
+  assert.ok(exists(under(plugins, 'puritanical-hooks', 'puritanical-config.js')), 'config core not installed');
   // The CJS core must stay CJS even though OpenCode's config dir is type:module,
   // which would otherwise propagate down and kill it on its first `require`.
   assert.equal(
-    readJson(under(plugins, 'chisle-hooks', 'package.json')).type,
+    readJson(under(plugins, 'puritanical-hooks', 'package.json')).type,
     'commonjs', 'compressor core not pinned to commonjs');
 
   // Second run: ruleset skipped, never duplicated; skills refreshed.
   const r2 = runCLI(['--only', 'opencode'], { env });
-  assert.match(r2.out, /already contains chisle ruleset/);
+  assert.match(r2.out, /already contains puritanical ruleset/);
   const txt2 = readText(agents);
-  assert.equal(txt2.indexOf('<!-- chisle-begin -->'), txt2.lastIndexOf('<!-- chisle-begin -->'));
+  assert.equal(txt2.indexOf('<!-- puritanical-begin -->'), txt2.lastIndexOf('<!-- puritanical-begin -->'));
   assert.ok(txt2.startsWith('# my setup'), 'reinstall moved user content');
 
   // Stale fence refreshes under --update, user content survives.
-  writeText(agents, txt2.replace(/# Chisle[\s\S]*<!-- chisle-end -->/, 'STALE\n<!-- chisle-end -->'));
+  writeText(agents, txt2.replace(/# Puritanical[\s\S]*<!-- puritanical-end -->/, 'STALE\n<!-- puritanical-end -->'));
   runCLI(['--only', 'opencode', '--update'], { env });
   const txt3 = readText(agents);
   assert.doesNotMatch(txt3, /STALE/);
@@ -532,14 +532,14 @@ test('opencode install appends fenced ruleset, preserves user content, copies sk
   makeDir(under(skills, 'foreign'), { recursive: true });
   writeText(under(skills, 'foreign', 'SKILL.md'), 'not ours');
   const u = runCLI(['--uninstall', '--only', 'opencode'], { env });
-  assert.match(u.out, /removed chisle block/);
+  assert.match(u.out, /removed puritanical block/);
   const after = readText(agents);
   assert.ok(after.startsWith('# my setup'), 'uninstall ate user content');
-  assert.doesNotMatch(after, /chisle-begin/);
-  assert.ok(!exists(under(skills, 'chisle')), 'owned skill left behind');
+  assert.doesNotMatch(after, /puritanical-begin/);
+  assert.ok(!exists(under(skills, 'puritanical')), 'owned skill left behind');
   assert.equal(readText(under(skills, 'foreign', 'SKILL.md')), 'not ours', 'foreign skill touched');
-  assert.ok(!exists(under(plugins, 'chisle.js')), 'plugin left behind');
-  assert.ok(!exists(under(plugins, 'chisle-hooks')), 'plugin core left behind');
+  assert.ok(!exists(under(plugins, 'puritanical.js')), 'plugin left behind');
+  assert.ok(!exists(under(plugins, 'puritanical-hooks')), 'plugin core left behind');
 });
 
 for (const [name, extra] of [
@@ -554,27 +554,27 @@ for (const [name, extra] of [
     let r = runCLI(['--only', 'opencode'], { env });
     assert.equal(r.status, 0, r.out);
     const agents = under(root, 'AGENTS.md');
-    assert.match(readText(agents), /chisle-begin/);
-    assert.ok(exists('home/xdg/opencode/plugins/chisle.js'));
+    assert.match(readText(agents), /puritanical-begin/);
+    assert.ok(exists('home/xdg/opencode/plugins/puritanical.js'));
 
-    writeText(agents, readText(agents).replace(/# Chisle[\s\S]*<!-- chisle-end -->/, 'STALE\n<!-- chisle-end -->'));
+    writeText(agents, readText(agents).replace(/# Puritanical[\s\S]*<!-- puritanical-end -->/, 'STALE\n<!-- puritanical-end -->'));
     r = runCLI(['--only', 'opencode', '--update'], { env });
     assert.equal(r.status, 0, r.out);
     assert.doesNotMatch(readText(agents), /STALE/);
 
-    writeText(under(root, '.chisle-compress-stats.json'), JSON.stringify({ savedChars: 1234, events: 2 }));
+    writeText(under(root, '.puritanical-compress-stats.json'), JSON.stringify({ savedChars: 1234, events: 2 }));
     r = runCLI(['--stats', '--only', 'opencode'], { env });
     assert.match(r.out, /1,234 chars/);
-    makeDir(under(root, 'chisle-spill'));
-    makeDir(under(root, 'chisle-dedup'));
+    makeDir(under(root, 'puritanical-spill'));
+    makeDir(under(root, 'puritanical-dedup'));
 
     r = runCLI(['--uninstall', '--only', 'opencode'], { env });
     assert.equal(r.status, 0, r.out);
-    assert.doesNotMatch(readText(agents), /chisle-begin/);
-    assert.equal(exists('home/xdg/opencode/plugins/chisle.js'), false);
-    assert.equal(exists(under(root, 'chisle-spill')), false);
-    assert.equal(exists(under(root, 'chisle-dedup')), false);
-    assert.equal(exists(under(root, '.chisle-compress-stats.json')), false);
+    assert.doesNotMatch(readText(agents), /puritanical-begin/);
+    assert.equal(exists('home/xdg/opencode/plugins/puritanical.js'), false);
+    assert.equal(exists(under(root, 'puritanical-spill')), false);
+    assert.equal(exists(under(root, 'puritanical-dedup')), false);
+    assert.equal(exists(under(root, '.puritanical-compress-stats.json')), false);
   });
 }
 
@@ -594,7 +594,7 @@ test('OpenCode directory detection uses the configured root', { skip: process.pl
 test('hermes install copies skills verbatim, uninstall prunes only owned', () => {
   const home = absolutePath('home');
   makeDir('home');
-  const env = { CHISLE_HOME: home };
+  const env = { PURITANICAL_HOME: home };
   const skills = under(home, '.hermes', 'skills');
 
   const r = runCLI(['--only', 'hermes'], { env });
@@ -605,7 +605,7 @@ test('hermes install copies skills verbatim, uninstall prunes only owned', () =>
   writeText(under(skills, 'mine', 'SKILL.md'), 'mine');
   const u = runCLI(['--uninstall', '--only', 'hermes'], { env });
   assert.match(u.out, /Uninstalled/);
-  assert.ok(!exists(under(skills, 'chisle')));
+  assert.ok(!exists(under(skills, 'puritanical')));
   assert.equal(readText(under(skills, 'mine', 'SKILL.md')), 'mine');
 });
 
@@ -614,7 +614,7 @@ test('opencode+hermes dry-run changes nothing on disk', () => {
   makeDir('home');
   const env = isolatedOpencodeEnv(home);
   runCLI(['--only', 'opencode', '--only', 'hermes', '--dry-run'], { env });
-  assert.deepEqual(listDir(home), [], 'dry-run wrote into CHISLE_HOME');
+  assert.deepEqual(listDir(home), [], 'dry-run wrote into PURITANICAL_HOME');
 });
 
 test('a fence missing its end marker is left alone, not truncated', () => {
@@ -625,7 +625,7 @@ test('a fence missing its end marker is left alone, not truncated', () => {
   const home = absolutePath('home');
   makeDir('home');
   const env = isolatedOpencodeEnv(home);
-  const body = 'my rules\n\n<!-- chisle-begin -->\nstale\n\nKEEP THIS\n';
+  const body = 'my rules\n\n<!-- puritanical-begin -->\nstale\n\nKEEP THIS\n';
 
   const codex = under(home, '.codex');
   const opencode = under(home, '.config', 'opencode');
@@ -635,7 +635,7 @@ test('a fence missing its end marker is left alone, not truncated', () => {
     process.chdir(directory);
     writeText('AGENTS.md', body);
     const install = runCLI(['--only', id, '--force'], { env, cwd: home });
-    assert.match(install.out, /no chisle-end/, id + ': no warning');
+    assert.match(install.out, /no puritanical-end/, id + ': no warning');
     assert.equal(readText('AGENTS.md'), body, id + ': --force rewrote a malformed fence');
 
     runCLI(['--uninstall', '--only', id], { env, cwd: home });
@@ -645,15 +645,15 @@ test('a fence missing its end marker is left alone, not truncated', () => {
 test('codex fenced install still works via shared helper (refactor guard)', () => {
   const home = absolutePath('home');
   makeDir('home');
-  const env = { CHISLE_HOME: home };
+  const env = { PURITANICAL_HOME: home };
   const agents = under(home, '.codex', 'AGENTS.md');
 
   runCLI(['--only', 'codex'], { env });
-  assert.ok(readText(agents).includes('<!-- chisle-begin -->'));
+  assert.ok(readText(agents).includes('<!-- puritanical-begin -->'));
   const r = runCLI(['--only', 'codex'], { env });
-  assert.match(r.out, /already contains chisle ruleset/);
+  assert.match(r.out, /already contains puritanical ruleset/);
   runCLI(['--uninstall', '--only', 'codex'], { env });
-  assert.doesNotMatch(readText(agents), /chisle-begin/);
+  assert.doesNotMatch(readText(agents), /puritanical-begin/);
 });
 
 // A shell-out install whose CLI is missing must be reported as a failure, not a
@@ -698,9 +698,9 @@ test('REGRESSION: --update upgrades an installed Claude plugin via plugin update
   const binDir = absolutePath('bin');
   makeDir('bin');
   const log = under(binDir, 'calls.log');
-  writeText(under(binDir, 'claude'), `#!/bin/sh\necho "$@" >> ${JSON.stringify(log)}\necho chisle\nexit 0\n`, { mode: 0o755 });
+  writeText(under(binDir, 'claude'), `#!/bin/sh\necho "$@" >> ${JSON.stringify(log)}\necho puritanical\nexit 0\n`, { mode: 0o755 });
   runCLI(['--update', '--only', 'claude', '--config-dir', cfg], { env: { PATH: binDir + path.delimiter + process.env.PATH } });
   const calls = readText(log);
-  assert.match(calls, /^plugin update chisle@chisle$/m);
+  assert.match(calls, /^plugin update puritanical@puritanical$/m);
   assert.doesNotMatch(calls, /^plugin install /m);
 });

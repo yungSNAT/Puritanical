@@ -12,8 +12,8 @@ const {
   restoreEnvironment, saveEnvironment, tempRoot, under,
 } = require('./helpers/sandbox');
 
-const OPENCODE_PLUGIN = repoPath('.opencode', 'plugins', 'chisle.mjs');
-const OPENCODE_SETUP = repoPath('.opencode', 'plugins-v2', 'chisle', 'setup.cjs');
+const OPENCODE_PLUGIN = repoPath('.opencode', 'plugins', 'puritanical.mjs');
+const OPENCODE_SETUP = repoPath('.opencode', 'plugins-v2', 'puritanical', 'setup.cjs');
 
 function runScript(script, args, env) {
   return spawnSync(process.execPath, ['-e', script, ...(args || [])], {
@@ -23,7 +23,7 @@ function runScript(script, args, env) {
 }
 
 test('OpenCode plugin remains a no-op when neither compressor nor config module can be loaded', (t) => {
-  const home = tempRoot(t, 'chisle-cov-plugin-null-');
+  const home = tempRoot(t, 'puritanical-cov-plugin-null-');
 
   const script = `
     const Module = require('node:module');
@@ -31,8 +31,8 @@ test('OpenCode plugin remains a no-op when neither compressor nor config module 
     const requests = [];
     Module._load = function(request, parent, isMain) {
       if (typeof request === 'string' &&
-          (request.endsWith('chisle-compress-output.js') ||
-           request.endsWith('chisle-config.js'))) {
+          (request.endsWith('puritanical-compress-output.js') ||
+           request.endsWith('puritanical-config.js'))) {
         requests.push(request);
         const error = new Error('intentionally missing: ' + request);
         error.code = 'MODULE_NOT_FOUND';
@@ -70,15 +70,15 @@ test('OpenCode plugin remains a no-op when neither compressor nor config module 
   assert.equal(observed.tool, 'unchanged tool output');
   assert.equal(observed.stored, 'unchanged stored output');
   assert.deepEqual(observed.requests, [
-    './chisle-hooks/chisle-compress-output.js',
-    '../../hooks/chisle-compress-output.js',
-    './chisle-hooks/chisle-config.js',
-    '../../hooks/chisle-config.js',
+    './puritanical-hooks/puritanical-compress-output.js',
+    '../../hooks/puritanical-compress-output.js',
+    './puritanical-hooks/puritanical-config.js',
+    '../../hooks/puritanical-config.js',
   ]);
 });
 
 test('OpenCode plugin uses fallback mode and legacy state-directory accessors', (t) => {
-  const home = tempRoot(t, 'chisle-cov-plugin-config-');
+  const home = tempRoot(t, 'puritanical-cov-plugin-config-');
   const stateDir = under(home, 'legacy-state');
 
   const script = `
@@ -102,10 +102,10 @@ test('OpenCode plugin uses fallback mode and legacy state-directory accessors', 
     };
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
-      if (typeof request === 'string' && request.endsWith('chisle-compress-output.js')) {
+      if (typeof request === 'string' && request.endsWith('puritanical-compress-output.js')) {
         return core;
       }
-      if (typeof request === 'string' && request.endsWith('chisle-config.js')) {
+      if (typeof request === 'string' && request.endsWith('puritanical-config.js')) {
         return config;
       }
       return originalLoad.call(this, request, parent, isMain);
@@ -150,7 +150,7 @@ test('OpenCode plugin uses fallback mode and legacy state-directory accessors', 
 });
 
 test('OpenCode plugin falls back to its config root when config has no state accessor', (t) => {
-  const home = tempRoot(t, 'chisle-cov-plugin-root-');
+  const home = tempRoot(t, 'puritanical-cov-plugin-root-');
 
   const script = `
     const Module = require('node:module');
@@ -164,10 +164,10 @@ test('OpenCode plugin falls back to its config root when config has no state acc
     };
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
-      if (typeof request === 'string' && request.endsWith('chisle-compress-output.js')) {
+      if (typeof request === 'string' && request.endsWith('puritanical-compress-output.js')) {
         return core;
       }
-      if (typeof request === 'string' && request.endsWith('chisle-config.js')) {
+      if (typeof request === 'string' && request.endsWith('puritanical-config.js')) {
         return {};
       }
       return originalLoad.call(this, request, parent, isMain);
@@ -200,7 +200,7 @@ test('OpenCode v2 setup rethrows non-module loading failures', () => {
 
   Module._load = function loadWithDeniedHooks(request, parent, isMain) {
     if (parent && parent.filename === OPENCODE_SETUP
-      && typeof request === 'string' && request.startsWith('./chisle-hooks/')) {
+      && typeof request === 'string' && request.startsWith('./puritanical-hooks/')) {
       const error = new Error('local hook access denied');
       error.code = 'EACCES';
       throw error;
@@ -221,8 +221,8 @@ test('OpenCode v2 setup rethrows non-module loading failures', () => {
 
 test('OpenCode v2 setup falls back after a falsy load error and safely handles every content shape', async (t) => {
   const envKeys = [
-    'HOME', 'USERPROFILE', 'XDG_CONFIG_HOME', 'CHISLE_STATE_DIR',
-    'CHISLE_DEFAULT_MODE', 'CHISLE_COMPRESS_TOOLS', 'CHISLE_COMPRESS',
+    'HOME', 'USERPROFILE', 'XDG_CONFIG_HOME', 'PURITANICAL_STATE_DIR',
+    'PURITANICAL_DEFAULT_MODE', 'PURITANICAL_COMPRESS_TOOLS', 'PURITANICAL_COMPRESS',
   ];
   const savedEnv = saveEnvironment(envKeys);
   const originalLoad = Module._load;
@@ -232,21 +232,21 @@ test('OpenCode v2 setup falls back after a falsy load error and safely handles e
     clearModule(OPENCODE_SETUP);
   });
 
-  const home = tempRoot(t, 'chisle-cov-v2-');
+  const home = tempRoot(t, 'puritanical-cov-v2-');
   const stateDir = under(home, 'state');
   process.env.HOME = home;
   process.env.USERPROFILE = home;
   process.env.XDG_CONFIG_HOME = under(home, 'xdg');
-  process.env.CHISLE_STATE_DIR = stateDir;
-  process.env.CHISLE_DEFAULT_MODE = 'on';
-  process.env.CHISLE_COMPRESS_TOOLS = 'shell';
-  delete process.env.CHISLE_COMPRESS;
+  process.env.PURITANICAL_STATE_DIR = stateDir;
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'shell';
+  delete process.env.PURITANICAL_COMPRESS;
 
   let setup;
 
   Module._load = function loadWithFalsyLocalFailure(request, parent, isMain) {
     if (parent && parent.filename === OPENCODE_SETUP
-      && typeof request === 'string' && request.startsWith('./chisle-hooks/')) throw null;
+      && typeof request === 'string' && request.startsWith('./puritanical-hooks/')) throw null;
     return originalLoad.call(this, request, parent, isMain);
   };
 
@@ -330,9 +330,9 @@ test('OpenCode v2 setup falls back after a falsy load error and safely handles e
     assert.deepEqual(event.result.content[2], { type: 'text', text: 123 });
     assert.equal(event.result.content[3].extra, 'preserved');
     assert.ok(event.result.content[3].text.length < original.length);
-    assert.match(event.result.content[3].text, /\[chisle: elided/);
+    assert.match(event.result.content[3].text, /\[puritanical: elided/);
 
-    const ledger = readJson(under(stateDir, '.chisle-compress-stats.json'));
+    const ledger = readJson(under(stateDir, '.puritanical-compress-stats.json'));
     assert.deepEqual(ledger, {
       savedChars: original.length - event.result.content[3].text.length,
       events: 1,

@@ -241,7 +241,7 @@ pub(super) fn trim(t: &Theme, l: &Lang) -> String {
         t,
         w,
         h,
-        "Animated illustration of the Chisle tool-output compressor: raw npm test output with colour codes, six identical lines and 172 passing lines becomes a short version with the codes stripped, the repeats collapsed, the middle elided with the full output saved to a file, and the failing test and its error kept. On real sessions, oversized output shrinks by about 48 percent on average.",
+        "Animated illustration of the Puritanical tool-output compressor: raw npm test output with colour codes, six identical lines and 172 passing lines becomes a short version with the codes stripped, the repeats collapsed, the middle elided with the full output saved to a file, and the failing test and its error kept. On real sessions, oversized output shrinks by about 48 percent on average.",
         &o,
         "",
     )
@@ -274,10 +274,13 @@ fn trim_right(t: &Theme, l: &Lang) -> [(usize, Vec<(&'static str, &'static str)>
     [
         (0, vec![("> chisle@3.12.1 test", t.soft)]),
         (1, vec![("✓", t.green), (" retry backs off", t.soft)]),
-        (6, vec![("... [chisle: line repeated 6×] ...", t.accent)]),
+        (
+            6,
+            vec![("... [puritanical: line repeated 6×] ...", t.accent)],
+        ),
         (7, vec![("✓", t.green), (" strips colour codes", t.soft)]),
         (8, vec![("✓", t.green), (" collapses repeats", t.soft)]),
-        (9, vec![("... [chisle: elided 172 lines,", t.accent)]),
+        (9, vec![("... [puritanical: elided 172 lines,", t.accent)]),
         (9, vec![("     full output saved to a file] ...", t.accent)]),
         (
             10,
@@ -359,7 +362,7 @@ fn trim_foot(t: &Theme, l: &Lang, w: f64) -> [String; 2] {
 
 // ── Filters: command-aware filters on four real outputs ──────────────────────
 // Chisle 3.14 on real output, from benchmarks/replay-commands.js (the failing
-// jest run goes through the chisle-run.js wrapper, as on Claude Code in
+// jest run goes through the puritanical-run.js wrapper, as on Claude Code in
 // bypassPermissions mode). The footnote is that script's 37-command total.
 const F_ROWS: [(&str, f64, f64); 4] = [
     ("npm test", 19374.0, 445.0),

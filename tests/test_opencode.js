@@ -20,20 +20,20 @@ const { spawn, spawnSync } = require('child_process');
 // Give every test its own state root and let the fixture clean it up.
 isolateWorkingDirectory();
 beforeEach(t => {
-  const previous = process.env.CHISLE_STATE_DIR;
-  process.env.CHISLE_STATE_DIR = process.cwd();
+  const previous = process.env.PURITANICAL_STATE_DIR;
+  process.env.PURITANICAL_STATE_DIR = process.cwd();
   t.after(() => {
-    if (previous === undefined) delete process.env.CHISLE_STATE_DIR;
-    else process.env.CHISLE_STATE_DIR = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_STATE_DIR;
+    else process.env.PURITANICAL_STATE_DIR = previous;
   });
 });
 
-const opencodeCore = require('../hooks/chisle-compress-output');
+const opencodeCore = require('../hooks/puritanical-compress-output');
 const {
   opencodeToolAllowed, compressForOpencode, boundForOpencode, recordSavings,
   SAFE_TOOLS_OPENCODE, THRESHOLDS,
 } = opencodeCore;
-const { getOpencodeDir, getOpencodeStateDir } = require('../hooks/chisle-config');
+const { getOpencodeDir, getOpencodeStateDir } = require('../hooks/puritanical-config');
 
 function bigOutput(lines, prefix) {
   return Array.from({ length: lines }, (_, i) => `${prefix || 'line'} ${i} ${'x'.repeat(80)}`).join('\n');
@@ -51,35 +51,35 @@ function hasUnpairedSurrogate(value) {
 
 function sessionStateFile(stateDir, sessionId) {
   const name = crypto.createHash('sha256').update(sessionId).digest('hex') + '.json';
-  return under(stateDir, 'chisle-dedup', name);
+  return under(stateDir, 'puritanical-dedup', name);
 }
 
 // ── config root ──────────────────────────────────────────────────────────────
 
 test('OpenCode root follows host precedence and keeps an injectable home fallback', () => {
-  const home = under(os.tmpdir(), 'chisle-home');
+  const home = under(os.tmpdir(), 'puritanical-home');
   assert.equal(getOpencodeDir({ env: {}, home }), under(home, '.config', 'opencode'));
   assert.equal(getOpencodeDir({ env: { XDG_CONFIG_HOME: '/xdg' }, home }), under('/xdg', 'opencode'));
   assert.equal(getOpencodeDir({ env: { XDG_CONFIG_HOME: '/xdg', OPENCODE_CONFIG_DIR: '/custom' }, home }), '/custom');
 });
 
-test('OpenCode state uses its config root unless CHISLE_STATE_DIR overrides it', () => {
-  const home = under(os.tmpdir(), 'chisle-home');
+test('OpenCode state uses its config root unless PURITANICAL_STATE_DIR overrides it', () => {
+  const home = under(os.tmpdir(), 'puritanical-home');
   assert.equal(getOpencodeStateDir({ env: { OPENCODE_CONFIG_DIR: '/custom' }, home }), '/custom');
-  assert.equal(getOpencodeStateDir({ env: { OPENCODE_CONFIG_DIR: '/custom', CHISLE_STATE_DIR: '/state' }, home }), '/state');
+  assert.equal(getOpencodeStateDir({ env: { OPENCODE_CONFIG_DIR: '/custom', PURITANICAL_STATE_DIR: '/state' }, home }), '/state');
 });
 
 // ── allowlist ────────────────────────────────────────────────────────────────
 
 test('opencodeToolAllowed allows only explicit read-heavy defaults', () => {
-  const previous = process.env.CHISLE_COMPRESS_TOOLS;
-  delete process.env.CHISLE_COMPRESS_TOOLS;
+  const previous = process.env.PURITANICAL_COMPRESS_TOOLS;
+  delete process.env.PURITANICAL_COMPRESS_TOOLS;
   try {
     assert.deepEqual(SAFE_TOOLS_OPENCODE, ['bash', 'shell', 'grep', 'glob', 'webfetch', 'websearch', 'list']);
     for (const t of SAFE_TOOLS_OPENCODE) assert.equal(opencodeToolAllowed(t), true, t);
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_COMPRESS_TOOLS;
-    else process.env.CHISLE_COMPRESS_TOOLS = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_COMPRESS_TOOLS;
+    else process.env.PURITANICAL_COMPRESS_TOOLS = previous;
   }
 });
 
@@ -102,26 +102,26 @@ test('opencodeToolAllowed rejects junk', () => {
   assert.equal(opencodeToolAllowed(undefined), false);
 });
 
-test('CHISLE_COMPRESS_TOOLS override is an exact allowlist', () => {
-  process.env.CHISLE_COMPRESS_TOOLS = 'bash,grep';
+test('PURITANICAL_COMPRESS_TOOLS override is an exact allowlist', () => {
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'bash,grep';
   try {
     assert.equal(opencodeToolAllowed('bash'), true);
     assert.equal(opencodeToolAllowed('glob'), false);       // not in override
     assert.equal(opencodeToolAllowed('github-tools_x'), false); // override wins over MCP heuristic
   } finally {
-    delete process.env.CHISLE_COMPRESS_TOOLS;
+    delete process.env.PURITANICAL_COMPRESS_TOOLS;
   }
 });
 
-test('CHISLE_COMPRESS_TOOLS allows explicit MCP tools but not protected tools', () => {
-  process.env.CHISLE_COMPRESS_TOOLS = 'custom_report,read,edit,write,patch,multiedit,notebookread';
+test('PURITANICAL_COMPRESS_TOOLS allows explicit MCP tools but not protected tools', () => {
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'custom_report,read,edit,write,patch,multiedit,notebookread';
   try {
     assert.equal(opencodeToolAllowed('custom_report'), true);
     for (const t of ['read', 'edit', 'write', 'patch', 'multiedit', 'notebookread']) {
       assert.equal(opencodeToolAllowed(t), false, t);
     }
   } finally {
-    delete process.env.CHISLE_COMPRESS_TOOLS;
+    delete process.env.PURITANICAL_COMPRESS_TOOLS;
   }
 });
 
@@ -131,7 +131,7 @@ test('compressForOpencode elides a big bash output', () => {
   const text = bigOutput(500);
   const out = compressForOpencode('bash', text, { mode: 'on' });
   assert.ok(out && out.length < text.length);
-  assert.match(out, /chisle: elided/);
+  assert.match(out, /puritanical: elided/);
 });
 
 test('compressForOpencode leaves small output untouched', () => {
@@ -147,11 +147,11 @@ test('compressForOpencode never touches read output even when huge', () => {
 test('compressForOpencode honors mode off and the kill switch', () => {
   const text = bigOutput(500);
   assert.equal(compressForOpencode('bash', text, { mode: 'off' }), null);
-  process.env.CHISLE_COMPRESS = '0';
+  process.env.PURITANICAL_COMPRESS = '0';
   try {
     assert.equal(compressForOpencode('bash', text, { mode: 'on' }), null);
   } finally {
-    delete process.env.CHISLE_COMPRESS;
+    delete process.env.PURITANICAL_COMPRESS;
   }
 });
 
@@ -176,8 +176,8 @@ test('salvage matches severities inside underscore codes and ERR!, not inside wo
 });
 
 test('maxChars is a final bound for long lines with late errors', () => {
-  const stateDir = makeTempDir('chisle-oc-bound-');
-  process.env.CHISLE_COMPRESS_MAX_CHARS = '4000';
+  const stateDir = makeTempDir('puritanical-oc-bound-');
+  process.env.PURITANICAL_COMPRESS_MAX_CHARS = '4000';
   try {
     const text = [
       `BEGIN ${'a'.repeat(5000)}`,
@@ -191,29 +191,29 @@ test('maxChars is a final bound for long lines with late errors', () => {
     assert.match(out, /FATAL LATE_ERROR/);
     assert.equal(readText(recoveryPath(out)), text);
   } finally {
-    delete process.env.CHISLE_COMPRESS_MAX_CHARS;
+    delete process.env.PURITANICAL_COMPRESS_MAX_CHARS;
     remove(stateDir, { recursive: true, force: true });
   }
 });
 
 test('maxChars remains exact at its smallest valid value', () => {
-  const previous = process.env.CHISLE_COMPRESS_MAX_CHARS;
-  process.env.CHISLE_COMPRESS_MAX_CHARS = '1';
+  const previous = process.env.PURITANICAL_COMPRESS_MAX_CHARS;
+  process.env.PURITANICAL_COMPRESS_MAX_CHARS = '1';
   try {
     assert.equal(compressForOpencode('bash', 'x'.repeat(5000), { mode: 'on' }).length, 1);
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_COMPRESS_MAX_CHARS;
-    else process.env.CHISLE_COMPRESS_MAX_CHARS = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_COMPRESS_MAX_CHARS;
+    else process.env.PURITANICAL_COMPRESS_MAX_CHARS = previous;
   }
 });
 
 test('maxChars bounds short output and duplicate markers', () => {
-  const previous = process.env.CHISLE_COMPRESS_MAX_CHARS;
-  const stateDir = makeTempDir('chisle-oc-small-bound-');
+  const previous = process.env.PURITANICAL_COMPRESS_MAX_CHARS;
+  const stateDir = makeTempDir('puritanical-oc-small-bound-');
   try {
-    process.env.CHISLE_COMPRESS_MAX_CHARS = '1';
+    process.env.PURITANICAL_COMPRESS_MAX_CHARS = '1';
     assert.equal(compressForOpencode('bash', 'x'.repeat(100), { mode: 'on', stateDir }).length, 1);
-    process.env.CHISLE_COMPRESS_MAX_CHARS = '1000';
+    process.env.PURITANICAL_COMPRESS_MAX_CHARS = '1000';
     const text = Array(5).fill('x'.repeat(300)).join('\n') + '\n' + 'y'.repeat(3000);
     const opts = { mode: 'on', stateDir, sessionId: 'bounded-dedup' };
     compressForOpencode('bash', text, { ...opts, callId: 'first' });
@@ -221,15 +221,15 @@ test('maxChars bounds short output and duplicate markers', () => {
     assert.ok(duplicate.length <= 1000);
     assert.match(duplicate, /byte-identical/);
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_COMPRESS_MAX_CHARS;
-    else process.env.CHISLE_COMPRESS_MAX_CHARS = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_COMPRESS_MAX_CHARS;
+    else process.env.PURITANICAL_COMPRESS_MAX_CHARS = previous;
     remove(stateDir, { recursive: true, force: true });
   }
 });
 
 test('small bounds retain late diagnostics and head/tail context', () => {
-  const previous = process.env.CHISLE_COMPRESS_MAX_CHARS;
-  process.env.CHISLE_COMPRESS_MAX_CHARS = '1000';
+  const previous = process.env.PURITANICAL_COMPRESS_MAX_CHARS;
+  process.env.PURITANICAL_COMPRESS_MAX_CHARS = '1000';
   try {
     const text = `BEGIN ${'a'.repeat(5000)} FATAL LATE_ERROR ${'b'.repeat(5000)} END`;
     const out = compressForOpencode('bash', text, { mode: 'on' });
@@ -239,13 +239,13 @@ test('small bounds retain late diagnostics and head/tail context', () => {
     assert.match(out, /END/);
     assert.equal(readText(recoveryPath(out)), text);
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_COMPRESS_MAX_CHARS;
-    else process.env.CHISLE_COMPRESS_MAX_CHARS = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_COMPRESS_MAX_CHARS;
+    else process.env.PURITANICAL_COMPRESS_MAX_CHARS = previous;
   }
 });
 
 test('spill preserves the byte-identical pre-scrub output', () => {
-  const stateDir = makeTempDir('chisle-oc-spill-');
+  const stateDir = makeTempDir('puritanical-oc-spill-');
   try {
     const text = `\u001b[31mBEGIN\u001b[0m   \n${bigOutput(200)}\n\n\nEND`;
     const out = compressForOpencode('bash', text, { mode: 'on', stateDir });
@@ -261,24 +261,24 @@ test('spill preserves the byte-identical pre-scrub output', () => {
 });
 
 test('spill rejects symlinked directories and final files', { skip: process.platform === 'win32' }, () => {
-  const stateDir = makeTempDir('chisle-oc-spill-link-');
-  const outside = makeTempDir('chisle-oc-spill-outside-');
+  const stateDir = makeTempDir('puritanical-oc-spill-link-');
+  const outside = makeTempDir('puritanical-oc-spill-outside-');
   try {
     const text = bigOutput(200, 'linked');
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
-    fs.symlinkSync(outside, under(stateDir, 'chisle-spill')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    fs.symlinkSync(outside, under(stateDir, 'puritanical-spill')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     const dirOutput = compressForOpencode('bash', text, { mode: 'on', stateDir });
     assert.doesNotMatch(dirOutput, /Full output:/);
     assert.deepEqual(listDir(outside), []);
 
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Removes a link this test created under os.tmpdir().
-    fs.unlinkSync(under(stateDir, 'chisle-spill')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    makeDir(under(stateDir, 'chisle-spill'));
+    fs.unlinkSync(under(stateDir, 'puritanical-spill')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    makeDir(under(stateDir, 'puritanical-spill'));
     const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
     const victim = under(outside, 'victim');
     writeText(victim, 'unchanged');
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
-    fs.symlinkSync(victim, under(stateDir, 'chisle-spill', `bash-${hash}.txt`)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    fs.symlinkSync(victim, under(stateDir, 'puritanical-spill', `bash-${hash}.txt`)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     const fileOutput = compressForOpencode('bash', text, { mode: 'on', stateDir });
     assert.doesNotMatch(fileOutput, /Full output:/);
     assert.equal(readText(victim), 'unchanged');
@@ -289,7 +289,7 @@ test('spill rejects symlinked directories and final files', { skip: process.plat
 });
 
 test('a repeated spill reuses the existing file even when UTF-8 cannot round-trip it', () => {
-  const stateDir = makeTempDir('chisle-oc-spill-reuse-');
+  const stateDir = makeTempDir('puritanical-oc-spill-reuse-');
   try {
     const text = bigOutput(200, 'lone \uD800');
     const first = compressForOpencode('bash', text, { mode: 'on', stateDir });
@@ -302,8 +302,8 @@ test('a repeated spill reuses the existing file even when UTF-8 cannot round-tri
 });
 
 test('spill and stats reject symlinked randomized temporary targets', { skip: process.platform === 'win32' }, () => {
-  const root = makeTempDir('chisle-oc-tmp-link-');
-  const core = under(__dirname, '..', 'hooks', 'chisle-compress-output.js');
+  const root = makeTempDir('puritanical-oc-tmp-link-');
+  const core = under(__dirname, '..', 'hooks', 'puritanical-compress-output.js');
   try {
     const probe = `
       const fs=require('fs'),path=require('path'),crypto=require('crypto');
@@ -311,14 +311,14 @@ test('spill and stats reject symlinked randomized temporary targets', { skip: pr
       const c=require(${JSON.stringify(core)}),root=process.argv[1],victim=path.join(root,'victim');
       fs.writeFileSync(victim,'unchanged');
       const text=Array.from({length:200},(_,i)=>'temporary '+i+' '+'x'.repeat(80)).join('\\n');
-      const spillDir=path.join(root,'spill','chisle-spill');fs.mkdirSync(spillDir,{recursive:true});
+      const spillDir=path.join(root,'spill','puritanical-spill');fs.mkdirSync(spillDir,{recursive:true});
       const hash=crypto.createHash('sha256').update(text).digest('hex').slice(0,12);
       fs.symlinkSync(victim,path.join(spillDir,'bash-'+hash+'.txt.'+process.pid+'.010203040506.tmp'));
       const out=c.compressForOpencode('bash',text,{mode:'on',stateDir:path.join(root,'spill')});
       const statsDir=path.join(root,'stats');fs.mkdirSync(statsDir);
-      fs.symlinkSync(victim,path.join(statsDir,'.chisle-compress-stats.json.'+process.pid+'.010203040506.tmp'));
+      fs.symlinkSync(victim,path.join(statsDir,'.puritanical-compress-stats.json.'+process.pid+'.010203040506.tmp'));
       c.recordSavings(10,statsDir);
-      process.stdout.write(JSON.stringify({recovery:/Full output:/.test(out),ledger:fs.existsSync(path.join(statsDir,'.chisle-compress-stats.json')),victim:fs.readFileSync(victim,'utf8')}));
+      process.stdout.write(JSON.stringify({recovery:/Full output:/.test(out),ledger:fs.existsSync(path.join(statsDir,'.puritanical-compress-stats.json')),victim:fs.readFileSync(victim,'utf8')}));
     `;
     const result = spawnSync(process.execPath, ['-e', probe, root], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
@@ -329,15 +329,15 @@ test('spill and stats reject symlinked randomized temporary targets', { skip: pr
 });
 
 // Symlinked state ROOT is a supported user layout (dotfiles via GNU stow), so
-// recordSavings must still write there. The files Chisle writes into the root
+// recordSavings must still write there. The files Puritanical writes into the root
 // are kept symlink-free.
 test('stats writes are private and reject a symlinked stats file', { skip: process.platform === 'win32' }, () => {
-  const root = makeTempDir('chisle-oc-stats-safe-');
-  const outside = makeTempDir('chisle-oc-stats-outside-');
+  const root = makeTempDir('puritanical-oc-stats-safe-');
+  const outside = makeTempDir('puritanical-oc-stats-outside-');
   try {
     const normal = under(root, 'normal');
     recordSavings(12, normal);
-    const ledger = under(normal, '.chisle-compress-stats.json');
+    const ledger = under(normal, '.puritanical-compress-stats.json');
     assert.deepEqual(readJson(ledger), { savedChars: 12, events: 1 });
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Inspects a file this test created under os.tmpdir().
     assert.equal(fs.statSync(ledger).mode & 0o777, 0o600); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
@@ -347,7 +347,7 @@ test('stats writes are private and reject a symlinked stats file', { skip: proce
     const victim = under(outside, 'victim');
     writeText(victim, 'unchanged');
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
-    fs.symlinkSync(victim, under(linkedFileDir, '.chisle-compress-stats.json')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    fs.symlinkSync(victim, under(linkedFileDir, '.puritanical-compress-stats.json')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     recordSavings(30, linkedFileDir);
     assert.equal(readText(victim), 'unchanged');
   } finally {
@@ -357,11 +357,11 @@ test('stats writes are private and reject a symlinked stats file', { skip: proce
 });
 
 // A user-owned state ROOT that is itself a symlink (dotfiles via GNU stow)
-// must still record — only the files/subdirs Chisle creates beneath it are
+// must still record — only the files/subdirs Puritanical creates beneath it are
 // kept symlink-free. Regression guard for PR #33 review. Symlink support is
 // probed up front so an environment that can't create links skips cleanly.
 test('recordSavings, spill, and dedup accept a symlinked state root', (t) => {
-  const probe = makeTempDir('chisle-oc-symprobe-');
+  const probe = makeTempDir('puritanical-oc-symprobe-');
   let linkOk = true;
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
@@ -370,8 +370,8 @@ test('recordSavings, spill, and dedup accept a symlinked state root', (t) => {
   finally { remove(probe, { recursive: true, force: true }); }
   if (!linkOk) { t.skip('host cannot create symlinks'); return; }
 
-  const outside = makeTempDir('chisle-oc-symroot-');
-  const victimDir = makeTempDir('chisle-oc-symroot-victim-');
+  const outside = makeTempDir('puritanical-oc-symroot-');
+  const victimDir = makeTempDir('puritanical-oc-symroot-victim-');
   const root = under(path.dirname(outside), path.basename(outside) + '-link');
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Creates a test fixture link under os.tmpdir() or the test working directory.
@@ -379,7 +379,7 @@ test('recordSavings, spill, and dedup accept a symlinked state root', (t) => {
 
     // Stats ledger records through the symlinked root.
     recordSavings(100, root);
-    const ledger = under(outside, '.chisle-compress-stats.json');
+    const ledger = under(outside, '.puritanical-compress-stats.json');
     assert.deepEqual(readJson(ledger), { savedChars: 100, events: 1 });
 
     // Spill and per-session dedup state under the symlinked root still write.
@@ -388,14 +388,14 @@ test('recordSavings, spill, and dedup accept a symlinked state root', (t) => {
     const recovery = recoveryPath(output);
     // The hook returns the path as given (the symlink); the file must exist
     // inside the REAL directory the root points at.
-    assert.equal(path.dirname(recovery), under(root, 'chisle-spill'));
+    assert.equal(path.dirname(recovery), under(root, 'puritanical-spill'));
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Resolves a directory this test created under os.tmpdir().
-    assert.equal(fs.realpathSync(path.dirname(recovery)), under(outside, 'chisle-spill')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    assert.equal(fs.realpathSync(path.dirname(recovery)), under(outside, 'puritanical-spill')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Reads raw bytes of a file this test created under os.tmpdir().
     assert.deepEqual(fs.readFileSync(recovery), Buffer.from(text)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    assert.equal(exists(under(outside, 'chisle-dedup')), true);
+    assert.equal(exists(under(outside, 'puritanical-dedup')), true);
 
-    // ...but a symlink planted by Chisle INSIDE the root is still rejected.
+    // ...but a symlink planted by Puritanical INSIDE the root is still rejected.
     const victim = under(victimDir, 'victim');
     writeText(victim, 'unchanged');
     remove(ledger); // symlinkSync cannot replace an existing file
@@ -411,7 +411,7 @@ test('recordSavings, spill, and dedup accept a symlinked state root', (t) => {
 });
 
 test('OpenCode truncation is Unicode-safe', () => {
-  const stateDir = makeTempDir('chisle-oc-unicode-');
+  const stateDir = makeTempDir('puritanical-oc-unicode-');
   try {
     const text = `${'😀'.repeat(3000)}\n${'😀'.repeat(400)} FATAL EMOJI_ERROR ${'😀'.repeat(400)}\n${'😀'.repeat(3000)}`;
     const out = compressForOpencode('bash', text, { mode: 'on', stateDir });
@@ -427,7 +427,7 @@ test('OpenCode truncation is Unicode-safe', () => {
 
 async function loadV2Plugin() {
   const hooks = [];
-  const setup = require('../.opencode/plugins-v2/chisle/setup.cjs');
+  const setup = require('../.opencode/plugins-v2/puritanical/setup.cjs');
   await setup({ tool: { hook: async (name, callback) => hooks.push([name, callback]) } });
   assert.equal(hooks.length, 1);
   assert.equal(hooks[0][0], 'execute.after');
@@ -435,18 +435,18 @@ async function loadV2Plugin() {
 }
 
 test('OpenCode v2 plugin uses Plugin.define and registers execute.after', async () => {
-  const entry = readText(under(__dirname, '..', '.opencode', 'plugins-v2', 'chisle', 'index.mjs'));
+  const entry = readText(under(__dirname, '..', '.opencode', 'plugins-v2', 'puritanical', 'index.mjs'));
   assert.match(entry, /import \{ Plugin \} from '@opencode\/plugin'/);
-  assert.match(entry, /Plugin\.define\(\{ id: 'chisle', setup \}\)/);
+  assert.match(entry, /Plugin\.define\(\{ id: 'puritanical', setup \}\)/);
   assert.equal(typeof await loadV2Plugin(), 'function');
 });
 
 test('OpenCode v2 shell compression preserves spill, metadata, safety, stats, and idempotency', async () => {
-  const stateDir = makeTempDir('chisle-oc-v2-');
-  const previous = process.env.CHISLE_STATE_DIR;
-  const previousTools = process.env.CHISLE_COMPRESS_TOOLS;
-  process.env.CHISLE_STATE_DIR = stateDir;
-  process.env.CHISLE_COMPRESS_TOOLS = 'shell';
+  const stateDir = makeTempDir('puritanical-oc-v2-');
+  const previous = process.env.PURITANICAL_STATE_DIR;
+  const previousTools = process.env.PURITANICAL_COMPRESS_TOOLS;
+  process.env.PURITANICAL_STATE_DIR = stateDir;
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'shell';
   try {
     const after = await loadV2Plugin();
     const original = bigOutput(500, 'shell');
@@ -457,12 +457,12 @@ test('OpenCode v2 shell compression preserves spill, metadata, safety, stats, an
     await after(event);
     const compressed = event.result.content[0].text;
     assert.ok(compressed.length < original.length);
-    assert.match(compressed, /chisle: elided/);
+    assert.match(compressed, /puritanical: elided/);
     assert.deepEqual(event.result.output, { output: original, exit: 0 });
     assert.deepEqual(event.result.metadata, { exit: 0 });
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Reads raw bytes of a file this test created under os.tmpdir().
     assert.deepEqual(fs.readFileSync(recoveryPath(compressed)), Buffer.from(original)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    assert.deepEqual(readJson(under(stateDir, '.chisle-compress-stats.json')), {
+    assert.deepEqual(readJson(under(stateDir, '.puritanical-compress-stats.json')), {
       savedChars: original.length - compressed.length, events: 1,
     });
 
@@ -478,10 +478,10 @@ test('OpenCode v2 shell compression preserves spill, metadata, safety, stats, an
       assert.equal(protectedEvent.result.content, original);
     }
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_STATE_DIR;
-    else process.env.CHISLE_STATE_DIR = previous;
-    if (previousTools === undefined) delete process.env.CHISLE_COMPRESS_TOOLS;
-    else process.env.CHISLE_COMPRESS_TOOLS = previousTools;
+    if (previous === undefined) delete process.env.PURITANICAL_STATE_DIR;
+    else process.env.PURITANICAL_STATE_DIR = previous;
+    if (previousTools === undefined) delete process.env.PURITANICAL_COMPRESS_TOOLS;
+    else process.env.PURITANICAL_COMPRESS_TOOLS = previousTools;
     remove(stateDir, { recursive: true, force: true });
   }
 });
@@ -523,7 +523,7 @@ test('OpenCode v2 plugin fails open when compression throws', async () => {
 });
 
 test('plugin tool.execute.after compresses output.output in place', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const after = hooks['tool.execute.after'];
   assert.equal(typeof after, 'function');
@@ -532,7 +532,7 @@ test('plugin tool.execute.after compresses output.output in place', async () => 
   const output = { title: 't', output: big, metadata: {} };
   await after({ tool: 'bash', sessionID: 's', callID: 'c', args: {} }, output);
   assert.ok(output.output.length < big.length);
-  assert.match(output.output, /chisle: elided/);
+  assert.match(output.output, /puritanical: elided/);
 
   // read is never compressed
   const readOut = { title: 't', output: big, metadata: {} };
@@ -541,11 +541,11 @@ test('plugin tool.execute.after compresses output.output in place', async () => 
 });
 
 test('failed Bash results are compressed once without changing exit metadata', async () => {
-  const stateDir = makeTempDir('chisle-oc-failed-');
-  const previous = process.env.CHISLE_STATE_DIR;
-  process.env.CHISLE_STATE_DIR = stateDir;
+  const stateDir = makeTempDir('puritanical-oc-failed-');
+  const previous = process.env.PURITANICAL_STATE_DIR;
+  process.env.PURITANICAL_STATE_DIR = stateDir;
   try {
-    const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+    const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
     const hooks = await plugin({});
     const original = `${bigOutput(220, 'failed')}\nFATAL_FAILED_SMOKE exit=23`;
     const output = { output: original, metadata: { exit: 23, truncated: false } };
@@ -557,7 +557,7 @@ test('failed Bash results are compressed once without changing exit metadata', a
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Reads raw bytes of a file this test created under os.tmpdir().
     assert.deepEqual(fs.readFileSync(recoveryPath(output.output)), Buffer.from(original)); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
-    const statsPath = under(stateDir, '.chisle-compress-stats.json');
+    const statsPath = under(stateDir, '.puritanical-compress-stats.json');
     const stats = readJson(statsPath);
     assert.deepEqual(stats, { savedChars: original.length - output.output.length, events: 1 });
 
@@ -565,14 +565,14 @@ test('failed Bash results are compressed once without changing exit metadata', a
     await hooks['experimental.chat.messages.transform']({}, { messages });
     assert.deepEqual(readJson(statsPath), stats);
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_STATE_DIR;
-    else process.env.CHISLE_STATE_DIR = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_STATE_DIR;
+    else process.env.PURITANICAL_STATE_DIR = previous;
     remove(stateDir, { recursive: true, force: true });
   }
 });
 
 test('plugin hook never throws on odd output shapes', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const after = hooks['tool.execute.after'];
   await after({ tool: 'bash' }, { output: null });
@@ -586,7 +586,7 @@ test('plugin hook never throws on odd output shapes', async () => {
 // ── experimental.chat.messages.transform (request-time / retroactive) ────────
 
 test('messages.transform compresses a big completed tool part in place', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const transform = hooks['experimental.chat.messages.transform'];
   assert.equal(typeof transform, 'function');
@@ -602,11 +602,11 @@ test('messages.transform compresses a big completed tool part in place', async (
   await transform({}, { messages });
   const toolPart = messages[0].parts[1];
   assert.ok(toolPart.state.output.length < big.length);
-  assert.match(toolPart.state.output, /chisle: elided/);
+  assert.match(toolPart.state.output, /puritanical: elided/);
 });
 
 test('messages.transform preserves errors and leaves protected/small parts alone', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const transform = hooks['experimental.chat.messages.transform'];
 
@@ -637,18 +637,18 @@ test('messages.transform preserves errors and leaves protected/small parts alone
 });
 
 test('messages.transform honors mode off / kill switch and never throws', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const transform = hooks['experimental.chat.messages.transform'];
 
   const big = bigOutput(500);
-  process.env.CHISLE_COMPRESS = '0';
+  process.env.PURITANICAL_COMPRESS = '0';
   try {
     const messages = [{ info: {}, parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed', output: big, input: {} } }] }];
     await transform({}, { messages });
     assert.equal(messages[0].parts[0].state.output, big); // kill switch: untouched
   } finally {
-    delete process.env.CHISLE_COMPRESS;
+    delete process.env.PURITANICAL_COMPRESS;
   }
   // odd shapes: no throw
   await transform({}, {});
@@ -657,7 +657,7 @@ test('messages.transform honors mode off / kill switch and never throws', async 
 });
 
 test('messages.transform is idempotent: already-compressed parts are skipped', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const transform = hooks['experimental.chat.messages.transform'];
 
@@ -665,21 +665,21 @@ test('messages.transform is idempotent: already-compressed parts are skipped', a
   const messages = [{ info: {}, parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed', output: big, input: {} } }] }];
   await transform({}, { messages });
   const once = messages[0].parts[0].state.output;
-  assert.match(once, /chisle: elided/);
+  assert.match(once, /puritanical: elided/);
   await transform({}, { messages });            // second pass
   assert.equal(messages[0].parts[0].state.output, once); // unchanged, no nested marker
 });
 
-test('tool.execute.after preserves bounded Chisle output but bounds source markers', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+test('tool.execute.after preserves bounded Puritanical output but bounds source markers', async () => {
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const after = hooks['tool.execute.after'];
-  const already = 'kept\n... [chisle: elided 100 lines] ...';
+  const already = 'kept\n... [puritanical: elided 100 lines] ...';
   const first = { title: 't', output: already, metadata: {} };
   await after({ tool: 'bash', callID: 'c1' }, first);
   assert.equal(first.output, already);
 
-  const source = bigOutput(500) + '\n... [chisle: source marker] ...';
+  const source = bigOutput(500) + '\n... [puritanical: source marker] ...';
   const second = { title: 't', output: source, metadata: {} };
   await after({ tool: 'bash', sessionID: 'marker-session', callID: 'c2' }, second);
   assert.ok(second.output.length <= THRESHOLDS.maxChars);
@@ -687,7 +687,7 @@ test('tool.execute.after preserves bounded Chisle output but bounds source marke
 });
 
 test('OpenCode-native tool_output truncation remains recoverable before the hook', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const nativePath = '/opt/opencode/tool_original';
   const native = `${bigOutput(300)}\n\n...250000 bytes truncated...\n\nThe tool call succeeded but the output was truncated. Full output saved to: ${nativePath}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`;
@@ -698,7 +698,7 @@ test('OpenCode-native tool_output truncation remains recoverable before the hook
 });
 
 test('OpenCode dedup is isolated across interleaved sessions and calls', () => {
-  const stateDir = makeTempDir('chisle-oc-dedup-');
+  const stateDir = makeTempDir('puritanical-oc-dedup-');
   try {
     const text = `same\n${'x'.repeat(3000)}`;
     assert.equal(compressForOpencode('bash', text, { mode: 'on', stateDir, sessionId: 'a', callId: 'a1' }), null);
@@ -713,14 +713,14 @@ test('OpenCode dedup is isolated across interleaved sessions and calls', () => {
 });
 
 test('OpenCode dedup state is bounded and does not follow symlinks', () => {
-  const stateDir = makeTempDir('chisle-oc-dedup-safe-');
+  const stateDir = makeTempDir('puritanical-oc-dedup-safe-');
   try {
     for (let i = 0; i < 25; i++) {
       compressForOpencode('bash', `session ${i}\n${'x'.repeat(3000)}`, {
         mode: 'on', stateDir, sessionId: `s${i}`, callId: `c${i}`,
       });
     }
-    const dir = under(stateDir, 'chisle-dedup');
+    const dir = under(stateDir, 'puritanical-dedup');
     assert.equal(listDir(dir).filter((name) => name.endsWith('.json')).length, 20);
     if (symlinkSkip) return; // the bound above holds everywhere; the symlink half needs symlinks
     const target = under(stateDir, 'target');
@@ -737,8 +737,8 @@ test('OpenCode dedup state is bounded and does not follow symlinks', () => {
 });
 
 test('concurrent OpenCode sessions retain independent dedup state', async () => {
-  const stateDir = makeTempDir('chisle-oc-concurrent-');
-  const core = under(__dirname, '..', 'hooks', 'chisle-compress-output.js');
+  const stateDir = makeTempDir('puritanical-oc-concurrent-');
+  const core = under(__dirname, '..', 'hooks', 'puritanical-compress-output.js');
   try {
     const sessions = Array.from({ length: 8 }, (_, i) => `concurrent-${i}`);
     await Promise.all(sessions.map((session) => new Promise((resolve, reject) => {
@@ -759,23 +759,23 @@ test('concurrent OpenCode sessions retain independent dedup state', async () => 
 });
 
 test('only the persisted after-hook replacement records savings', async () => {
-  const stateDir = makeTempDir('chisle-oc-stats-');
-  const previous = process.env.CHISLE_STATE_DIR;
-  process.env.CHISLE_STATE_DIR = stateDir;
+  const stateDir = makeTempDir('puritanical-oc-stats-');
+  const previous = process.env.PURITANICAL_STATE_DIR;
+  process.env.PURITANICAL_STATE_DIR = stateDir;
   try {
-    const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+    const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
     const hooks = await plugin({});
     const big = bigOutput(500, 'stats');
     const output = { output: big };
     await hooks['tool.execute.after']({ tool: 'bash', sessionID: 'stats', callID: 'one' }, output);
-    const statsPath = under(stateDir, '.chisle-compress-stats.json');
+    const statsPath = under(stateDir, '.puritanical-compress-stats.json');
     const first = readJson(statsPath);
     const messages = [{ parts: [{ type: 'tool', tool: 'bash', state: { status: 'completed', output: big } }] }];
     await hooks['experimental.chat.messages.transform']({}, { messages });
     assert.deepEqual(readJson(statsPath), first);
   } finally {
-    if (previous === undefined) delete process.env.CHISLE_STATE_DIR;
-    else process.env.CHISLE_STATE_DIR = previous;
+    if (previous === undefined) delete process.env.PURITANICAL_STATE_DIR;
+    else process.env.PURITANICAL_STATE_DIR = previous;
     remove(stateDir, { recursive: true, force: true });
   }
 });
@@ -787,9 +787,9 @@ test('only the persisted after-hook replacement records savings', async () => {
 // loadFrom rethrows, taking the whole plugin down. Bun tolerates it; Node does
 // not. This asserts the installed layout survives the strict runtime.
 test('plugin runtime keeps spill, dedup, and stats under OPENCODE_CONFIG_DIR', () => {
-  const root = makeTempDir('chisle-oc-runtime-root-');
+  const root = makeTempDir('puritanical-oc-runtime-root-');
   try {
-    const pluginPath = under(__dirname, '..', '.opencode', 'plugins', 'chisle.mjs');
+    const pluginPath = under(__dirname, '..', '.opencode', 'plugins', 'puritanical.mjs');
     const probe = `
       const big = Array.from({length:220},(_,i)=>'line '+i+' '+'x'.repeat(80)).join('\\n');
       import(${JSON.stringify('file://' + pluginPath)}).then(async (m) => {
@@ -799,26 +799,26 @@ test('plugin runtime keeps spill, dedup, and stats under OPENCODE_CONFIG_DIR', (
         process.stdout.write(out.output.length < big.length ? 'COMPRESSED' : 'NOOP');
       });
     `;
-    const env = { ...process.env, OPENCODE_CONFIG_DIR: root, XDG_CONFIG_HOME: '', CHISLE_STATE_DIR: '' };
+    const env = { ...process.env, OPENCODE_CONFIG_DIR: root, XDG_CONFIG_HOME: '', PURITANICAL_STATE_DIR: '' };
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', probe], { encoding: 'utf8', env });
     assert.equal(result.stdout, 'COMPRESSED', result.stderr);
-    assert.ok(listDir(under(root, 'chisle-spill')).some(name => name.endsWith('.txt')));
-    assert.ok(listDir(under(root, 'chisle-dedup')).some(name => name.endsWith('.json')));
-    assert.ok(exists(under(root, '.chisle-compress-stats.json')));
+    assert.ok(listDir(under(root, 'puritanical-spill')).some(name => name.endsWith('.txt')));
+    assert.ok(listDir(under(root, 'puritanical-dedup')).some(name => name.endsWith('.json')));
+    assert.ok(exists(under(root, '.puritanical-compress-stats.json')));
   } finally {
     remove(root, { recursive: true, force: true });
   }
 });
 
 test('installed plugin still compresses when the config dir is type:module', async () => {
-  const home = makeTempDir('chisle-oc-mod-');
+  const home = makeTempDir('puritanical-oc-mod-');
   try {
     const { spawnSync } = require('child_process');
     const cli = under(__dirname, '..', 'bin', 'install.js');
     const r = spawnSync(process.execPath, [cli, '--only', 'opencode'], {
       encoding: 'utf8',
       env: Object.assign({}, process.env, {
-        HOME: home, USERPROFILE: home, CHISLE_HOME: home,
+        HOME: home, USERPROFILE: home, PURITANICAL_HOME: home,
         XDG_CONFIG_HOME: '', OPENCODE_CONFIG_DIR: '',
       }),
     });
@@ -829,7 +829,7 @@ test('installed plugin still compresses when the config dir is type:module', asy
 
     const probe = `
       const big = Array.from({length:500},(_,i)=>'line '+i+' '+'x'.repeat(80)).join('\\n');
-      import(${JSON.stringify('file://' + under(oc, 'plugins', 'chisle.js'))})
+      import(${JSON.stringify('file://' + under(oc, 'plugins', 'puritanical.js'))})
         .then(async (m) => {
           const hooks = await m.default({});
           const out = { output: big };
@@ -845,7 +845,7 @@ test('installed plugin still compresses when the config dir is type:module', asy
 });
 
 test('plugin hooks leave output alone when reading it throws', async () => {
-  const { default: plugin } = await import('../.opencode/plugins/chisle.mjs');
+  const { default: plugin } = await import('../.opencode/plugins/puritanical.mjs');
   const hooks = await plugin({});
   const broken = { get output() { throw new Error('unreadable output'); } };
   await hooks['tool.execute.after']({ tool: 'bash', sessionID: 's', callID: 'c', args: {} }, broken);

@@ -4,16 +4,16 @@
 const { test, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { makeDir, makeTempDir, remove, under, writeText } = require('./helpers/sandbox');
-const chisleExtension = require('../pi-extension');
+const puritanicalExtension = require('../pi-extension');
 
-// Keep the developer's real chisle config (e.g. sections.code=false) out of these tests.
-const configDir = makeTempDir('chisle-pi-config-');
+// Keep the developer's real puritanical config (e.g. sections.code=false) out of these tests.
+const configDir = makeTempDir('puritanical-pi-config-');
 process.env.XDG_CONFIG_HOME = configDir;
 process.on('exit', () => remove(configDir, { recursive: true, force: true }));
 
 const ENV_KEYS = [
-  'CHISLE_COMPRESS', 'CHISLE_COMPRESS_DEDUP', 'CHISLE_COMPRESS_SCRUB',
-  'CHISLE_COMPRESS_TOOLS', 'CHISLE_DEFAULT_MODE',
+  'PURITANICAL_COMPRESS', 'PURITANICAL_COMPRESS_DEDUP', 'PURITANICAL_COMPRESS_SCRUB',
+  'PURITANICAL_COMPRESS_TOOLS', 'PURITANICAL_DEFAULT_MODE',
 ];
 // eslint-disable-next-line security/detect-object-injection -- Keys come from the fixed ENV_KEYS list.
 const originalEnv = new Map(ENV_KEYS.map(key => [key, process.env[key]]));
@@ -56,7 +56,7 @@ function makeHarness({ entries = [], contextEntries = entries, hasUI = true, too
     getAllTools() { return tools; },
     events: eventBus,
   };
-  chisleExtension(pi);
+  puritanicalExtension(pi);
   const ctx = {
     hasUI,
     ui: {
@@ -85,13 +85,13 @@ function toolEvent(toolName, text, extra = {}) {
 }
 
 test('compresses safe Pi tool text and patches content only', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness();
   await start(h);
   const result = await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx);
 
   assert.deepEqual(Object.keys(result), ['content']);
-  assert.match(result.content[0].text, /\[chisle: elided/);
+  assert.match(result.content[0].text, /\[puritanical: elided/);
   assert.equal(result.content[0].type, 'text');
   assert.match(h.statuses.at(-1)[1], /⇣/);
 });
@@ -100,20 +100,20 @@ test('compresses safe Pi tool text and patches content only', async () => {
 // with isError: true and applies the returned content, so it is compressed
 // like any other result. Returning only `content` keeps Pi's isError intact.
 test('compresses a failed Pi tool result and leaves isError to Pi', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness();
   await start(h);
   const text = bigOutput() + '\n\nCommand exited with code 23';
   const result = await h.handlers.get('tool_result')(toolEvent('bash', text, { isError: true }), h.ctx);
 
   assert.deepEqual(Object.keys(result), ['content']);
-  assert.match(result.content[0].text, /\[chisle: elided/);
+  assert.match(result.content[0].text, /\[puritanical: elided/);
   assert.match(result.content[0].text, /Command exited with code 23/);
 });
 
 test('never compresses read, edit, or write, even when env-allowlisted', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
-  process.env.CHISLE_COMPRESS_TOOLS = 'read,edit,write';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'read,edit,write';
   const h = makeHarness();
   await start(h);
   for (const name of ['read', 'edit', 'write']) {
@@ -122,7 +122,7 @@ test('never compresses read, edit, or write, even when env-allowlisted', async (
 });
 
 test('preserves non-text blocks and compresses explicitly allowlisted extension tools', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness({
     tools: [{ name: 'web_search', sourceInfo: { source: '/opt/pi/extensions/search-extension.js' } }],
   });
@@ -131,36 +131,36 @@ test('preserves non-text blocks and compresses explicitly allowlisted extension 
   const event = toolEvent('web_search', bigOutput(), { content: [image, { type: 'text', text: bigOutput() }] });
   assert.equal(await h.handlers.get('tool_result')(event, h.ctx), undefined);
 
-  process.env.CHISLE_COMPRESS_TOOLS = 'web_search';
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'web_search';
   const result = await h.handlers.get('tool_result')(event, h.ctx);
   assert.equal(result.content[0], image);
-  assert.match(result.content[1].text, /\[chisle: elided/);
+  assert.match(result.content[1].text, /\[puritanical: elided/);
 });
 
 test('compression kill switches and explicit Pi allowlist work', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness();
   await start(h);
 
-  process.env.CHISLE_COMPRESS = '0';
+  process.env.PURITANICAL_COMPRESS = '0';
   assert.equal(await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx), undefined);
-  delete process.env.CHISLE_COMPRESS;
+  delete process.env.PURITANICAL_COMPRESS;
 
-  process.env.CHISLE_COMPRESS_TOOLS = 'grep';
+  process.env.PURITANICAL_COMPRESS_TOOLS = 'grep';
   assert.equal(await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx), undefined);
   assert.match((await h.handlers.get('tool_result')(toolEvent('grep', bigOutput()), h.ctx)).content[0].text, /elided/);
 });
 
 test('injects rules once, skips an existing AGENTS.md ruleset, and reinjects after compaction', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness();
   await start(h);
   const before = h.handlers.get('before_agent_start');
   const event = { type: 'before_agent_start', systemPrompt: '', systemPromptOptions: { contextFiles: [] } };
 
   const first = await before(event, h.ctx);
-  assert.equal(first.message.customType, 'chisle-rules');
-  assert.match(first.message.content, /CHISLE ACTIVE/);
+  assert.equal(first.message.customType, 'puritanical-rules');
+  assert.match(first.message.content, /PURITANICAL ACTIVE/);
   assert.equal(await before(event, h.ctx), undefined);
 
   await h.handlers.get('session_compact')({ type: 'session_compact' }, h.ctx);
@@ -170,19 +170,19 @@ test('injects rules once, skips an existing AGENTS.md ruleset, and reinjects aft
   await start(tagline);
   assert.ok(await tagline.handlers.get('before_agent_start')({
     ...event,
-    systemPromptOptions: { contextFiles: [{ content: '# Chisle\n\nChisle — maximum-efficiency dev mode.' }] },
+    systemPromptOptions: { contextFiles: [{ content: '# Puritanical\n\nPuritanical — maximum-efficiency dev mode.' }] },
   }, tagline.ctx), 'tagline without rules suppressed injection');
 
   const covered = makeHarness();
   await start(covered);
   assert.equal(await covered.handlers.get('before_agent_start')({
     ...event,
-    systemPromptOptions: { contextFiles: [{ content: '# Chisle\n\n## Prose: zero fluff\n\n## Code: the efficiency ladder' }] },
+    systemPromptOptions: { contextFiles: [{ content: '# Puritanical\n\n## Prose: zero fluff\n\n## Code: the efficiency ladder' }] },
   }, covered.ctx), undefined);
 });
 
 test('OMP system prompt segments receive rules as a system prompt instead of a trailing message', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness({ omp: true });
   await start(h);
   const event = { systemPrompt: ['base system prompt'], systemPromptOptions: { contextFiles: [] } };
@@ -190,7 +190,7 @@ test('OMP system prompt segments receive rules as a system prompt instead of a t
   const result = await before(event, h.ctx);
 
   assert.ok(Array.isArray(result.systemPrompt));
-  assert.match(result.systemPrompt.at(-1), /CHISLE ACTIVE/);
+  assert.match(result.systemPrompt.at(-1), /PURITANICAL ACTIVE/);
   assert.equal(result.message, undefined);
   assert.ok(await before(event, h.ctx), 'rules were not appended to the next OMP turn');
   assert.equal(await before({ ...event, systemPrompt: result.systemPrompt }, h.ctx), undefined,
@@ -199,22 +199,22 @@ test('OMP system prompt segments receive rules as a system prompt instead of a t
 
 for (const sections of [{ code: false }, { prose: false }, { prose: false, code: false }]) {
   test(`OMP rules injected with sections ${JSON.stringify(sections)} are not appended twice`, async () => {
-    const dir = makeTempDir('chisle-pi-sections-');
+    const dir = makeTempDir('puritanical-pi-sections-');
     const savedConfigHome = process.env.XDG_CONFIG_HOME;
     try {
-      makeDir(under(dir, 'chisle'));
-      writeText(under(dir, 'chisle', 'config.json'), JSON.stringify({ sections }));
+      makeDir(under(dir, 'puritanical'));
+      writeText(under(dir, 'puritanical', 'config.json'), JSON.stringify({ sections }));
       process.env.XDG_CONFIG_HOME = dir;
-      process.env.CHISLE_DEFAULT_MODE = 'on';
+      process.env.PURITANICAL_DEFAULT_MODE = 'on';
       const h = makeHarness({ omp: true });
       await start(h);
       const event = { systemPrompt: ['base system prompt'], systemPromptOptions: { contextFiles: [] } };
       const before = h.handlers.get('before_agent_start');
       const result = await before(event, h.ctx);
-      assert.match(result.systemPrompt.at(-1), /CHISLE ACTIVE/);
+      assert.match(result.systemPrompt.at(-1), /PURITANICAL ACTIVE/);
       assert.equal(await before({ ...event, systemPrompt: result.systemPrompt }, h.ctx), undefined,
         'rules already present in the prompt were appended twice');
-      assert.ok(await before({ ...event, systemPrompt: ['CHISLE ACTIVE is a phrase', '## Boundaries'] }, h.ctx),
+      assert.ok(await before({ ...event, systemPrompt: ['PURITANICAL ACTIVE is a phrase', '## Boundaries'] }, h.ctx),
         'a prompt that merely mentions the markers suppressed injection');
     } finally {
       if (savedConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
@@ -225,7 +225,7 @@ for (const sections of [{ code: false }, { prose: false }, { prose: false, code:
 }
 
 test('OMP array system prompts handle disabled mode without stringifying segments', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'off';
+  process.env.PURITANICAL_DEFAULT_MODE = 'off';
   const h = makeHarness({ omp: true });
   await start(h);
   const result = await h.handlers.get('before_agent_start')({
@@ -233,15 +233,15 @@ test('OMP array system prompts handle disabled mode without stringifying segment
   }, h.ctx);
 
   assert.deepEqual(result.systemPrompt.slice(0, 1), ['base system prompt']);
-  assert.match(result.systemPrompt.at(-1), /CHISLE DISABLED/);
+  assert.match(result.systemPrompt.at(-1), /PURITANICAL DISABLED/);
 });
 
 test('OMP active resumed sessions remove legacy trailing rules messages', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness({ omp: true });
   await start(h);
   const filtered = await h.handlers.get('context')({ messages: [
-    { role: 'custom', customType: 'chisle-rules', content: 'legacy rules' },
+    { role: 'custom', customType: 'puritanical-rules', content: 'legacy rules' },
     { role: 'user', content: 'keep' },
   ] }, h.ctx);
 
@@ -249,7 +249,7 @@ test('OMP active resumed sessions remove legacy trailing rules messages', async 
 });
 
 test('duplicate extension copies coordinate first-turn rules injection', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const eventBus = makeEventBus();
   const first = makeHarness({ eventBus });
   const second = makeHarness({ eventBus });
@@ -260,7 +260,7 @@ test('duplicate extension copies coordinate first-turn rules injection', async (
   assert.ok(await first.handlers.get('before_agent_start')(event, first.ctx));
   assert.equal(await second.handlers.get('before_agent_start')(event, second.ctx), undefined);
 
-  assert.deepEqual(await first.handlers.get('input')({ text: 'stop chisle', source: 'interactive' }, first.ctx),
+  assert.deepEqual(await first.handlers.get('input')({ text: 'stop puritanical', source: 'interactive' }, first.ctx),
     { action: 'handled' });
   assert.equal(await second.handlers.get('tool_result')(toolEvent('bash', bigOutput()), second.ctx), undefined,
     'second extension copy ignored shared mode change');
@@ -269,22 +269,22 @@ test('duplicate extension copies coordinate first-turn rules injection', async (
 });
 
 test('resume sees persisted rules and mode state without duplicate injection', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const entries = [
-    { type: 'custom', customType: 'chisle-mode', data: { mode: 'off' } },
-    { type: 'custom_message', customType: 'chisle-rules', content: 'rules' },
+    { type: 'custom', customType: 'puritanical-mode', data: { mode: 'off' } },
+    { type: 'custom_message', customType: 'puritanical-rules', content: 'rules' },
   ];
   const h = makeHarness({ entries });
   await start(h);
   const before = await h.handlers.get('before_agent_start')({ systemPrompt: 'base', systemPromptOptions: {} }, h.ctx);
-  assert.match(before.systemPrompt, /CHISLE DISABLED/);
+  assert.match(before.systemPrompt, /PURITANICAL DISABLED/);
   assert.equal(await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx), undefined);
   assert.equal(h.statuses.at(-1)[1], undefined);
 });
 
 test('session tree navigation restores branch mode and clears dedup state', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
-  const entries = [{ type: 'custom', customType: 'chisle-mode', data: { mode: 'off' } }];
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
+  const entries = [{ type: 'custom', customType: 'puritanical-mode', data: { mode: 'off' } }];
   const h = makeHarness({ entries, contextEntries: [] });
   await start(h);
   assert.equal(await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx), undefined);
@@ -302,38 +302,38 @@ test('session tree navigation restores branch mode and clears dedup state', asyn
     'dedup used output from the branch left by /tree');
 });
 
-test('default off starts dormant but explicit /chisle enables', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'off';
+test('default off starts dormant but explicit /puritanical enables', async () => {
+  process.env.PURITANICAL_DEFAULT_MODE = 'off';
   const h = makeHarness();
   await start(h);
   assert.equal(await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx), undefined);
-  await h.commands.get('chisle').handler('', h.ctx);
+  await h.commands.get('puritanical').handler('', h.ctx);
   assert.match((await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx)).content[0].text, /elided/);
 });
 
-test('/chisle and natural stop toggle both axes', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+test('/puritanical and natural stop toggle both axes', async () => {
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness();
   await start(h);
   const input = h.handlers.get('input');
 
-  assert.deepEqual(await input({ text: 'stop chisle', source: 'interactive' }, h.ctx), { action: 'handled' });
+  assert.deepEqual(await input({ text: 'stop puritanical', source: 'interactive' }, h.ctx), { action: 'handled' });
   assert.deepEqual(h.appended.at(-1).data, { mode: 'off' });
   assert.match((await h.handlers.get('before_agent_start')({ systemPrompt: 'base' }, h.ctx)).systemPrompt,
-    /CHISLE DISABLED/);
+    /PURITANICAL DISABLED/);
   const filtered = await h.handlers.get('context')({ messages: [
-    { role: 'custom', customType: 'chisle-rules' }, { role: 'user', content: 'keep' },
+    { role: 'custom', customType: 'puritanical-rules' }, { role: 'user', content: 'keep' },
   ] }, h.ctx);
   assert.deepEqual(filtered.messages, [{ role: 'user', content: 'keep' }]);
   assert.equal(await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx), undefined);
 
-  await h.commands.get('chisle').handler('on', h.ctx);
+  await h.commands.get('puritanical').handler('on', h.ctx);
   assert.deepEqual(h.appended.at(-1).data, { mode: 'on' });
   assert.match((await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx)).content[0].text, /elided/);
 });
 
 test('dedup ignores parallel siblings but marks repeats from an earlier turn', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness();
   await start(h);
   const text = 'clean '.repeat(500);
@@ -350,7 +350,7 @@ test('dedup ignores parallel siblings but marks repeats from an earlier turn', a
 });
 
 test('headless sessions never call UI status methods', async () => {
-  process.env.CHISLE_DEFAULT_MODE = 'on';
+  process.env.PURITANICAL_DEFAULT_MODE = 'on';
   const h = makeHarness({ hasUI: false });
   await start(h);
   await h.handlers.get('tool_result')(toolEvent('bash', bigOutput()), h.ctx);
@@ -361,7 +361,7 @@ test('headless sessions never call UI status methods', async () => {
 // ── OMP compatibility (issue #14) ───────────────────────────────────────────
 // OMP (oh-my-pi) implements a subset of Pi's sessionManager. Calling an absent
 // reader threw inside session_start and took the whole extension down with
-// "ctx.sessionManager.buildContextEntries is not a function", so chisle failed
+// "ctx.sessionManager.buildContextEntries is not a function", so puritanical failed
 // to load at all under OMP. Both readers must be optional.
 const { sessionEntries, hasRulesEntry } = require('../pi-extension');
 
@@ -377,13 +377,13 @@ test('sessionEntries tolerates an OMP-shaped sessionManager missing the readers'
 test('sessionEntries still reads a full Pi sessionManager unchanged', () => {
   const pi = {
     sessionManager: {
-      buildContextEntries: () => [{ type: 'custom_message', customType: 'chisle-rules' }],
-      getBranch: () => [{ type: 'custom', customType: 'chisle-mode', data: { mode: 'off' } }],
+      buildContextEntries: () => [{ type: 'custom_message', customType: 'puritanical-rules' }],
+      getBranch: () => [{ type: 'custom', customType: 'puritanical-mode', data: { mode: 'off' } }],
     },
   };
   assert.equal(hasRulesEntry(sessionEntries(pi, 'buildContextEntries')), true);
   const mode = sessionEntries(pi, 'getBranch')
-    .filter((e) => e.type === 'custom' && e.customType === 'chisle-mode').pop();
+    .filter((e) => e.type === 'custom' && e.customType === 'puritanical-mode').pop();
   assert.equal(mode.data.mode, 'off');
 });
 

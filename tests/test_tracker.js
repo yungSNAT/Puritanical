@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* global __dirname, process, require -- Node.js runtime */
-// Integration tests for chisle-mode-tracker.js — drives it via stdin with a temp
+// Integration tests for puritanical-mode-tracker.js — drives it via stdin with a temp
 // CLAUDE_CONFIG_DIR and asserts the resulting flag state.
 // Run: node --test tests/test_tracker.js
 
@@ -12,65 +12,65 @@ const { execFileSync } = require('child_process');
 const isolateWorkingDirectory = require('./fixtures/working-directory');
 const { absolutePath, makeDir, makeLink, writeText } = require('./helpers/sandbox');
 
-const TRACKER = path.join(__dirname, '..', 'hooks', 'chisle-mode-tracker.js');
-const { requestedMode } = require('../hooks/chisle-mode');
+const TRACKER = path.join(__dirname, '..', 'hooks', 'puritanical-mode-tracker.js');
+const { requestedMode } = require('../hooks/puritanical-mode');
 isolateWorkingDirectory();
 
 // Run the tracker with a given prompt against a fresh temp config dir.
 // Returns the flag contents after the run (or null if the flag was removed).
 function runTracker(prompt, { preActive, defaultMode = 'on' } = {}) {
   const dir = process.cwd();
-  fs.rmSync('.chisle-active', { force: true });
-  if (preActive) fs.writeFileSync('.chisle-active', preActive, { mode: 0o600 });
+  fs.rmSync('.puritanical-active', { force: true });
+  if (preActive) fs.writeFileSync('.puritanical-active', preActive, { mode: 0o600 });
 
   try {
     execFileSync(process.execPath, [TRACKER], {
       input: JSON.stringify({ prompt }),
-      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, CHISLE_DEFAULT_MODE: defaultMode },
+      env: { ...process.env, CLAUDE_CONFIG_DIR: dir, PURITANICAL_DEFAULT_MODE: defaultMode },
       encoding: 'utf8',
       timeout: 5000,
     });
   } catch { /* tracker silent-fails; we assert on flag state */ }
 
-  try { return fs.readFileSync('.chisle-active', 'utf8').trim(); } catch { return null; }
+  try { return fs.readFileSync('.puritanical-active', 'utf8').trim(); } catch { return null; }
 }
 
-test('shared parser only deactivates when off-verb targets Chisle', () => {
-  assert.equal(requestedMode('stop chisle'), 'off');
+test('shared parser only deactivates when off-verb targets Puritanical', () => {
+  assert.equal(requestedMode('stop puritanical'), 'off');
   assert.equal(requestedMode('normal mode'), 'off');
-  assert.equal(requestedMode('use chisle to turn off the logger'), 'on');
-  assert.equal(requestedMode('chisle please stop the server'), null);
+  assert.equal(requestedMode('use puritanical to turn off the logger'), null);
+  assert.equal(requestedMode('puritanical please stop the server'), null);
 });
 
 // ── Activation ───────────────────────────────────────────────────────────────
 
-test('/chisle activates at default level', () => {
-  assert.equal(runTracker('/chisle'), 'on');
+test('/puritanical activates at default level', () => {
+  assert.equal(runTracker('/puritanical'), 'on');
 });
 
 test('a leftover level argument still just activates', () => {
-  // /chisle lite|full|ultra used to select an intensity. One mode now, so any
+  // /puritanical lite|full|ultra used to select an intensity. One mode now, so any
   // stray argument is ignored rather than rejected — old muscle memory works.
-  assert.equal(runTracker('/chisle full'), 'on');
-  assert.equal(runTracker('/chisle ultra'), 'on');
+  assert.equal(runTracker('/puritanical full'), 'on');
+  assert.equal(runTracker('/puritanical ultra'), 'on');
 });
 
-test('natural language "activate chisle" activates', () => {
-  assert.equal(runTracker('please activate chisle'), 'on');
+test('natural language "activate puritanical" activates', () => {
+  assert.equal(runTracker('please activate puritanical'), 'on');
 });
 
-test('/chisle explicitly activates when default mode is off', () => {
-  assert.equal(runTracker('/chisle', { defaultMode: 'off' }), 'on');
+test('/puritanical explicitly activates when default mode is off', () => {
+  assert.equal(runTracker('/puritanical', { defaultMode: 'off' }), 'on');
 });
 
 // ── Deactivation ─────────────────────────────────────────────────────────────
 
-test('"stop chisle" deactivates', () => {
-  assert.equal(runTracker('stop chisle', { preActive: 'on' }), null);
+test('"stop puritanical" deactivates', () => {
+  assert.equal(runTracker('stop puritanical', { preActive: 'on' }), null);
 });
 
-test('"/chisle off" deactivates', () => {
-  assert.equal(runTracker('/chisle off', { preActive: 'on' }), null);
+test('"/puritanical off" deactivates', () => {
+  assert.equal(runTracker('/puritanical off', { preActive: 'on' }), null);
 });
 
 test('"normal mode" deactivates', () => {
@@ -79,12 +79,12 @@ test('"normal mode" deactivates', () => {
 
 // ── Regression: must NOT deactivate on unrelated "off"/"stop" ─────────────────
 
-test('REGRESSION: "use chisle to turn off the logger" stays active', () => {
-  assert.equal(runTracker('use chisle to turn off the logger', { preActive: 'on' }), 'on');
+test('REGRESSION: "use puritanical to turn off the logger" stays active', () => {
+  assert.equal(runTracker('use puritanical to turn off the logger', { preActive: 'on' }), 'on');
 });
 
-test('REGRESSION: "chisle please stop the server" stays active', () => {
-  assert.equal(runTracker('chisle please stop the server', { preActive: 'on' }), 'on');
+test('REGRESSION: "puritanical please stop the server" stays active', () => {
+  assert.equal(runTracker('puritanical please stop the server', { preActive: 'on' }), 'on');
 });
 
 // ── sections config: per-turn reinforcement line ─────────────────────────────
@@ -97,19 +97,19 @@ function runTrackerOutput(prompt, { preActive = 'on', sectionsValue } = {}) {
   const claudeDir = path.resolve('claude');
   const xdgDir = path.resolve('config');
   fs.mkdirSync('claude', { recursive: true });
-  fs.rmSync('claude/.chisle-active', { force: true });
-  fs.rmSync('config/chisle/config.json', { force: true });
-  if (preActive) fs.writeFileSync('claude/.chisle-active', preActive, { mode: 0o600 });
+  fs.rmSync('claude/.puritanical-active', { force: true });
+  fs.rmSync('config/puritanical/config.json', { force: true });
+  if (preActive) fs.writeFileSync('claude/.puritanical-active', preActive, { mode: 0o600 });
   if (sectionsValue !== undefined) {
-    fs.mkdirSync('config/chisle', { recursive: true });
-    fs.writeFileSync('config/chisle/config.json', JSON.stringify({ sections: sectionsValue }));
+    fs.mkdirSync('config/puritanical', { recursive: true });
+    fs.writeFileSync('config/puritanical/config.json', JSON.stringify({ sections: sectionsValue }));
   }
 
   let stdout = '';
   try {
     stdout = execFileSync(process.execPath, [TRACKER], {
       input: JSON.stringify({ prompt }),
-      env: { ...process.env, CLAUDE_CONFIG_DIR: claudeDir, XDG_CONFIG_HOME: xdgDir, CHISLE_DEFAULT_MODE: 'on' },
+      env: { ...process.env, CLAUDE_CONFIG_DIR: claudeDir, XDG_CONFIG_HOME: xdgDir, PURITANICAL_DEFAULT_MODE: 'on' },
       encoding: 'utf8',
       timeout: 5000,
     });
@@ -122,7 +122,7 @@ test('reinforcement: no config → unchanged (byte-identical to prior hardcoded 
   const line = runTrackerOutput('hello');
   assert.equal(
     line,
-    'CHISLE ACTIVE. ' +
+    'PURITANICAL ACTIVE. ' +
       'Prose: drop articles/filler/pleasantries/hedging. Fragments OK. ' +
       'Code: YAGNI ladder first (reuse → stdlib → native → dep → one line → min code). ' +
       'Code/commits/security: write normal.'
@@ -147,7 +147,7 @@ test('reinforcement: both false still ships the always-on Boundaries clause', ()
   const line = runTrackerOutput('hello', { sectionsValue: { prose: false, code: false } });
   assert.ok(!line.includes('Prose:'), line);
   assert.ok(!line.includes('Code: YAGNI ladder'), line);
-  assert.equal(line, 'CHISLE ACTIVE. Code/commits/security: write normal.');
+  assert.equal(line, 'PURITANICAL ACTIVE. Code/commits/security: write normal.');
 });
 
 test('reinforcement: malformed sections value falls back to enabled, no throw', () => {
@@ -164,7 +164,7 @@ test('reinforcement: malformed sections value falls back to enabled, no throw', 
 const TRANSCRIPT = path.join('projects', 'p', 'session.jsonl');
 
 function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptPath, configDir = process.cwd() } = {}) {
-  fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
+  fs.writeFileSync('.puritanical-active', 'on', { mode: 0o600 });
   const entry = {
     type: 'assistant',
     timestamp: new Date(Date.now() - minutesAgo * 60000).toISOString(),
@@ -174,7 +174,7 @@ function runWithTranscript(minutesAgo, context, { file = TRANSCRIPT, transcriptP
   writeText(file, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\n' + JSON.stringify(entry) + '\n');
   const out = execFileSync(process.execPath, [TRACKER], {
     input: JSON.stringify({ prompt: 'next task', transcript_path: absolutePath(transcriptPath || file) }),
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, CHISLE_DEFAULT_MODE: 'on' },
+    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir, PURITANICAL_DEFAULT_MODE: 'on' },
     encoding: 'utf8',
     timeout: 5000,
   });
@@ -186,21 +186,21 @@ test('resume nudge: big context after an expired cache warns the user', () => {
   assert.match(out.systemMessage, /3 h idle/);
   assert.match(out.systemMessage, /~480k-token context/);
   assert.match(out.systemMessage, /\/compact/);
-  assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+  assert.ok(out.hookSpecificOutput.additionalContext.startsWith('PURITANICAL ACTIVE.'));
 });
 
 test('resume nudge: silent when the transcript has no assistant usage', () => {
-  fs.writeFileSync('.chisle-active', 'on', { mode: 0o600 });
+  fs.writeFileSync('.puritanical-active', 'on', { mode: 0o600 });
   makeDir(path.dirname(TRANSCRIPT), { recursive: true });
   writeText(TRANSCRIPT, JSON.stringify({ type: 'user', message: { content: 'hi' } }) + '\nnot json\n');
   const out = JSON.parse(execFileSync(process.execPath, [TRACKER], {
     input: JSON.stringify({ prompt: 'next task', transcript_path: path.resolve(TRANSCRIPT) }),
-    env: { ...process.env, CLAUDE_CONFIG_DIR: process.cwd(), CHISLE_DEFAULT_MODE: 'on' },
+    env: { ...process.env, CLAUDE_CONFIG_DIR: process.cwd(), PURITANICAL_DEFAULT_MODE: 'on' },
     encoding: 'utf8',
     timeout: 5000,
   }));
   assert.equal(out.systemMessage, undefined);
-  assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+  assert.ok(out.hookSpecificOutput.additionalContext.startsWith('PURITANICAL ACTIVE.'));
 });
 
 test('resume nudge: ignores a transcript outside the Claude projects folder', () => {
@@ -208,7 +208,7 @@ test('resume nudge: ignores a transcript outside the Claude projects folder', ()
   for (const file of ['session.jsonl', path.join('elsewhere', 'session.jsonl')]) {
     const out = runWithTranscript(180, 480000, { file });
     assert.equal(out.systemMessage, undefined, file);
-    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('PURITANICAL ACTIVE.'));
   }
 });
 
@@ -221,7 +221,7 @@ test('resume nudge: ignores a linked transcript or a linked projects subfolder',
   for (const link of [path.join('projects', 'p', 'linked.jsonl'), path.join('projects', 'linked', 'session.jsonl')]) {
     const out = runWithTranscript(180, 480000, { file: outside, transcriptPath: link });
     assert.equal(out.systemMessage, undefined, link);
-    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.'));
+    assert.ok(out.hookSpecificOutput.additionalContext.startsWith('PURITANICAL ACTIVE.'));
   }
   // The same transcript inside the tree still warns.
   assert.match(runWithTranscript(180, 480000).systemMessage, /3 h idle/);
@@ -231,7 +231,7 @@ test('resume nudge: warns for a transcript under a linked Claude config folder',
   // A stow-managed ~/.claude is itself a link; its transcripts still count.
   makeDir('real-config');
   makeLink(absolutePath('real-config'), 'linked-config', 'dir');
-  writeText(path.join('linked-config', '.chisle-active'), 'on', { mode: 0o600 });
+  writeText(path.join('linked-config', '.puritanical-active'), 'on', { mode: 0o600 });
   const file = path.join('linked-config', 'projects', 'p', 'session.jsonl');
   const out = runWithTranscript(180, 480000, { file, configDir: absolutePath('linked-config') });
   assert.match(out.systemMessage, /3 h idle/);

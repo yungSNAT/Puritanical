@@ -2,10 +2,17 @@
 
 <!-- markdownlint-configure-file { "MD024": { "siblings_only": true } } -->
 
-All notable changes to Chisle are documented here.
+All notable changes to Puritanical (formerly Chisle) are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [4.0.0] - Unreleased
+
+### Changed: Chisle is now Puritanical
+
+- Every name the package installs changes. The Claude Code plugin is `puritanical@puritanical`; the skills and commands are `puritanical`, `puritanical-audit`, `puritanical-help` and `puritanical-review` (`/puritanical`, `/puritanical off`); hooks, state files (`.puritanical-*`), the config folder (`puritanical/`), rule files, the fenced-block markers (`<!-- puritanical-begin -->`), environment variables (`PURITANICAL_*`) and hook output (`PURITANICAL ACTIVE`) follow, as do the package and command name, `puritanical`. Nothing is published to npm, where `chisle` is upstream's name: install from this repository with `npx github:yungSNAT/Puritanical`.
+- Upgrading: `--update` replaces a Chisle install. It removes the `chisle@chisle` plugin at user scope, and at local scope in the current project, then its marketplace; a copy at project scope, or one that fails to go, is reported with the command to run, and the marketplace stays. It also removes the old Gemini CLI extension and pi sources, standalone hooks, a status line that runs only the old badge script, old skills, the old Copilot CLI hook and OpenCode plugin, and project rule files identical to a released copy (an edited one moves aside to `<file>.chisle-bak`); it replaces the old fenced block rather than adding a second one; it moves the `.chisle-*` state (the savings ledger and the `tools trim` record among it) and the `chisle` config folder's settings to the new names; and it points MCP servers wrapped by the old proxy at the new one. The Claude Code hook and the pi extension move state and settings themselves at the next session.
+- `CHISLE_*` variables still apply when the matching `PURITANICAL_*` one is unset; 'stop chisle', 'chisle mode' and `/chisle` still switch the mode. Because 'puritanical' is an everyday word, it switches the mode only in a whole instruction: `/puritanical`, 'puritanical mode', 'puritanical off', or 'activate' or 'stop puritanical' standing alone. `--uninstall` removes both sets of names, the marketplaces included.
+- The update notice checks this fork's GitHub releases instead of npm, and points at `claude plugin update puritanical@puritanical` or `npx github:yungSNAT/Puritanical --update`.
 
 ### Security
 
@@ -14,6 +21,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- The installer adds this fork, not upstream Chisle: the Claude Code marketplace, Gemini CLI extension and pi package come from yungSNAT/Puritanical, and the star prompt stars and follows it. Uninstall still removes the upstream sources earlier installs added.
 - Licence: Ryan Duguid's code is now under Apache-2.0, with the attribution in `NOTICE`; code from Chisle stays under the MIT License, and earlier versions keep the licence they were released with. Manifests and SPDX lines say `Apache-2.0 AND MIT`.
 - The generators and benchmark analysis are a Rust crate, `tools/` (`puritanical-tools`): rule copies, charts, site samples and README art, each with `--check`, plus `aggregate`, `pooled`, `answers`, `normalize-pi` and `agentic-score`. Their output matches the JavaScript they replace byte for byte; the npm scripts keep their names, and `check:readme-art` is new. CI checks the crate on Linux and Windows and adds its line coverage to Codecov. `pooled` seeds its bootstrap, so a rerun prints the same interval. `benchmarks/quality/grade.js` stays in JavaScript because it runs the models' code.
 - CI runs the Node suite once on Node 22, with the 100% line-coverage floor, instead of again in a separate coverage workflow. That run installs bubblewrap and requires `tests/test_grade_sandbox.js`, which runs `benchmarks/quality/grade.js` on test answers under bubblewrap: a correct answer passes, an answer that escapes `vm` cannot read host files or environment, and one that ignores SIGTERM fails at its deadline.

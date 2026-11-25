@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global __dirname, process, require -- Node.js runtime */
-// MCP proxy (hooks/chisle-mcp-proxy.js) end to end against a fake stdio
-// server, plus `npx chisle mcp wrap|unwrap|status` and Copilot CLI install,
+// MCP proxy (hooks/puritanical-mcp-proxy.js) end to end against a fake stdio
+// server, plus `npx github:yungSNAT/Puritanical mcp wrap|unwrap|status` and Copilot CLI install,
 // all inside temp dirs. Run: node --test tests/test_mcp_proxy.js
 
 const { test } = require('node:test');
@@ -13,10 +13,10 @@ const isolateWorkingDirectory = require('./fixtures/working-directory');
 const { absolutePath, linkStat, makeDir, makeLink, readText, writeText } = require('./helpers/sandbox');
 
 const ROOT = path.join(__dirname, '..');
-const PROXY = path.join(ROOT, 'hooks', 'chisle-mcp-proxy.js');
+const PROXY = path.join(ROOT, 'hooks', 'puritanical-mcp-proxy.js');
 const SERVER = path.join(__dirname, 'fixtures', 'fake-mcp-server.js');
 const CLI = path.join(ROOT, 'bin', 'install.js');
-const { quoteWin } = require('../hooks/chisle-mcp-proxy');
+const { quoteWin } = require('../hooks/puritanical-mcp-proxy');
 
 const rpc = (id, method, params) => JSON.stringify({ jsonrpc: '2.0', id, method, params });
 isolateWorkingDirectory();
@@ -24,7 +24,7 @@ isolateWorkingDirectory();
 function proxy(lines, env) {
   const r = spawnSync(process.execPath, [PROXY, '--', process.execPath, SERVER], {
     input: lines.join('\n') + '\n', encoding: 'utf8', timeout: 20000,
-    env: { ...process.env, CHISLE_DEFAULT_MODE: 'on', CHISLE_COMPRESS: '', ...env },
+    env: { ...process.env, PURITANICAL_DEFAULT_MODE: 'on', PURITANICAL_COMPRESS: '', ...env },
   });
   const messages = r.stdout.split('\n').filter(Boolean).map(line => ({ message: JSON.parse(line), line }));
   const byId = Object.fromEntries(messages.map(({ message }) => [message.id, message]));
@@ -47,22 +47,22 @@ const LINES = [
 
 test('proxy compresses tools/call text, salvages the mid-log error, spills the original', () => {
   const state = process.cwd();
-  const { status, byId } = proxy(LINES, { CHISLE_STATE_DIR: state });
+  const { status, byId } = proxy(LINES, { PURITANICAL_STATE_DIR: state });
   assert.equal(status, 0);
   const text = byId.a.result.content[0].text;
   assert.ok(text.length < 5000, 'compressed: ' + text.length);
-  assert.match(text, /\[chisle:/);
+  assert.match(text, /\[puritanical:/);
   assert.match(text, /ERROR: run_logs exploded/);
   assert.equal(byId[5].result.isError, true, 'isError flag kept');
-  const stats = JSON.parse(fs.readFileSync('.chisle-compress-stats.json', 'utf8'));
+  const stats = JSON.parse(fs.readFileSync('.puritanical-compress-stats.json', 'utf8'));
   assert.equal(stats.events, 2);
-  const spilled = fs.readdirSync('chisle-spill');
+  const spilled = fs.readdirSync('puritanical-spill');
   assert.ok(spilled.some(f => f.startsWith('mcp-run_logs-')), spilled.join(','));
 });
 
 test('proxy forwards everything that is not an allowed tool result byte-identical', () => {
   const state = process.cwd();
-  const { raw } = proxy(LINES, { CHISLE_STATE_DIR: state });
+  const { raw } = proxy(LINES, { PURITANICAL_STATE_DIR: state });
   const orig = direct(LINES);
   assert.equal(raw[1], orig[1], 'initialize');
   assert.equal(raw[2], orig[2], 'tools/list is not a tool result');
@@ -71,17 +71,17 @@ test('proxy forwards everything that is not an allowed tool result byte-identica
 
 test('proxy is a pure pass-through when compression is off', () => {
   const state = process.cwd();
-  for (const env of [{ CHISLE_COMPRESS: '0' }, { CHISLE_DEFAULT_MODE: 'off' }]) {
-    const { raw } = proxy(LINES, { CHISLE_STATE_DIR: state, ...env });
+  for (const env of [{ PURITANICAL_COMPRESS: '0' }, { PURITANICAL_DEFAULT_MODE: 'off' }]) {
+    const { raw } = proxy(LINES, { PURITANICAL_STATE_DIR: state, ...env });
     assert.deepEqual(raw, direct(LINES), JSON.stringify(env));
   }
-  assert.ok(!fs.existsSync('.chisle-compress-stats.json'));
+  assert.ok(!fs.existsSync('.puritanical-compress-stats.json'));
 });
 
 test('proxy exits with the server exit code; missing server exits 127', () => {
   const state = process.cwd();
-  assert.equal(proxy([rpc(1, 'initialize', {})], { CHISLE_STATE_DIR: state, FAKE_MCP_EXIT: '7' }).status, 7);
-  const r = spawnSync(process.execPath, [PROXY, '--', 'chisle-no-such-binary-xyz'], { input: '', encoding: 'utf8' });
+  assert.equal(proxy([rpc(1, 'initialize', {})], { PURITANICAL_STATE_DIR: state, FAKE_MCP_EXIT: '7' }).status, 7);
+  const r = spawnSync(process.execPath, [PROXY, '--', 'puritanical-no-such-binary-xyz'], { input: '', encoding: 'utf8' });
   if (process.platform === 'win32') {
     // The Windows proxy spawns through cmd.exe, which reports a missing command
     // itself (localized message, exit 1) instead of raising a spawn error.
@@ -93,7 +93,7 @@ test('proxy exits with the server exit code; missing server exits 127', () => {
 });
 
 test('unit: responses to unknown ids and cancelled calls stay untouched', () => {
-  const { rewriteLine, observeRequest } = require('../hooks/chisle-mcp-proxy');
+  const { rewriteLine, observeRequest } = require('../hooks/puritanical-mcp-proxy');
   const pending = new Map();
   const big = JSON.stringify({ jsonrpc: '2.0', id: 9, result: { content: [{ type: 'text', text: 'x\n'.repeat(9000) }] } });
   assert.equal(rewriteLine(big, pending), big, 'no pending call');
@@ -103,7 +103,7 @@ test('unit: responses to unknown ids and cancelled calls stay untouched', () => 
   assert.equal(rewriteLine('not json "result"', pending), 'not json "result"');
 });
 
-// ── npx chisle mcp ──────────────────────────────────────────────────────────
+// ── npx github:yungSNAT/Puritanical mcp ──────────────────────────────────────────────────────────
 
 function cli(args, env) {
   try {
@@ -116,7 +116,7 @@ function isolated() {
   fs.mkdirSync('config');
   const home = path.resolve('home');
   const xdg = path.resolve('config');
-  return { xdg, env: { CHISLE_HOME: home, XDG_CONFIG_HOME: xdg, APPDATA: xdg, COPILOT_HOME: '', CODEX_HOME: '', CLAUDE_CONFIG_DIR: path.join(home, '.claude') } };
+  return { xdg, env: { PURITANICAL_HOME: home, XDG_CONFIG_HOME: xdg, APPDATA: xdg, COPILOT_HOME: '', CODEX_HOME: '', CLAUDE_CONFIG_DIR: path.join(home, '.claude') } };
 }
 
 test('mcp wrap routes stdio servers through the proxy; unwrap restores them exactly', () => {
@@ -139,23 +139,23 @@ test('mcp wrap routes stdio servers through the proxy; unwrap restores them exac
 
   cli(['mcp', 'wrap'], env);
   const wrapped = JSON.parse(fs.readFileSync('home/.cursor/mcp.json', 'utf8')).mcpServers;
-  const proxyPath = path.join(xdg, 'chisle', 'mcp-proxy', 'chisle-mcp-proxy.js');
+  const proxyPath = path.join(xdg, 'puritanical', 'mcp-proxy', 'puritanical-mcp-proxy.js');
   assert.deepEqual(wrapped.gh, { command: 'node', args: [proxyPath, '--', 'npx', '-y', '@modelcontextprotocol/server-github'], env: { TOKEN: 'x' } });
   assert.deepEqual(wrapped.bare.args, [proxyPath, '--', 'my-server']);
   assert.deepEqual(wrapped.remote, original.mcpServers.remote, 'url server untouched');
-  assert.ok(fs.existsSync('config/chisle/mcp-proxy/chisle-mcp-proxy.js'));
-  assert.ok(fs.existsSync('config/chisle/mcp-proxy/chisle-compress-output.js'));
+  assert.ok(fs.existsSync('config/puritanical/mcp-proxy/puritanical-mcp-proxy.js'));
+  assert.ok(fs.existsSync('config/puritanical/mcp-proxy/puritanical-compress-output.js'));
   // The installed copy must load on its own, without the repository's hooks/.
   const load = spawnSync(process.execPath, ['-e', 'require(process.argv[1])', path.resolve(proxyPath)], { encoding: 'utf8' });
   assert.equal(load.status, 0, load.stderr);
-  assert.equal(fs.readFileSync('home/.cursor/mcp.json.chisle-bak', 'utf8'), originalText);
+  assert.equal(fs.readFileSync('home/.cursor/mcp.json.puritanical-bak', 'utf8'), originalText);
 
   assert.match(cli(['mcp', 'wrap'], env).out, /nothing to wrap/, 'idempotent');
   assert.match(cli(['mcp', 'status'], env).out, /Cursor: 2\/2 stdio server\(s\) wrapped/);
 
   cli(['mcp', 'unwrap'], env);
   assert.deepEqual(JSON.parse(fs.readFileSync('home/.cursor/mcp.json', 'utf8')), original);
-  assert.equal(fs.readFileSync('home/.cursor/mcp.json.chisle-bak', 'utf8'), originalText);
+  assert.equal(fs.readFileSync('home/.cursor/mcp.json.puritanical-bak', 'utf8'), originalText);
 });
 
 test('mcp wrap leaves JSONC files alone and never touches Claude config', () => {
@@ -193,17 +193,17 @@ test('copilot-cli install writes ruleset + postToolUse hook; uninstall removes o
   const r = cli(['--only', 'copilot-cli', '--no-color'], env);
   assert.match(r.out, /Copilot CLI detected/);
   const md = fs.readFileSync('home/.copilot/copilot-instructions.md', 'utf8');
-  assert.ok(md.startsWith('my rules\n') && md.includes('<!-- chisle-begin -->'));
-  const hook = JSON.parse(fs.readFileSync('home/.copilot/hooks/chisle.json', 'utf8'));
+  assert.ok(md.startsWith('my rules\n') && md.includes('<!-- puritanical-begin -->'));
+  const hook = JSON.parse(fs.readFileSync('home/.copilot/hooks/puritanical.json', 'utf8'));
   const cmd = hook.hooks.postToolUse[0].bash;
   assert.equal(hook.version, 1);
-  assert.match(cmd, /chisle-hooks[\\/]chisle-compress-output\.js"$/);
+  assert.match(cmd, /puritanical-hooks[\\/]puritanical-compress-output\.js"$/);
 
   // The installed hook answers a real Copilot payload with modifiedResult.
   const text = Array.from({ length: 3000 }, (_, i) => 'line ' + i).join('\n') + '\n<shellId: 0 completed with exit code 3>';
-  const out = execFileSync(process.execPath, [path.join(root, 'chisle-hooks', 'chisle-compress-output.js')], {
+  const out = execFileSync(process.execPath, [path.join(root, 'puritanical-hooks', 'puritanical-compress-output.js')], {
     input: JSON.stringify({ sessionId: 's', toolName: 'bash', toolArgs: {}, toolResult: { resultType: 'success', textResultForLlm: text } }),
-    encoding: 'utf8', env: { ...process.env, ...env, COPILOT_HOME: root, CHISLE_DEFAULT_MODE: '' },
+    encoding: 'utf8', env: { ...process.env, ...env, COPILOT_HOME: root, PURITANICAL_DEFAULT_MODE: '' },
   });
   const res = JSON.parse(out).modifiedResult;
   assert.ok(res.textResultForLlm.length < text.length / 3);
@@ -213,15 +213,15 @@ test('copilot-cli install writes ruleset + postToolUse hook; uninstall removes o
 
   cli(['--uninstall', '--only', 'copilot-cli'], env);
   assert.equal(fs.readFileSync('home/.copilot/copilot-instructions.md', 'utf8'), 'my rules\n');
-  assert.ok(!fs.existsSync('home/.copilot/hooks/chisle.json'));
-  assert.ok(!fs.existsSync('home/.copilot/chisle-hooks'));
+  assert.ok(!fs.existsSync('home/.copilot/hooks/puritanical.json'));
+  assert.ok(!fs.existsSync('home/.copilot/puritanical-hooks'));
 });
 
-test('copilot hook follows CHISLE_DEFAULT_MODE=off', () => {
+test('copilot hook follows PURITANICAL_DEFAULT_MODE=off', () => {
   const text = 'x\n'.repeat(9000);
-  const out = execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'chisle-compress-output.js')], {
+  const out = execFileSync(process.execPath, [path.join(ROOT, 'hooks', 'puritanical-compress-output.js')], {
     input: JSON.stringify({ sessionId: 's', toolName: 'bash', toolResult: { resultType: 'success', textResultForLlm: text } }),
-    encoding: 'utf8', env: { ...process.env, CHISLE_DEFAULT_MODE: 'off', COPILOT_HOME: process.cwd() },
+    encoding: 'utf8', env: { ...process.env, PURITANICAL_DEFAULT_MODE: 'off', COPILOT_HOME: process.cwd() },
   });
   assert.equal(out, '');
 });
@@ -259,7 +259,7 @@ test('mcp wrap covers Codex TOML: only command/args lines change, unwrap restore
   assert.equal(fs.readFileSync('home/.codex/config.toml', 'utf8'), original, 'dry run wrote');
 
   cli(['mcp', 'wrap', '--only', 'codex'], env);
-  const proxyPath = path.join(xdg, 'chisle', 'mcp-proxy', 'chisle-mcp-proxy.js');
+  const proxyPath = path.join(xdg, 'puritanical', 'mcp-proxy', 'puritanical-mcp-proxy.js');
   const wrapped = fs.readFileSync('home/.codex/config.toml', 'utf8');
   assert.ok(wrapped.includes(`command = "node"\nargs = [${JSON.stringify(proxyPath)}, "--", "npx", "-y", "@upstash/context7-mcp"]\nenv = { KEY = "x" }`));
   assert.ok(wrapped.includes(`args = [${JSON.stringify(proxyPath)}, "--", "my-server"]`));
@@ -285,7 +285,7 @@ test('mcp wrap covers Antigravity mcp_config.json and VS Code Copilot mcp.json (
   const out = cli(['mcp', 'wrap'], env).out;
   assert.match(out, /Antigravity: wrapped fs/);
   assert.match(out, /GitHub Copilot: wrapped mem/);
-  const proxyPath = path.join(xdg, 'chisle', 'mcp-proxy', 'chisle-mcp-proxy.js');
+  const proxyPath = path.join(xdg, 'puritanical', 'mcp-proxy', 'puritanical-mcp-proxy.js');
   const wrapped = JSON.parse(fs.readFileSync('config/Code/User/mcp.json', 'utf8'));
   assert.deepEqual(wrapped.servers.mem.args, [proxyPath, '--', 'npx', '-y', 'server-memory']);
   assert.deepEqual(wrapped.servers.web, vsOrig.servers.web, 'http server untouched');
@@ -297,16 +297,16 @@ test('mcp wrap covers Antigravity mcp_config.json and VS Code Copilot mcp.json (
 
 test('mcp wrap replaces a planted proxy-file link without writing through it', () => {
   const { env } = isolated();
-  const proxyDir = path.join('config', 'chisle', 'mcp-proxy');
+  const proxyDir = path.join('config', 'puritanical', 'mcp-proxy');
   makeDir(proxyDir, { recursive: true });
   writeText('sentinel.txt', 'do not touch\n');
-  makeLink(absolutePath('sentinel.txt'), path.join(proxyDir, 'chisle-mcp-proxy.js'));
+  makeLink(absolutePath('sentinel.txt'), path.join(proxyDir, 'puritanical-mcp-proxy.js'));
   makeLink(absolutePath('sentinel.txt'), path.join(proxyDir, 'package.json'));
 
   assert.equal(cli(['mcp', 'wrap'], env).status, 0);
   assert.equal(readText('sentinel.txt'), 'do not touch\n');
   for (const [file, content] of [
-    ['chisle-mcp-proxy.js', readText(PROXY)],
+    ['puritanical-mcp-proxy.js', readText(PROXY)],
     ['package.json', '{ "type": "commonjs" }\n'],
   ]) {
     const st = linkStat(path.join(proxyDir, file));

@@ -1,6 +1,6 @@
 /* global module, process, require -- Node.js runtime */
 'use strict';
-// `npx chisle tools [trim|restore] [--days N] [--also A,B] [--dry-run] [--config-dir <dir>]`
+// `npx github:yungSNAT/Puritanical tools [trim|restore] [--days N] [--also A,B] [--dry-run] [--config-dir <dir>]`
 //
 // Every Claude Code request carries fixed overhead the model may never use:
 //   - the full schema of every loaded tool. On the maintainer's machine
@@ -34,7 +34,7 @@ const CORE = new Set(['Bash', 'Read', 'Edit', 'MultiEdit', 'Write', 'Glob', 'Gre
 const MIN_CHARS = 2000;        // smaller schemas are not worth a deny entry
 const MIN_SKILL_CHARS = 150;   // shorter descriptions are not worth an override
 const CHARS_PER_TOKEN = 5.5;   // measured on tool schemas: 5 denied tools, -3,707 tokens
-const RECORD = '.chisle-trimmed-tools.json';
+const RECORD = '.puritanical-trimmed-tools.json';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function transcripts(dir, since) {
@@ -210,7 +210,7 @@ function trim(claudeDir, names, skillNames = [], { dryRun = false } = {}) {
   return { tools: fresh, skills: freshSkills };
 }
 
-const USAGE = 'usage: npx chisle tools [trim|restore] [--days N] [--also A,B] [--dry-run] [--config-dir <dir>]';
+const USAGE = 'usage: npx github:yungSNAT/Puritanical tools [trim|restore] [--days N] [--also A,B] [--dry-run] [--config-dir <dir>]';
 
 function parseArgs(argv) {
   const o = { action: 'report', days: 30, dryRun: false, also: [] };
@@ -264,7 +264,7 @@ function main(argv, claudeDir, out = (s) => process.stdout.write(s + '\n')) {
 
   if (o.action === 'trim') trimAndReport(claudeDir, pick, pickSkills, o, out);
   else if (pick.length || pickSkills.length) {
-    out(`  apply with: npx chisle tools trim${o.also.length ? ' --also ' + o.also.join(',') : ''}   (undo: npx chisle tools restore)`);
+    out(`  apply with: npx github:yungSNAT/Puritanical tools trim${o.also.length ? ' --also ' + o.also.join(',') : ''}   (undo: npx github:yungSNAT/Puritanical tools restore)`);
   }
 }
 
@@ -273,7 +273,7 @@ function trimAndReport(claudeDir, pick, pickSkills, o, out) {
   const what = [];
   if (done.tools.length) what.push(`denied ${done.tools.join(', ')}`);
   if (done.skills.length) what.push(`listed ${done.skills.length} skill(s) name-only`);
-  out(what.length ? `  ${o.dryRun ? 'would have ' : ''}${what.join('; ')}. Undo: npx chisle tools restore` : '  nothing new to trim.');
+  out(what.length ? `  ${o.dryRun ? 'would have ' : ''}${what.join('; ')}. Undo: npx github:yungSNAT/Puritanical tools restore` : '  nothing new to trim.');
 }
 
 module.exports = { main, plan, trim, restore, CORE };

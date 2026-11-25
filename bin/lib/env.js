@@ -1,5 +1,5 @@
 /* global module, process, require, __dirname -- Node.js runtime */
-// chisle installer: platform, process and directory helpers shared by the
+// puritanical installer: platform, process and directory helpers shared by the
 // install, uninstall and update paths.
 
 'use strict';
@@ -8,9 +8,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const cp = require('child_process');
-const { getOpencodeDir, getOpencodeStateDir } = require('../../hooks/chisle-config');
+const { getOpencodeDir, getOpencodeStateDir } = require('../../hooks/puritanical-config');
 
-const REPO = 'JayPokale/Chisle';
+// This fork. The Claude marketplace, Gemini extension and pi package all come
+// from it, not from the upstream Chisle repository or npm package.
+const REPO = 'yungSNAT/Puritanical';
 const IS_WIN = process.platform === 'win32';
 // Repo root = parent of bin/. Installed package or local clone both work.
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -86,11 +88,16 @@ function ranOk(r) {
 function capture(cmd, args) {
   try { return spawnX(cmd, args, { encoding: 'utf8' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
 }
-// True when `<cmd> <args>` exits 0 and prints "chisle" (plugin/extension lists).
-function listsChisle(cmd, args) {
+// True when `<cmd> <args>` exits 0 and its output matches pattern, by default
+// "puritanical" (plugin/extension lists).
+function listsPuritanical(cmd, args, pattern = /puritanical/i) {
   const r = capture(cmd, args);
-  return r.status === 0 && /chisle/i.test(r.stdout || '');
+  return r.status === 0 && pattern.test(r.stdout || '');
 }
+
+// The Claude plugin and Gemini extension as installs before 4.0.0 named them.
+const OLD_PLUGIN = 'chisle@chisle'; // formerly Chisle
+const OLD_LISTED = /\bchisle\b/i; // formerly Chisle
 
 function claudeDir(opts) {
   if (opts.configDir) return opts.configDir;
@@ -98,9 +105,9 @@ function claudeDir(opts) {
   return path.join(os.homedir(), '.claude');
 }
 
-// Home dir for Chisle-managed global targets. CHISLE_HOME overrides it
+// Home dir for Puritanical-managed global targets. PURITANICAL_HOME overrides it
 // (tests, containers); mirrors the CLAUDE_CONFIG_DIR precedent for Claude.
-function homeDir() { return process.env.CHISLE_HOME || os.homedir(); }
+function homeDir() { return process.env.PURITANICAL_HOME || os.homedir(); }
 
 function opencodeDir() { return getOpencodeDir({ home: homeDir() }); }
 // Copilot CLI reads hooks, instructions and MCP config under COPILOT_HOME.
@@ -114,7 +121,7 @@ function opencodeMajor() {
 }
 
 module.exports = {
-  REPO, IS_WIN, REPO_ROOT, die, expandHome, hasCmd, isDir, isFile, quoteWin,
-  run, ranOk, capture, listsChisle, claudeDir, homeDir, opencodeDir, copilotDir,
+  REPO, IS_WIN, REPO_ROOT, OLD_PLUGIN, OLD_LISTED, die, expandHome, hasCmd, isDir, isFile, quoteWin,
+  run, ranOk, capture, listsPuritanical, claudeDir, homeDir, opencodeDir, copilotDir,
   opencodeStateDir, opencodeMajor,
 };

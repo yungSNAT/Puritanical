@@ -1,12 +1,12 @@
 /* global __dirname, module, process, require -- Node.js runtime */
-// chisle — `npx chisle mcp <wrap|unwrap|status>`: route stdio MCP servers
-// through hooks/chisle-mcp-proxy.js so their oversized tool results get the
+// puritanical — `npx github:yungSNAT/Puritanical mcp <wrap|unwrap|status>`: route stdio MCP servers
+// through hooks/puritanical-mcp-proxy.js so their oversized tool results get the
 // same compression Claude Code and Pi get from PostToolUse.
 //
 // Opt-in, because it rewrites other tools' config files:
 //   - strict JSON only: a file with comments is reported and left alone,
 //     since rewriting it would drop them
-//   - first write of each file keeps a `<file>.chisle-bak` copy
+//   - first write of each file keeps a `<file>.puritanical-bak` copy
 //   - only stdio entries (`command`) are wrapped; url/http servers untouched
 //   - wrapped form is reversible from the args alone, no extra keys a host
 //     schema might reject: { command: "node", args: [proxy, "--", cmd, ...args] }
@@ -20,15 +20,18 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { getConfigDir, readSettingsText, secureDirectory } = require('../../hooks/chisle-config');
+const { getConfigDir, getOldConfigDir, OLD_NAME, readSettingsText, secureDirectory } = require('../../hooks/puritanical-config');
 const { writeAtomically } = require('./settings');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const PROXY_FILE = 'chisle-mcp-proxy.js';
-const PROXY_SOURCES = ['chisle-mcp-proxy.js', 'chisle-compress-output.js', 'chisle-config.js', 'chisle-command-filters.js'];
+const PROXY_FILE = 'puritanical-mcp-proxy.js';
+// The proxy as `mcp wrap` installed it before 4.0.0: still recognised as wrapped.
+const OLD_PROXY_FILE = OLD_NAME + '-mcp-proxy.js';
+const PROXY_SOURCES = ['puritanical-mcp-proxy.js', 'puritanical-compress-output.js', 'puritanical-config.js', 'puritanical-command-filters.js'];
 
-function home() { return process.env.CHISLE_HOME || os.homedir(); }
+function home() { return process.env.PURITANICAL_HOME || os.homedir(); }
 function proxyDir() { return path.join(getConfigDir(), 'mcp-proxy'); }
+function oldProxyDir() { return path.join(getOldConfigDir(), 'mcp-proxy'); }
 
 // VS Code-family user dirs, for Cline's global MCP settings.
 function vscodeUserDirs() {
@@ -65,7 +68,7 @@ function targets() {
 
 function isWrapped(entry) {
   return !!(entry && Array.isArray(entry.args) && typeof entry.args[0] === 'string' &&
-    path.basename(entry.args[0]) === PROXY_FILE && entry.args[1] === '--');
+    [PROXY_FILE, OLD_PROXY_FILE].includes(path.basename(entry.args[0])) && entry.args[1] === '--');
 }
 
 function isStdio(entry) {
@@ -114,11 +117,11 @@ function writeConfig(file, raw, data) {
 }
 
 function writeText(file, raw, text) {
-  const bak = file + '.chisle-bak';
+  const bak = file + '.puritanical-bak';
   try {
     writeAtomically(bak, raw, { noReplace: true });
   } catch (error) {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The .chisle-bak backup beside an MCP config file from the target table or the user's own --file argument.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The .puritanical-bak backup beside an MCP config file from the target table or the user's own --file argument.
     if (error.code !== 'EEXIST' || !fs.lstatSync(bak).isFile()) throw error; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   }
   let mode = 0o600;
@@ -260,13 +263,20 @@ function installProxy() {
 }
 
 // Proxies copied by an older version can lack newer sources
-// (chisle-command-filters.js), so an install or update refreshes an existing
-// copy. Returns its folder, or null when no proxy is installed.
+// (puritanical-command-filters.js), so an install or update refreshes an existing
+// copy. When a proxy from before 4.0.0 exists, the servers wrapped with it in
+// the known config files are pointed at the new copy. The old folder stays:
+// servers wrapped with --file may still use it, and --uninstall removes it.
+// Returns the folder, or null when no proxy is installed.
 function refreshProxy() {
   const dir = proxyDir();
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The mcp-proxy folder inside the Chisle config directory.
-  if (!fs.existsSync(dir)) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  const old = oldProxyDir();
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The mcp-proxy folders inside the current and the old config directories.
+  const hadOld = fs.existsSync(old); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- The mcp-proxy folder inside the Puritanical config directory.
+  if (!fs.existsSync(dir) && !hadOld) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   installProxy();
+  if (hadOld) run(['rewrap'], () => {});
   return dir;
 }
 
@@ -281,7 +291,7 @@ function parse(argv) {
     else if (a === '--no-color' || a === '--') continue;
     else throw new Error('unknown option: ' + a);
   }
-  if (!['wrap', 'unwrap', 'status'].includes(o.action)) throw new Error('usage: npx chisle mcp <wrap|unwrap|status> [--only <agent>] [--file <mcp.json>] [--dry-run]');
+  if (!['wrap', 'unwrap', 'status', 'rewrap'].includes(o.action)) throw new Error('usage: npx github:yungSNAT/Puritanical mcp <wrap|unwrap|status> [--only <agent>] [--file <mcp.json>] [--dry-run]');
   return o;
 }
 
@@ -300,6 +310,7 @@ function serverEntries(t, cfg) {
 function applyChanges(t, cfg, o, proxy, todo, out) {
   for (const [, entry] of todo) {
     if (o.action === 'wrap') wrapEntry(entry, proxy);
+    else if (o.action === 'rewrap') entry.args[0] = proxy;
     else unwrapEntry(entry);
   }
   const names = todo.map(([name]) => name);
@@ -325,18 +336,18 @@ function runTarget(t, o, proxy, out) {
     return 0;
   }
 
-  const todo = o.action === 'wrap'
-    ? stdio.filter(([, entry]) => !isWrapped(entry))
+  const todo = o.action === 'wrap' ? stdio.filter(([, entry]) => !isWrapped(entry))
+    : o.action === 'rewrap' ? wrapped.filter(([, entry]) => entry.args[0] !== proxy)
     : wrapped;
   if (!todo.length) { out('  ' + t.label + ': nothing to ' + o.action + '  ' + t.file); return 0; }
   return applyChanges(t, cfg, o, proxy, todo, out);
 }
 
 function printSavings(out) {
-  const dir = process.env.CHISLE_STATE_DIR || getConfigDir();
+  const dir = process.env.PURITANICAL_STATE_DIR || getConfigDir();
   let stats = null;
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed ledger name in CHISLE_STATE_DIR or the Chisle config directory.
-  try { stats = JSON.parse(fs.readFileSync(path.join(dir, '.chisle-compress-stats.json'), 'utf8')); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed ledger name in PURITANICAL_STATE_DIR or the Puritanical config directory.
+  try { stats = JSON.parse(fs.readFileSync(path.join(dir, '.puritanical-compress-stats.json'), 'utf8')); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   out('\n  saved so far: ' + (stats && Number.isFinite(stats.savedChars)
     ? stats.savedChars.toLocaleString('en-US') + ' chars over ' + stats.events + ' tool result(s)'
     : 'nothing yet') + '  (' + dir + ')');
@@ -367,4 +378,4 @@ function main(argv) {
   catch (e) { process.stderr.write('error: ' + e.message + '\n'); process.exit(2); }
 }
 
-module.exports = { main, run, targets, isWrapped, isStdio, proxyDir, refreshProxy };
+module.exports = { main, run, targets, isWrapped, isStdio, proxyDir, oldProxyDir, refreshProxy };

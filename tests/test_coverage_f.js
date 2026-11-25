@@ -13,10 +13,10 @@ const {
 const { INSTALLERS } = require('../bin/lib/agents');
 const { piSources } = require('../bin/lib/uninstall');
 const { writeAtomically } = require('../bin/lib/settings');
-const { exitWhenHostGone } = require('../hooks/chisle-mcp-proxy');
+const { exitWhenHostGone } = require('../hooks/puritanical-mcp-proxy');
 
 const CLI = repoPath('bin', 'install.js');
-const RECORD = '.chisle-trimmed-tools.json';
+const RECORD = '.puritanical-trimmed-tools.json';
 
 function runCLI(args, home) {
   const emptyPath = under(home, 'empty-path');
@@ -28,7 +28,7 @@ function runCLI(args, home) {
       HOME: home,
       USERPROFILE: home,
       XDG_CONFIG_HOME: under(home, 'xdg'),
-      CHISLE_HOME: home,
+      PURITANICAL_HOME: home,
       PATH: emptyPath,
       NO_COLOR: '1',
       CI: '1',
@@ -59,10 +59,10 @@ function withLinkFailure(code, fn) {
 }
 
 test('Codex install records a write failure with the error message', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-codex-');
+  const home = tempRoot(t, 'puritanical-cov-f-codex-');
   writeText(under(home, '.codex'), 'a file where the directory should be');
-  const saved = saveEnvironment(['CHISLE_HOME']);
-  process.env.CHISLE_HOME = home;
+  const saved = saveEnvironment(['PURITANICAL_HOME']);
+  process.env.PURITANICAL_HOME = home;
   const results = { detected: 0, installed: [], skipped: [], failed: [] };
   const originalWrite = process.stdout.write;
   process.stdout.write = () => true;
@@ -83,8 +83,8 @@ test('Codex install records a write failure with the error message', (t) => {
   assert.ok(results.failed[0][1].length > 0);
 });
 
-test('Claude uninstall removes only the tool deny entries chisle added', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-tools-');
+test('Claude uninstall removes only the tool deny entries puritanical added', (t) => {
+  const home = tempRoot(t, 'puritanical-cov-f-tools-');
   const cfg = under(home, 'claude');
   makeDir(cfg);
   writeJson(under(cfg, 'settings.json'), { permissions: { deny: ['Workflow', 'Bash(rm -rf:*)'] } });
@@ -92,13 +92,13 @@ test('Claude uninstall removes only the tool deny entries chisle added', (t) => 
 
   const result = uninstallClaude(cfg, home);
   assert.equal(result.status, 0, result.out);
-  assert.match(result.out, /removed tool deny entries added by chisle: Workflow/);
+  assert.match(result.out, /removed tool deny entries added by puritanical: Workflow/);
   assert.deepEqual(readJson(under(cfg, 'settings.json')).permissions, { deny: ['Bash(rm -rf:*)'] });
   assert.equal(exists(under(cfg, RECORD)), false);
 });
 
 test('Claude uninstall warns and leaves unparseable settings alone when restoring tools', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-badtools-');
+  const home = tempRoot(t, 'puritanical-cov-f-badtools-');
   const cfg = under(home, 'claude');
   makeDir(cfg);
   writeText(under(cfg, 'settings.json'), '{ not json ::: }');
@@ -129,6 +129,7 @@ test('pi sources ignore text after the source and refuse unsafe characters', () 
   const output = [
     'npm:chisle@3.0.0 (user)',
     '  git:https://github.com/JayPokale/Chisle@v1.2.0   (project)',
+    'git:github.com/yungSNAT/Puritanical@v2 (user)',
     'npm:chisle',
     'npm:chisle@1;calc (user)',
     'npm:other@1.0.0 (user)',
@@ -136,74 +137,75 @@ test('pi sources ignore text after the source and refuse unsafe characters', () 
   assert.deepEqual(piSources(output), [
     'npm:chisle',
     'git:https://github.com/JayPokale/Chisle',
+    'git:github.com/yungSNAT/Puritanical',
     'npm:chisle',
   ]);
 });
 
 test('backups fall back to an exclusive copy where hard links are unsupported', (t) => {
-  const dir = tempRoot(t, 'chisle-cov-f-nolink-');
-  const backup = under(dir, 'mcp.json.chisle-bak');
+  const dir = tempRoot(t, 'puritanical-cov-f-nolink-');
+  const backup = under(dir, 'mcp.json.puritanical-bak');
   withLinkFailure('EPERM', () => writeAtomically(backup, 'first', { noReplace: true }));
   assert.equal(readText(backup), 'first');
-  assert.deepEqual(listDir(dir), ['mcp.json.chisle-bak']);
+  assert.deepEqual(listDir(dir), ['mcp.json.puritanical-bak']);
 
   assert.throws(
     () => withLinkFailure('ENOTSUP', () => writeAtomically(backup, 'second', { noReplace: true })),
     error => error.code === 'EEXIST',
   );
   assert.equal(readText(backup), 'first');
-  assert.deepEqual(listDir(dir), ['mcp.json.chisle-bak']);
+  assert.deepEqual(listDir(dir), ['mcp.json.puritanical-bak']);
 });
 
 test('update repairs an MCP proxy installed without the command filters', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-proxy-');
-  const proxy = under(home, 'xdg', 'chisle', 'mcp-proxy');
+  const home = tempRoot(t, 'puritanical-cov-f-proxy-');
+  const proxy = under(home, 'xdg', 'puritanical', 'mcp-proxy');
   makeDir(proxy, { recursive: true });
-  writeText(under(proxy, 'chisle-mcp-proxy.js'), '// stale copy\n');
+  writeText(under(proxy, 'puritanical-mcp-proxy.js'), '// stale copy\n');
 
   const result = runCLI(['--update'], home);
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /MCP proxy refreshed in/);
-  assert.equal(exists(under(proxy, 'chisle-command-filters.js')), true);
-  assert.equal(readText(under(proxy, 'chisle-mcp-proxy.js')), readText(repoPath('hooks', 'chisle-mcp-proxy.js')));
+  assert.equal(exists(under(proxy, 'puritanical-command-filters.js')), true);
+  assert.equal(readText(under(proxy, 'puritanical-mcp-proxy.js')), readText(repoPath('hooks', 'puritanical-mcp-proxy.js')));
 });
 
 test('install leaves the MCP proxy alone when none is installed and warns when a refresh fails', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-noproxy-');
+  const home = tempRoot(t, 'puritanical-cov-f-noproxy-');
   let result = runCLI(['--update'], home);
   assert.equal(result.status, 0, result.out);
   assert.doesNotMatch(result.out, /MCP proxy/);
-  assert.equal(exists(under(home, 'xdg', 'chisle', 'mcp-proxy')), false);
+  assert.equal(exists(under(home, 'xdg', 'puritanical', 'mcp-proxy')), false);
 
-  makeDir(under(home, 'xdg', 'chisle', 'mcp-proxy', 'chisle-config.js'), { recursive: true });
+  makeDir(under(home, 'xdg', 'puritanical', 'mcp-proxy', 'puritanical-config.js'), { recursive: true });
   result = runCLI(['--update'], home);
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /MCP proxy refresh failed/);
 });
 
 test('update replaces a planted proxy-file link and leaves its target untouched', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-proxylink-');
-  const proxy = under(home, 'xdg', 'chisle', 'mcp-proxy');
+  const home = tempRoot(t, 'puritanical-cov-f-proxylink-');
+  const proxy = under(home, 'xdg', 'puritanical', 'mcp-proxy');
   const sentinel = under(home, 'sentinel.txt');
   makeDir(proxy, { recursive: true });
   writeText(sentinel, 'do not touch\n');
-  fs.symlinkSync(sentinel, under(proxy, 'chisle-mcp-proxy.js')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  fs.symlinkSync(sentinel, under(proxy, 'puritanical-mcp-proxy.js')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
   const result = runCLI(['--update'], home);
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /MCP proxy refreshed in/);
   assert.equal(readText(sentinel), 'do not touch\n');
-  const st = fs.lstatSync(under(proxy, 'chisle-mcp-proxy.js')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  const st = fs.lstatSync(under(proxy, 'puritanical-mcp-proxy.js')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
   assert.equal(st.isFile() && !st.isSymbolicLink(), true);
-  assert.equal(readText(under(proxy, 'chisle-mcp-proxy.js')), readText(repoPath('hooks', 'chisle-mcp-proxy.js')));
+  assert.equal(readText(under(proxy, 'puritanical-mcp-proxy.js')), readText(repoPath('hooks', 'puritanical-mcp-proxy.js')));
 });
 
 test('update refuses an MCP proxy folder that is a link', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-proxydir-');
+  const home = tempRoot(t, 'puritanical-cov-f-proxydir-');
   const elsewhere = under(home, 'elsewhere');
   makeDir(elsewhere, { recursive: true });
-  makeDir(under(home, 'xdg', 'chisle'), { recursive: true });
-  fs.symlinkSync(elsewhere, under(home, 'xdg', 'chisle', 'mcp-proxy'), 'dir'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+  makeDir(under(home, 'xdg', 'puritanical'), { recursive: true });
+  fs.symlinkSync(elsewhere, under(home, 'xdg', 'puritanical', 'mcp-proxy'), 'dir'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 
   const result = runCLI(['--update'], home);
   assert.equal(result.status, 0, result.out);
@@ -212,7 +214,7 @@ test('update refuses an MCP proxy folder that is a link', (t) => {
 });
 
 test('mcp reads a config named by --file and refuses an unknown option', (t) => {
-  const home = tempRoot(t, 'chisle-cov-f-mcpfile-');
+  const home = tempRoot(t, 'puritanical-cov-f-mcpfile-');
   const config = under(home, 'servers.json');
   writeJson(config, { mcpServers: { local: { command: 'node', args: ['server.js'] } } });
 
@@ -238,6 +240,7 @@ test('pi git sources must name github.com as their host', () => {
     'git:https://github.com.evil/JayPokale/Chisle',
     'git:https://github.com@evil.com/JayPokale/Chisle',
     'git:git@github.com:evil/JayPokale/Chisle',
+    'git:https://github.com/yungSNAT/Puritanical-evil',
   ]) {
     assert.deepEqual(piSources(lookalike), [], lookalike);
   }

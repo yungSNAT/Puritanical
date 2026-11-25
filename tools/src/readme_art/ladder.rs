@@ -51,7 +51,7 @@ pub(super) fn ladder(t: &Theme, l: &Lang) -> String {
         t,
         L_W,
         396.0,
-        "The Chisle efficiency ladder. Before writing code, stop at the first rung that holds: 1 does this need to exist at all, 2 already in this codebase, 3 does the stdlib do it, 4 a native platform feature, 5 an already-installed dependency, 6 can it be one line, 7 only then the minimum code that works. Animated examples: deep-copying a config object stops at the stdlib with structuredClone; a date picker stops at the platform with input type date; formatting a date stops at reuse.",
+        "The Puritanical efficiency ladder. Before writing code, stop at the first rung that holds: 1 does this need to exist at all, 2 already in this codebase, 3 does the stdlib do it, 4 a native platform feature, 5 an already-installed dependency, 6 can it be one line, 7 only then the minimum code that works. Animated examples: deep-copying a config object stops at the stdlib with structuredClone; a date picker stops at the platform with input type date; formatting a date stops at reuse.",
         &o,
         "",
     )
@@ -225,7 +225,7 @@ fn printed(x: f64, y: f64, segs: &[(&str, &str)], fs: f64, at: f64, d: f64) -> S
     )
 }
 
-// ── Install: what `npx chisle` prints (format copied from bin/install.js) ────
+// ── Install: what `npx github:yungSNAT/Puritanical` prints (format copied from bin/install.js) ────
 const AGENTS: [&str; 6] = [
     "Claude Code",
     "Gemini CLI",
@@ -259,16 +259,27 @@ pub(super) fn install(t: &Theme, _: &Lang) -> String {
         d: I_D,
     };
     let o = [
-        win(t, 16.0, 16.0, 848.0, 388.0, "~/app — npx chisle"),
+        win(
+            t,
+            16.0,
+            16.0,
+            848.0,
+            388.0,
+            "~/app — npx github:yungSNAT/Puritanical",
+        ),
         format!(
             "<g>{}{}{}</g>",
             anim_n("opacity", &[(out, 1.0), (out + 0.3, 0.0)], I_D, PLAIN),
-            typed(t, &cmd, &[("$ ", t.faint), ("npx chisle", t.text)]),
+            typed(
+                t,
+                &cmd,
+                &[("$ ", t.faint), ("npx github:yungSNAT/Puritanical", t.text)]
+            ),
             install_output(t)
         ),
     ];
     let label = format!(
-        "Animated terminal: npx chisle detects {}, installs into each, and prints \"Done. Restart your agent.\"",
+        "Animated terminal: npx github:yungSNAT/Puritanical detects {}, installs into each, and prints \"Done. Restart your agent.\"",
         AGENTS.join(", ")
     );
     svg(t, 880.0, 420.0, &label, &o, "")
@@ -281,7 +292,7 @@ fn install_output(t: &Theme) -> String {
     let count = format!("  detected:  {}", AGENTS.len());
     let installed = format!("  installed: {}", AGENT_IDS.join(", "));
     let mut lines: Vec<(f64, Vec<(&str, &str)>)> =
-        vec![(1.7, vec![("╭─ Chisle installer ─╮", t.accent)])];
+        vec![(1.7, vec![("╭─ Puritanical installer ─╮", t.accent)])];
     for (i, a) in detected.iter().enumerate() {
         lines.push((2.1 + i as f64 * 0.35, vec![("→ ", t.accent), (a, t.soft)]));
     }
@@ -294,7 +305,7 @@ fn install_output(t: &Theme) -> String {
             vec![
                 ("Done.", t.accent),
                 (" Restart your agent. Type ", t.soft),
-                ("/chisle", t.accent),
+                ("/puritanical", t.accent),
                 (" in Claude Code or Pi, or just start coding.", t.soft),
             ],
         ),
@@ -310,26 +321,42 @@ fn install_output(t: &Theme) -> String {
 
 // ── Commands: a typed cheat sheet ─────────────────────────────────────────────
 const COMMANDS: [(&str, &str, &str); 8] = [
-    ("$", "npx chisle", "wire every agent on this machine"),
-    ("$", "npx chisle --dry-run", "preview first"),
-    ("$", "npx chisle --uninstall", "put everything back"),
-    (">", "/chisle off", "pause it"),
+    (
+        "$",
+        "npx github:yungSNAT/Puritanical",
+        "wire every agent on this machine",
+    ),
+    (
+        "$",
+        "npx github:yungSNAT/Puritanical --dry-run",
+        "preview first",
+    ),
+    (
+        "$",
+        "npx github:yungSNAT/Puritanical --uninstall",
+        "put everything back",
+    ),
+    (">", "/puritanical off", "pause it"),
     (
         ">",
-        "/chisle-review",
+        "/puritanical-review",
         "over-engineering, one finding per line",
     ),
     (
         ">",
-        "/chisle-audit",
+        "/puritanical-audit",
         "bloated code and prose, biggest cut first",
     ),
     (
         "$",
-        "npx chisle tools",
+        "npx github:yungSNAT/Puritanical tools",
         "tool schemas you pay for but never use",
     ),
-    ("$", "npx chisle mcp wrap", "trim MCP output in any agent"),
+    (
+        "$",
+        "npx github:yungSNAT/Puritanical mcp wrap",
+        "trim MCP output in any agent",
+    ),
 ];
 const C_D: f64 = 11.0;
 
@@ -362,7 +389,14 @@ pub(super) fn commands(t: &Theme, l: &Lang) -> String {
 
 /// Row `i`: the prompt and command typed out, then its note.
 fn command_row(t: &Theme, i: usize, (p, c): (&str, &str), note: &str) -> [String; 2] {
-    let (fs, x, y0, lh, pad) = (14.0, 40.0, 84.0, 27.0, 26.0);
+    let (fs, x, y0, lh) = (14.0, 40.0, 84.0, 27.0);
+    // Notes line up two characters after the prompt and the longest command.
+    let longest = COMMANDS
+        .iter()
+        .map(|(_, c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    let pad = (longest + 4) as f64;
     let y = y0 + i as f64 * lh;
     let t0 = 0.5 + i as f64 * 0.85;
     let t1 = t0 + 0.45;

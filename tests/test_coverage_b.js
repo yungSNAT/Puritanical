@@ -9,12 +9,12 @@ const {
   exists, makeDir, readText, repoPath, tempRoot, under, writeJson, writeText,
 } = require('./helpers/sandbox');
 
-const CONFIG = require('../hooks/chisle-config');
-const { filterCommand } = require('../hooks/chisle-command-filters');
+const CONFIG = require('../hooks/puritanical-config');
+const { filterCommand } = require('../hooks/puritanical-command-filters');
 
 const SANDBOX = require.resolve('./helpers/sandbox');
-const ACTIVATE = repoPath('hooks', 'chisle-activate.js');
-const TRACKER = repoPath('hooks', 'chisle-mode-tracker.js');
+const ACTIVATE = repoPath('hooks', 'puritanical-activate.js');
+const TRACKER = repoPath('hooks', 'puritanical-mode-tracker.js');
 
 function setEnv(t, values) {
   const previous = new Map();
@@ -45,24 +45,24 @@ function childEnv(root, claudeDir, xdgDir, extra = {}) {
     USERPROFILE: home,
     CLAUDE_CONFIG_DIR: claudeDir,
     XDG_CONFIG_HOME: xdgDir,
-    CHISLE_DEFAULT_MODE: 'on',
-    CHISLE_UPDATE_CHECK: '0',
+    PURITANICAL_DEFAULT_MODE: 'on',
+    PURITANICAL_UPDATE_CHECK: '0',
     ...extra,
   };
 }
 
 test('activate emits the fallback ruleset and writes the active flag when SKILL.md is unavailable', (t) => {
-  const root = tempRoot(t, 'chisle-activate-fallback-');
+  const root = tempRoot(t, 'puritanical-activate-fallback-');
   const claudeDir = under(root, 'claude');
   const xdgDir = under(root, 'xdg');
-  const skillPath = repoPath('skills', 'chisle', 'SKILL.md');
+  const skillPath = repoPath('skills', 'puritanical', 'SKILL.md');
   const preload = under(root, 'hide-skill.js');
 
   writeText(preload, [
     `const { fs, absolutePath } = require(${JSON.stringify(SANDBOX)});`,
     'const original = fs.readFileSync;',
     'fs.readFileSync = function (filename, ...args) {',
-    '  if (absolutePath(String(filename)) === absolutePath(process.env.CHISLE_TEST_MISSING_SKILL)) {',
+    '  if (absolutePath(String(filename)) === absolutePath(process.env.PURITANICAL_TEST_MISSING_SKILL)) {',
     "    const error = new Error('SKILL.md intentionally unavailable');",
     "    error.code = 'ENOENT';",
     '    throw error;',
@@ -75,7 +75,7 @@ test('activate emits the fallback ruleset and writes the active flag when SKILL.
     cwd: root,
     input: JSON.stringify({ source: 'startup' }),
     env: childEnv(root, claudeDir, xdgDir, {
-      CHISLE_TEST_MISSING_SKILL: skillPath,
+      PURITANICAL_TEST_MISSING_SKILL: skillPath,
     }),
     encoding: 'utf8',
     timeout: 5000,
@@ -84,9 +84,9 @@ test('activate emits the fallback ruleset and writes the active flag when SKILL.
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.signal, null);
   assert.equal(result.stderr, '');
-  assert.ok(result.stdout.startsWith('CHISLE ACTIVE\n\n'));
+  assert.ok(result.stdout.startsWith('PURITANICAL ACTIVE\n\n'));
   assert.ok(result.stdout.includes(
-    'Chisle: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.'
+    'Puritanical: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.'
   ));
   assert.ok(result.stdout.includes('## Persistence'));
   assert.ok(result.stdout.includes('## Prose'));
@@ -95,11 +95,11 @@ test('activate emits the fallback ruleset and writes the active flag when SKILL.
   assert.ok(result.stdout.includes('Ladder: YAGNI → reuse → stdlib → native'));
   assert.ok(result.stdout.includes('STATUSLINE SETUP NEEDED:'));
   assert.ok(!result.stdout.includes('## Thinking Is Billed Too'));
-  assert.equal(readText(under(claudeDir, '.chisle-active')), 'on');
+  assert.equal(readText(under(claudeDir, '.puritanical-active')), 'on');
 });
 
 test('getConfigDir uses the Windows roaming-profile fallback when APPDATA is absent', (t) => {
-  const root = tempRoot(t, 'chisle-win-config-');
+  const root = tempRoot(t, 'puritanical-win-config-');
   const home = under(root, 'profile');
   makeDir(home, { recursive: true });
 
@@ -117,17 +117,17 @@ test('getConfigDir uses the Windows roaming-profile fallback when APPDATA is abs
       ...platformDescriptor,
       value: 'win32',
     });
-    assert.equal(CONFIG.getConfigDir(), under(home, 'AppData', 'Roaming', 'chisle'));
+    assert.equal(CONFIG.getConfigDir(), under(home, 'AppData', 'Roaming', 'puritanical'));
   } finally {
     Object.defineProperty(process, 'platform', platformDescriptor);
   }
 });
 
 test('getDefaultMode reads and normalizes a valid mode from config.json', (t) => {
-  const root = tempRoot(t, 'chisle-default-config-');
+  const root = tempRoot(t, 'puritanical-default-config-');
   const home = under(root, 'home');
   const xdgDir = under(root, 'xdg');
-  const configDir = under(xdgDir, 'chisle');
+  const configDir = under(xdgDir, 'puritanical');
 
   makeDir(home, { recursive: true });
   makeDir(configDir, { recursive: true });
@@ -137,7 +137,7 @@ test('getDefaultMode reads and normalizes a valid mode from config.json', (t) =>
     HOME: home,
     USERPROFILE: home,
     XDG_CONFIG_HOME: xdgDir,
-    CHISLE_DEFAULT_MODE: undefined,
+    PURITANICAL_DEFAULT_MODE: undefined,
   });
 
   assert.equal(CONFIG.getDefaultMode(), 'off');
@@ -159,10 +159,10 @@ test('filterSections returns the original content when section inspection throws
 });
 
 test('mode tracker ignores an unreadable transcript while still reinforcing active mode', (t) => {
-  const root = tempRoot(t, 'chisle-tracker-transcript-');
+  const root = tempRoot(t, 'puritanical-tracker-transcript-');
   const claudeDir = under(root, 'claude');
   const xdgDir = under(root, 'xdg');
-  const flagPath = under(claudeDir, '.chisle-active');
+  const flagPath = under(claudeDir, '.puritanical-active');
 
   makeDir(claudeDir, { recursive: true });
   writeText(flagPath, 'on', { mode: 0o600 });
@@ -189,16 +189,16 @@ test('mode tracker ignores an unreadable transcript while still reinforcing acti
     'UserPromptSubmit'
   );
   assert.ok(
-    output.hookSpecificOutput.additionalContext.startsWith('CHISLE ACTIVE.')
+    output.hookSpecificOutput.additionalContext.startsWith('PURITANICAL ACTIVE.')
   );
   assert.equal(readText(flagPath), 'on');
 });
 
 test('mode tracker silently exits without changing state when its input is malformed', (t) => {
-  const root = tempRoot(t, 'chisle-tracker-malformed-');
+  const root = tempRoot(t, 'puritanical-tracker-malformed-');
   const claudeDir = under(root, 'claude');
   const xdgDir = under(root, 'xdg');
-  const flagPath = under(claudeDir, '.chisle-active');
+  const flagPath = under(claudeDir, '.puritanical-active');
   const markerPath = under(root, 'parse-attempted');
   const preload = under(root, 'track-json-parse.js');
   const malformed = '{ malformed input';
@@ -209,8 +209,8 @@ test('mode tracker silently exits without changing state when its input is malfo
     `const { writeText } = require(${JSON.stringify(SANDBOX)});`,
     'const originalParse = JSON.parse;',
     'JSON.parse = function trackedParse(value, ...args) {',
-    '  if (value === process.env.CHISLE_TEST_MALFORMED_PAYLOAD) {',
-    "    writeText(process.env.CHISLE_TEST_PARSE_MARKER, 'attempted');",
+    '  if (value === process.env.PURITANICAL_TEST_MALFORMED_PAYLOAD) {',
+    "    writeText(process.env.PURITANICAL_TEST_PARSE_MARKER, 'attempted');",
     '  }',
     '  return originalParse.call(this, value, ...args);',
     '};',
@@ -220,8 +220,8 @@ test('mode tracker silently exits without changing state when its input is malfo
     cwd: root,
     input: malformed,
     env: childEnv(root, claudeDir, xdgDir, {
-      CHISLE_TEST_MALFORMED_PAYLOAD: malformed,
-      CHISLE_TEST_PARSE_MARKER: markerPath,
+      PURITANICAL_TEST_MALFORMED_PAYLOAD: malformed,
+      PURITANICAL_TEST_PARSE_MARKER: markerPath,
     }),
     encoding: 'utf8',
     timeout: 5000,

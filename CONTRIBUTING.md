@@ -1,32 +1,32 @@
 # Contributing
 
-Small focused PRs beat big rewrites. Chisle is a small package. Keep it that way.
+Small focused PRs beat big rewrites. Puritanical is a small package. Keep it that way.
 
 ## What lives where
 
 | File | Purpose |
 |------|---------|
-| `skills/chisle/SKILL.md` | **Behaviour source.** All rules and examples. The activate hook reads it at runtime. |
+| `skills/puritanical/SKILL.md` | **Behaviour source.** All rules and examples. The activate hook reads it at runtime. |
 | `tools/src/rules.rs` | Condensed mirror of the skill for the 7 static-rule agents (OpenCode reuses `AGENTS.md` + `skills/` directly; no generated copy). **Editing SKILL.md alone does not propagate here**, so update the `BODY` too, then regenerate. |
-| `hooks/chisle-activate.js` | SessionStart: reads SKILL.md, writes flag, emits rules |
-| `hooks/chisle-mode-tracker.js` | UserPromptSubmit: `/chisle` commands, NL detection, per-turn reinforcement |
-| `hooks/chisle-compress-output.js` | PostToolUse: input-side compression (scrub / elide / dedup tiers, savings ledger) |
-| `hooks/chisle-config.js` | Shared flag read/write, mode resolution. Security-sensitive, so test changes carefully. |
-| `hooks/chisle-mode.js` | Shared natural-language mode-directive parser. |
+| `hooks/puritanical-activate.js` | SessionStart: reads SKILL.md, writes flag, emits rules |
+| `hooks/puritanical-mode-tracker.js` | UserPromptSubmit: `/puritanical` commands, NL detection, per-turn reinforcement |
+| `hooks/puritanical-compress-output.js` | PostToolUse: input-side compression (scrub / elide / dedup tiers, savings ledger) |
+| `hooks/puritanical-config.js` | Shared flag read/write, mode resolution. Security-sensitive, so test changes carefully. |
+| `hooks/puritanical-mode.js` | Shared natural-language mode-directive parser. |
 | `pi-extension/index.js` | Pi lifecycle, command, status, and `tool_result` adapter; reuses hook core. |
-| `hooks/chisle-statusline.sh` / `.ps1` | Statusline badge: mode + measured input-side savings |
+| `hooks/puritanical-statusline.sh` / `.ps1` | Statusline badge: mode + measured input-side savings |
 | `bin/install.js` + `bin/lib/` | Multi-agent installer (`agents.js`, `claude.js`, `uninstall.js`), JSONC-safe settings merge (`settings.js`) |
-| `bin/lib/agents.js` + `bin/lib/fence.js` (opencode/hermes paths) | Fenced global ruleset + verbatim skill copies; `CHISLE_HOME` redirects home in tests |
+| `bin/lib/agents.js` + `bin/lib/fence.js` (opencode/hermes paths) | Fenced global ruleset + verbatim skill copies; `PURITANICAL_HOME` redirects home in tests |
 
 ## What to edit
 
-**Changing behaviour** → `skills/chisle/SKILL.md`, **and** the condensed `BODY` in `tools/src/rules.rs`, then `npm run build:rules`. CI checks the copies are in sync with the generator (not with SKILL.md; the mirror is manual, by design).
+**Changing behaviour** → `skills/puritanical/SKILL.md`, **and** the condensed `BODY` in `tools/src/rules.rs`, then `npm run build:rules`. CI checks the copies are in sync with the generator (not with SKILL.md; the mirror is manual, by design).
 
-**Input-side compression** → shared transforms in `hooks/chisle-compress-output.js`, harness shape/lifecycle in `pi-extension/index.js`. Correctness invariants: allowlist only (never Read/Edit/Write), preserve Pi result metadata, salvage error lines, skip same-turn Pi dedup, keep every tier kill-switchable, never break the tool pipeline.
+**Input-side compression** → shared transforms in `hooks/puritanical-compress-output.js`, harness shape/lifecycle in `pi-extension/index.js`. Correctness invariants: allowlist only (never Read/Edit/Write), preserve Pi result metadata, salvage error lines, skip same-turn Pi dedup, keep every tier kill-switchable, never break the tool pipeline.
 
-**Natural language triggers** → `hooks/chisle-mode.js`; both harnesses consume it.
+**Natural language triggers** → `hooks/puritanical-mode.js`; both harnesses consume it.
 
-**Security-sensitive paths** → `hooks/chisle-config.js` (`safeWriteFlag`, `readFlag`). Symlink-safe, `O_NOFOLLOW`, size-capped. Don't simplify them.
+**Security-sensitive paths** → `hooks/puritanical-config.js` (`safeWriteFlag`, `readFlag`). Symlink-safe, `O_NOFOLLOW`, size-capped. Don't simplify them.
 
 ## Tests
 
@@ -65,16 +65,16 @@ Pushing a `v*` tag runs `.github/workflows/publish.yml`, which reruns the Node s
 
 ## Hacktoberfest
 
-Chisle welcomes Hacktoberfest contributors. Start from an issue labelled `hacktoberfest`, `good first issue` or `help wanted`, and comment before you start so two people don't build the same thing. One issue per PR.
+Puritanical welcomes Hacktoberfest contributors. Start from an issue labelled `hacktoberfest`, `good first issue` or `help wanted`, and comment before you start so two people don't build the same thing. One issue per PR.
 
 No rewards: Hacktoberfest 2026 no longer counts pull requests, and this is an unfunded, one-person project with no swag or bounties. What you get is a merged change, credit in the changelog, and your name in the repo's history.
 
 What gets merged: a fix, a fixture, a test, a measurement with receipts, a docs correction backed by data. What doesn't: whitespace, typo sweeps across unrelated files, reworded README sections, or anything that adds a dependency; those get labelled `invalid` or `spam`.
 
-If Chisle saved you tokens, or you enjoyed contributing, a ⭐ on the repo is the best thanks and helps others find it. It's optional and never a condition for review or merge.
+If Puritanical saved you tokens, or you enjoyed contributing, a ⭐ on the repo is the best thanks and helps others find it. It's optional and never a condition for review or merge.
 
 Benchmark PRs follow the same rule as everything else: raw cells committed, losses published.
 
 ## Reporting bugs
 
-Open an issue. Include: what you typed, what chisle did, what you expected.
+Open an issue. Include: what you typed, what puritanical did, what you expected.

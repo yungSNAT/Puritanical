@@ -95,7 +95,7 @@ test('Claude replay reports per-tool compression savings', () => {
   const out = execFileSync(
     process.execPath,
     [REPLAY, 'claude', dir],
-    { encoding: 'utf8', env: { ...process.env, CHISLE_COMPRESS_DEDUP: '1' } }
+    { encoding: 'utf8', env: { ...process.env, PURITANICAL_COMPRESS_DEDUP: '1' } }
   );
 
   assert.match(out, /per-tool breakdown \(incl\. dedup\):/);

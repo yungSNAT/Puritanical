@@ -29,7 +29,7 @@ engines:
       - "benchmarks/results/2026-11-21-astra/replay.py"
       - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
   agentlinter:
-    # AGENTS.md is the shipped Chisle rule text, tuned against the benchmarks.
+    # AGENTS.md is the shipped Puritanical rule text, tuned against the benchmarks.
     # Its absolute rules are deliberate; a wording change needs a new run.
     exclude_paths:
       - "AGENTS.md"

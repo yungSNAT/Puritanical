@@ -4,20 +4,23 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getDefaultMode, getSections, filterSections } = require('../hooks/chisle-config');
-const { commandOf, duplicateMarker, limitsFor, transform, unsafeToolName } = require('../hooks/chisle-compress-output');
-const { requestedMode } = require('../hooks/chisle-mode');
+const { getDefaultMode, getSections, filterSections, OLD_NAME, migrateOldConfig } = require('../hooks/puritanical-config');
+const { commandOf, duplicateMarker, limitsFor, transform, unsafeToolName } = require('../hooks/puritanical-compress-output');
+const { requestedMode } = require('../hooks/puritanical-mode');
 
-const RULES_TYPE = 'chisle-rules';
-const MODE_TYPE = 'chisle-mode';
+const RULES_TYPE = 'puritanical-rules';
+const MODE_TYPE = 'puritanical-mode';
+// Entry types sessions recorded before 4.0.0 still count when resumed.
+const RULES_TYPES = [RULES_TYPE, OLD_NAME + '-rules'];
+const MODE_TYPES = [MODE_TYPE, OLD_NAME + '-mode'];
 const SAFE_TOOLS = new Set(['bash', 'powershell', 'grep', 'find', 'ls']);
 const NEVER_COMPRESS = new Set(['read', 'edit', 'write']);
 const DEDUP_MIN = 2048;
 // Sectioned so the `sections` config applies here too. Flat prose/code lines
 // would leave the fallback ignoring a user's sections.prose:false the moment
-// SKILL.md became unreadable — chisle-activate.js's fallback is shaped the
+// SKILL.md became unreadable — puritanical-activate.js's fallback is shaped the
 // same way for the same reason. The safety line stays outside both groups.
-const FALLBACK_BODY = `Chisle: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.
+const FALLBACK_BODY = `Puritanical: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.
 
 ## Prose
 
@@ -33,13 +36,13 @@ Never simplify away input validation, data-loss prevention, security, accessibil
 
 function loadRules() {
   try {
-    const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    // Shares the SKILL.md emission path with chisle-activate.js, so it honors
+    const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'puritanical', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    // Shares the SKILL.md emission path with puritanical-activate.js, so it honors
     // the same `sections` config (prose/code rule suppression) the same way.
-    return 'CHISLE ACTIVE\n\n' +
+    return 'PURITANICAL ACTIVE\n\n' +
       filterSections(skill.replace(/^---[\s\S]*?---\s*/, ''), getSections());
   } catch {
-    return 'CHISLE ACTIVE\n\n' +
+    return 'PURITANICAL ACTIVE\n\n' +
       filterSections(FALLBACK_BODY, getSections(), ['Prose'], ['Code']);
   }
 }
@@ -69,9 +72,9 @@ function sessionEntries(ctx, method) {
 
 function hasRulesEntry(entries) {
   return (entries || []).some(entry =>
-    (entry.type === 'custom_message' && entry.customType === RULES_TYPE) ||
+    (entry.type === 'custom_message' && RULES_TYPES.includes(entry.customType)) ||
     (entry.type === 'message' && entry.message && entry.message.role === 'custom' &&
-      entry.message.customType === RULES_TYPE));
+      RULES_TYPES.includes(entry.message.customType)));
 }
 
 function promptHasRules(event) {
@@ -79,8 +82,8 @@ function promptHasRules(event) {
     text = text || '';
     // Our own injection: the sections config can drop the prose or the code
     // group, but never the header or "## Boundaries".
-    if (/^CHISLE ACTIVE\s*$/m.test(text) && text.includes('## Boundaries')) return true;
-    return /^# Chisle\s*$/m.test(text) &&
+    if (/^PURITANICAL ACTIVE\s*$/m.test(text) && text.includes('## Boundaries')) return true;
+    return /^# Puritanical\s*$/m.test(text) &&
       ((text.includes('## Prose: zero fluff') && text.includes('## Code: the efficiency ladder')) ||
         (text.includes('## Persistence') && text.includes('## Code:')));
   };
@@ -100,13 +103,14 @@ function appendSystemPrompt(systemPrompt, text) {
 
 function piToolAllowed(name) {
   if (!name || NEVER_COMPRESS.has(name.toLowerCase()) || unsafeToolName(name)) return false;
-  if (process.env.CHISLE_COMPRESS_TOOLS) {
-    return process.env.CHISLE_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean).includes(name);
+  if (process.env.PURITANICAL_COMPRESS_TOOLS) {
+    return process.env.PURITANICAL_COMPRESS_TOOLS.split(',').map(s => s.trim()).filter(Boolean).includes(name);
   }
   return SAFE_TOOLS.has(name.toLowerCase()) || name.startsWith('mcp__');
 }
 
-function chisleExtension(pi) {
+function puritanicalExtension(pi) {
+  migrateOldConfig(); // a pre-4.0.0 config.json, so the mode below is the user's own
   const rules = loadRules();
   let active = getDefaultMode() !== 'off';
   let rulesInContext = false;
@@ -114,18 +118,18 @@ function chisleExtension(pi) {
   let savedChars = 0;
   let lastByToolBlock = new Map();
   let dedupBaseline = new Map();
-  const stopRulesSignal = pi.events.on('chisle:rules-injected', () => { rulesInContext = true; });
-  const stopModeSignal = pi.events.on('chisle:mode', mode => { active = mode === 'on'; });
+  const stopRulesSignal = pi.events.on('puritanical:rules-injected', () => { rulesInContext = true; });
+  const stopModeSignal = pi.events.on('puritanical:mode', mode => { active = mode === 'on'; });
 
   function updateStatus(ctx) {
     if (!ctx.hasUI) return;
     if (!active) {
-      ctx.ui.setStatus('chisle', undefined);
+      ctx.ui.setStatus('puritanical', undefined);
       return;
     }
     const tokens = Math.floor(savedChars / 4);
     const saved = tokens >= 1000 ? ` ⇣${Math.floor(tokens / 1000)}k tok` : tokens ? ` ⇣${tokens} tok` : '';
-    ctx.ui.setStatus('chisle', ctx.ui.theme.fg('accent', `[CHISLE]${saved}`));
+    ctx.ui.setStatus('puritanical', ctx.ui.theme.fg('accent', `[PURITANICAL]${saved}`));
   }
 
   function restoreBranch(ctx) {
@@ -136,7 +140,7 @@ function chisleExtension(pi) {
     dedupBaseline = new Map();
 
     const modeEntry = sessionEntries(ctx, 'getBranch')
-      .filter(entry => entry.type === 'custom' && entry.customType === MODE_TYPE).pop();
+      .filter(entry => entry.type === 'custom' && MODE_TYPES.includes(entry.customType)).pop();
     if (modeEntry && modeEntry.data && ['on', 'off'].includes(modeEntry.data.mode)) {
       active = modeEntry.data.mode === 'on';
     }
@@ -146,16 +150,16 @@ function chisleExtension(pi) {
 
   function setMode(request, ctx) {
     active = request === 'on';
-    pi.events.emit('chisle:mode', active ? 'on' : 'off');
+    pi.events.emit('puritanical:mode', active ? 'on' : 'off');
     pi.appendEntry(MODE_TYPE, { mode: active ? 'on' : 'off' });
     updateStatus(ctx);
-    if (ctx.hasUI) ctx.ui.notify(active ? 'Chisle enabled.' : 'Chisle disabled.', 'info');
+    if (ctx.hasUI) ctx.ui.notify(active ? 'Puritanical enabled.' : 'Puritanical disabled.', 'info');
   }
 
-  pi.registerCommand('chisle', {
-    description: 'Enable Chisle or set /chisle on|off',
+  pi.registerCommand('puritanical', {
+    description: 'Enable Puritanical or set /puritanical on|off',
     handler: async (args, ctx) => {
-      const request = requestedMode(`/chisle ${args || ''}`) || 'on';
+      const request = requestedMode(`/puritanical ${args || ''}`) || 'on';
       setMode(request, ctx);
     },
   });
@@ -168,7 +172,7 @@ function chisleExtension(pi) {
     dedupBaseline.clear();
     stopRulesSignal();
     stopModeSignal();
-    if (ctx.hasUI) ctx.ui.setStatus('chisle', undefined);
+    if (ctx.hasUI) ctx.ui.setStatus('puritanical', undefined);
   });
 
   pi.on('session_compact', async (_event, ctx) => {
@@ -190,8 +194,8 @@ function chisleExtension(pi) {
       const systemPrompt = Array.isArray(event.systemPrompt)
         ? event.systemPrompt.join('\n\n')
         : event.systemPrompt || '';
-      if (systemPrompt.includes('CHISLE DISABLED.')) return undefined;
-      const disabled = 'CHISLE DISABLED. Ignore only Chisle style and efficiency-ladder instructions.';
+      if (systemPrompt.includes('PURITANICAL DISABLED.')) return undefined;
+      const disabled = 'PURITANICAL DISABLED. Ignore only Puritanical style and efficiency-ladder instructions.';
       return { systemPrompt: appendSystemPrompt(event.systemPrompt, disabled) };
     }
     if (Array.isArray(event.systemPrompt)) {
@@ -201,7 +205,7 @@ function chisleExtension(pi) {
     }
     if (rulesInContext || promptHasRules(event)) return undefined;
     rulesInContext = true;
-    pi.events.emit('chisle:rules-injected');
+    pi.events.emit('puritanical:rules-injected');
     return { message: { customType: RULES_TYPE, content: rules, display: false } };
   });
 
@@ -217,7 +221,7 @@ function chisleExtension(pi) {
 
   pi.on('tool_result', async (event, ctx) => {
     try {
-      if (!active || process.env.CHISLE_COMPRESS === '0' || !piToolAllowed(event.toolName) ||
+      if (!active || process.env.PURITANICAL_COMPRESS === '0' || !piToolAllowed(event.toolName) ||
           !Array.isArray(event.content)) return undefined;
 
       let changed = false;
@@ -227,7 +231,7 @@ function chisleExtension(pi) {
         const key = `${event.toolName}:${index}`;
         let updated = null;
 
-        if (process.env.CHISLE_COMPRESS_DEDUP !== '0' && text.length >= DEDUP_MIN) {
+        if (process.env.PURITANICAL_COMPRESS_DEDUP !== '0' && text.length >= DEDUP_MIN) {
           const hash = crypto.createHash('sha256').update(text).digest();
           const previous = dedupBaseline.get(key);
           lastByToolBlock.set(key, hash);
@@ -249,7 +253,7 @@ function chisleExtension(pi) {
   });
 }
 
-module.exports = chisleExtension;
+module.exports = puritanicalExtension;
 module.exports.loadRules = loadRules;
 module.exports.hasRulesEntry = hasRulesEntry;
 module.exports.sessionEntries = sessionEntries;

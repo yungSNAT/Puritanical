@@ -1,15 +1,15 @@
 ---
 name: Bug report
-about: Chisle did something wrong
+about: Puritanical did something wrong
 title: ''
 labels: bug
 assignees: ''
 ---
 
 **What you typed**
-The prompt or `/chisle` command.
+The prompt or `/puritanical` command.
 
-**What Chisle did**
+**What Puritanical did**
 Actual behavior. Paste the response or statusline badge if relevant.
 
 **What you expected**
@@ -20,4 +20,4 @@ Expected behavior.
 - OS: macOS / Linux / Windows
 
 **Flag state** (if relevant)
-Output of: `cat "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.chisle-active"`
+Output of: `cat "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.puritanical-active"`

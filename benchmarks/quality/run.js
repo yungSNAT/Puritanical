@@ -3,7 +3,7 @@
 // Quality benchmark: does the Chisle ruleset change how OFTEN the model is RIGHT?
 //
 // Two arms, identical prompt, identical model. vanilla appends nothing; chisle
-// appends skills/chisle/SKILL.md (frontmatter stripped) as the system prompt --
+// appends skills/puritanical/SKILL.md (frontmatter stripped) as the system prompt --
 // exactly what the shipped skill does. Every item is auto-graded:
 //   math -> exact match on a required "ANSWER:" line
 //   code -> hidden unit tests the model never sees
@@ -29,7 +29,7 @@ fs.mkdirSync(RAW, { recursive: true }); // nosemgrep: javascript_pathtraversal_r
 // Isolated config: credentials only, so no personal settings/CLAUDE.md/plugins leak in.
 const ISO = fs.mkdtempSync(path.join(os.tmpdir(), 'chisle-bench-'));
 fs.copyFileSync(path.join(os.homedir(), '.claude', '.credentials.json'), path.join(ISO, '.credentials.json'));
-const skill = fs.readFileSync(path.join(HERE, '..', '..', 'skills', 'chisle', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+const skill = fs.readFileSync(path.join(HERE, '..', '..', 'skills', 'puritanical', 'SKILL.md'), 'utf8'); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 const body = skill.split(/^---\s*$/m).slice(2).join('---').trim();
 if (!body) { console.error('empty chisle system prompt'); process.exit(1); }
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- The prompt file in the private temporary config directory.

@@ -120,11 +120,11 @@ function isolatedCompressionEnv(home) {
     HOME: home,
     USERPROFILE: home,
     XDG_CONFIG_HOME: under(home, 'xdg'),
-    CHISLE_STATE_DIR: under(home, 'state'),
-    CHISLE_COMPRESS_MAX_CHARS: '8000',
+    PURITANICAL_STATE_DIR: under(home, 'state'),
+    PURITANICAL_COMPRESS_MAX_CHARS: '8000',
   };
-  delete env.CHISLE_COMPRESS;
-  delete env.CHISLE_COMPRESS_TOOLS;
+  delete env.PURITANICAL_COMPRESS;
+  delete env.PURITANICAL_COMPRESS_TOOLS;
   delete env.PI_CODING_AGENT_SESSION_DIR;
   delete env.PI_CODING_AGENT_DIR;
   return env;

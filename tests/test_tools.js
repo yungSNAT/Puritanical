@@ -85,7 +85,7 @@ test('tools trim lists unused skills name-only and leaves used and user-set ones
   assert.deepEqual(settings().skillOverrides, { mine: 'off' });
 });
 
-test('tools restore drops skillOverrides when chisle set every entry', () => {
+test('tools restore drops skillOverrides when puritanical set every entry', () => {
   const dir = skillFixture({});
   TOOLS.main(['trim'], dir, () => {});
   assert.deepEqual(settings().skillOverrides, { mine: 'name-only', pptx: 'name-only' });
