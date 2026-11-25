@@ -68,7 +68,23 @@ async function latestVersion(cachePath) {
 // the user actually asked for. Measured and reported by @enc0ded (#2).
 const FULL_INJECT_SOURCES = new Set(['startup']);
 
-function statuslineNotice(settingsPath) {
+function hasPwsh(envPath = process.env.PATH) {
+  for (const dir of (envPath || '').split(path.delimiter)) {
+    if (!dir) continue;
+    // A Store install's App Execution Alias exists but fails stat with EACCES.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Probes PATH entries for the fixed pwsh.exe host.
+    try { if (fs.statSync(path.join(dir, 'pwsh.exe')).isFile()) return true; } catch (error) { if (error.code === 'EACCES') return true; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  }
+  return false;
+}
+
+function statuslineCommand(dir = __dirname, platform = process.platform, envPath = process.env.PATH) {
+  if (platform !== 'win32') return `bash "${path.join(dir, 'puritanical-statusline.sh')}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+  const psHost = hasPwsh(envPath) ? 'pwsh' : 'powershell';
+  return `${psHost} -NoProfile -ExecutionPolicy Bypass -File "${path.join(dir, 'puritanical-statusline.ps1')}"`; // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+}
+
+function statuslineNotice(settingsPath, platform = process.platform, envPath = process.env.PATH) {
   try {
     const raw = readSettingsText(settingsPath);
     if (raw === null) return '';
@@ -79,8 +95,7 @@ function statuslineNotice(settingsPath) {
     // A missing file needs setup. Leave unreadable or malformed settings alone.
     if (error.code !== 'ENOENT') return '';
   }
-  const scriptPath = path.join(__dirname, 'puritanical-statusline.sh');
-  const command = `bash "${scriptPath}"`;
+  const command = statuslineCommand(__dirname, platform, envPath);
   const snippet = '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
   return '\n\n' +
     'STATUSLINE SETUP NEEDED: The puritanical plugin includes a statusline badge ' +
@@ -208,4 +223,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { majorOf, majorUpdateNotice, latestVersion };
+module.exports = { majorOf, majorUpdateNotice, latestVersion, statuslineCommand, statuslineNotice };

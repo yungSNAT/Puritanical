@@ -124,6 +124,39 @@ test('Windows command quoting quotes empty and spaced arguments while preserving
   assert.equal(nonWindowsEnv.quoteWin('two words'), 'two words');
 });
 
+test('capture enforces a bounded timeout and SIGKILL on hung child processes', (t) => {
+  const cp = require('child_process');
+  const envMod = loadFresh(ENV_PATH);
+  t.after(() => clearModule(ENV_PATH));
+
+  const fast = envMod.capture('node', ['-e', "process.stdout.write('ok')"]);
+  assert.equal(envMod.ranOk(fast), true);
+  assert.equal(fast.stdout, 'ok');
+
+  const warned = [];
+  const stderrWrite = t.mock.method(process.stderr, 'write', (chunk) => { warned.push(String(chunk)); return true; });
+  const started = Date.now();
+  const hung = envMod.capture('node', ['-e', 'setTimeout(() => {}, 5000)'], 150);
+  const elapsed = Date.now() - started;
+  stderrWrite.mock.restore();
+  assert.equal(warned.length, 1);
+  assert.match(warned[0], /warning: `node -e setTimeout\(\(\) => \{\}, 5000\)` gave no answer within 1 s; its result was skipped/);
+  assert.equal(envMod.ranOk(hung), false);
+  assert.equal(hung.status, null);
+  assert.equal(hung.error && hung.error.code, 'ETIMEDOUT');
+  assert.ok(elapsed < 4000, `capture took ${elapsed}ms instead of timing out`);
+
+  let capturedOpts;
+  t.mock.method(cp, 'spawnSync', (_cmd, _args, opts) => {
+    capturedOpts = opts;
+    return { status: 0, stdout: '', stderr: '' };
+  });
+  envMod.capture('probe', ['--version']);
+  assert.equal(capturedOpts.timeout, envMod.CAPTURE_TIMEOUT_MS);
+  assert.equal(capturedOpts.killSignal, 'SIGKILL');
+  assert.equal(capturedOpts.encoding, 'utf8');
+});
+
 test('default Claude directory uses the isolated home and foreign hooks are not treated as installed', (t) => {
   const root = tempDir(t);
   const home = under(root, 'home');

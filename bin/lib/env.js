@@ -85,8 +85,15 @@ function run(cmd, args, dry) {
 function ranOk(r) {
   return !!r && !r.error && r.status === 0;
 }
-function capture(cmd, args) {
-  try { return spawnX(cmd, args, { encoding: 'utf8' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
+const CAPTURE_TIMEOUT_MS = 15000;
+function capture(cmd, args, timeout = CAPTURE_TIMEOUT_MS) {
+  let r;
+  try { r = spawnX(cmd, args, { encoding: 'utf8', timeout, killSignal: 'SIGKILL' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
+  // Callers read a timed-out child as "nothing listed", so say why.
+  if (r && r.error && r.error.code === 'ETIMEDOUT') {
+    process.stderr.write(`  warning: \`${cmd} ${args.join(' ')}\` gave no answer within ${Math.ceil(timeout / 1000)} s; its result was skipped\n`);
+  }
+  return r;
 }
 // True when `<cmd> <args>` exits 0 and its output matches pattern, by default
 // "puritanical" (plugin/extension lists).
@@ -121,7 +128,7 @@ function opencodeMajor() {
 }
 
 module.exports = {
-  REPO, IS_WIN, REPO_ROOT, OLD_PLUGIN, OLD_LISTED, die, expandHome, hasCmd, isDir, isFile, quoteWin,
+  REPO, IS_WIN, REPO_ROOT, OLD_PLUGIN, OLD_LISTED, CAPTURE_TIMEOUT_MS, die, expandHome, hasCmd, isDir, isFile, quoteWin,
   run, ranOk, capture, listsPuritanical, claudeDir, homeDir, opencodeDir, copilotDir,
   opencodeStateDir, opencodeMajor,
 };
