@@ -410,10 +410,6 @@
         {
           "patternId": "Ruff_W605_invalid-escape-sequence"
         }
-      ],
-      "exclude": [
-        "benchmarks/results/2026-11-21-astra/replay.py",
-        "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
       ]
     },
     {
@@ -2622,11 +2618,6 @@
         {
           "patternId": "Bandit_B704"
         }
-      ],
-      "exclude": [
-        "benchmarks/results/2026-11-21-astra/replay.py",
-        "benchmarks/results/2026-11-21-astra/ponytail_checks.py",
-        "benchmarks/results/2026-11-21-astra/retired_checks.py"
       ]
     },
     {
@@ -2884,10 +2875,6 @@
         {
           "patternId": "PyLintPython3_W1307"
         }
-      ],
-      "exclude": [
-        "benchmarks/results/2026-11-21-astra/ponytail_checks.py",
-        "benchmarks/results/2026-11-21-astra/retired_checks.py"
       ]
     },
     {
@@ -2935,9 +2922,7 @@
       ],
       "exclude": [
         "tests/**",
-        "**/package-lock.json",
-        "benchmarks/results/2026-11-21-astra/replay.py",
-        "benchmarks/results/2026-11-21-astra/retired_checks.py"
+        "**/package-lock.json"
       ]
     },
     {
@@ -2955,10 +2940,6 @@
         {
           "patternId": "Prospector_pyflakes"
         }
-      ],
-      "exclude": [
-        "benchmarks/results/2026-11-21-astra/ponytail_checks.py",
-        "benchmarks/results/2026-11-21-astra/retired_checks.py"
       ]
     },
     {

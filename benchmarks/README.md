@@ -1,7 +1,5 @@
 # Benchmarks
 
-[Puritanical, Chisle and Ponytail on GPT-6.2 Astra](results/2026-11-21-astra/README.md) compares the fork’s correctness and token use on 48 matched attempts. The historical upstream suites follow.
-
 Every number below is recomputed from the committed `raw*/` cells by the
 scripts in this directory; no hand-copied figures. Full tables, intervals and
 reading notes: [docs/benchmarks.md](../docs/benchmarks.md). Earlier rounds
@@ -41,7 +39,6 @@ each cell is one answer. Score with `puritanical-tools pooled` (pooled ratio of 
 node benchmarks/run-ablation.js <dir> 2 4 vanilla caveman=<SKILL.md> ponytail=<SKILL.md> chisle=skills/puritanical/SKILL.md
 MODEL=claude-sonnet-5-5 node benchmarks/run-ablation.js <dir> 2 4 vanilla chisle=skills/puritanical/SKILL.md
 bash benchmarks/run-live.sh claude-haiku-4-5-20251001 benchmarks/results/<dir>/default-s1
-ARMS=vanilla,caveman,ponytail,chisle cargo run --quiet --locked --manifest-path tools/Cargo.toml -- pooled benchmarks/results/raw-nov/*/
 ```
 
 `cargo run --quiet --locked --manifest-path tools/Cargo.toml -- answers <run-dir>` writes `<run-dir>/ANSWERS.md`: every prompt with each arm's
@@ -50,8 +47,7 @@ verbatim answer and token counts.
 Cells: [`results/raw-314-sidebyside/`](results/raw-314-sidebyside/),
 [`results/raw-314-sonnet/`](results/raw-314-sonnet/),
 [`results/raw-nov-sidebyside/`](results/raw-nov-sidebyside/),
-[`results/raw-nov-sonnet/`](results/raw-nov-sonnet/),
-[`results/raw-nov/`](results/raw-nov/).
+[`results/raw-nov-sonnet/`](results/raw-nov-sonnet/).
 
 ## 2. Correctness (maths + coding, auto-graded)
 
