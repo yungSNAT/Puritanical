@@ -84,8 +84,9 @@ function removeMarketplace(ctx, name) {
 // marketplace stays while any copy of the old plugin does.
 function removeOldPlugin(ctx) {
   const { removed, left } = uninstallPlugin(ctx, ENV.OLD_PLUGIN, ENV.OLD_LISTED);
-  if (left) ctx.warn(`  kept the ${OLD_NAME} marketplace while the old plugin is installed`);
-  else if (removed) removeMarketplace(ctx, OLD_NAME);
+  if (left) { ctx.warn(`  kept the ${OLD_NAME} marketplace while the old plugin is installed`); return true; }
+  if (removed) removeMarketplace(ctx, OLD_NAME);
+  return false;
 }
 
 // A status line that runs the old badge script among other commands stays
@@ -145,12 +146,17 @@ function dropStandaloneHooks(ctx) {
 }
 
 function installClaude(ctx) {
-  const { say, note, results } = ctx;
+  const { say, note, warn, results } = ctx;
   results.detected++;
   say('→ Claude Code detected');
   let pluginOK = false;
   if (ENV.hasCmd('claude')) {
-    removeOldPlugin(ctx);
+    if (removeOldPlugin(ctx)) {
+      warn(`  left Claude Code unchanged while a pre-4.0.0 ${OLD_NAME} plugin remains`);
+      results.failed.push(['claude', 'old plugin still installed']);
+      process.stdout.write('\n');
+      return;
+    }
     pluginOK = installPlugin(ctx);
   }
   else note('  claude CLI not on PATH, wiring standalone hooks in settings.json');

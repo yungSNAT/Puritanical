@@ -233,6 +233,8 @@ test('an old plugin that cannot go keeps its marketplace and names the command t
   assert.match(out, /kept the chisle marketplace while the old plugin is installed/);
   assert.match(s.log('claude'), /^plugin uninstall chisle@chisle --scope local$/m, 'the local copy in this project stayed');
   assert.doesNotMatch(s.log('claude'), /--scope project|marketplace remove/);
+  assert.doesNotMatch(s.log('claude'), /^plugin install /m);
+  assert.ok(!exists(s.dir('claude', 'puritanical-hooks')));
 });
 
 test('a status line that runs the old script among other commands stays, with a note', POSIX, t => {
@@ -509,6 +511,21 @@ test('plain Claude install leaves an unrelated old marketplace intact when no ol
   s.cli(['--only', 'claude']);
   assert.deepEqual(readJson(s.dir('claude.state.json')).marketplaces, ['chisle', 'puritanical']);
   assert.doesNotMatch(s.log('claude'), /marketplace remove/);
+
+  s.fake('claude', { plugins: [], marketplaces: ['chisle', 'puritanical'] });
+  s.cli(['--uninstall', '--only', 'claude']);
+  assert.deepEqual(readJson(s.dir('claude.state.json')).marketplaces, ['chisle', 'puritanical']);
+
+  s.fake('claude', {
+    plugins: [{ id: 'puritanical@puritanical' }, { id: 'chisle@chisle', scope: 'project', projectPath: s.dir() }],
+    marketplaces: ['puritanical', 'chisle'],
+  });
+  s.cli(['--uninstall', '--only', 'claude']);
+  assert.deepEqual(readJson(s.dir('claude.state.json')).marketplaces, ['chisle']);
+
+  s.fake('claude', { plugins: [{ id: 'puritanical@puritanical' }], marketplaces: ['puritanical'], fail: ['user'] });
+  s.cli(['--uninstall', '--only', 'claude']);
+  assert.deepEqual(readJson(s.dir('claude.state.json')).marketplaces, ['puritanical']);
 });
 
 test('removeOldRule continues past 99 existing backups to .chisle-bak-100', t => {

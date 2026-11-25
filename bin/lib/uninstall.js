@@ -44,7 +44,7 @@ function uninstallClaudePlugin(ctx) {
   let n = 0;
   for (const [id, listed] of [['puritanical@puritanical', /puritanical/i], [ENV.OLD_PLUGIN, ENV.OLD_LISTED]]) {
     const { removed, left } = CLAUDE.uninstallPlugin(ctx, id, listed);
-    n += removed + (left ? 0 : CLAUDE.removeMarketplace(ctx, id.split('@')[1]));
+    n += removed + (removed > 0 && left === 0 ? CLAUDE.removeMarketplace(ctx, id.split('@')[1]) : 0);
   }
   return n;
 }
