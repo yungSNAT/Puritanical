@@ -167,8 +167,10 @@ test('the session hook moves old state and config before reading the mode', t =>
 test('the session hook asks for a new status badge while the old script is configured', t => {
   const s = sandbox(t);
   putJson(s.dir('claude', 'settings.json'), { statusLine: { type: 'command', command: 'bash "/x/chisle-hooks/chisle-statusline.sh"' } });
-  const ext = process.platform === 'win32' ? 'ps1' : 'sh';
-  assert.match(s.hook(), new RegExp(`STATUSLINE SETUP NEEDED[\\s\\S]*puritanical-statusline\\.${ext}`));
+  const badge = process.platform === 'win32'
+    ? /STATUSLINE SETUP NEEDED[\s\S]*puritanical-statusline\.ps1/
+    : /STATUSLINE SETUP NEEDED[\s\S]*puritanical-statusline\.sh/;
+  assert.match(s.hook(), badge);
   putJson(s.dir('claude', 'settings.json'), { statusLine: { type: 'command', command: 'my-status' } });
   assert.doesNotMatch(s.hook(), /STATUSLINE SETUP NEEDED/);
 });
