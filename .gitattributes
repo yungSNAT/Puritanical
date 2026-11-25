@@ -7,3 +7,4 @@
 .agents/rules/puritanical.md text eol=lf
 assets/benchmark*.svg text eol=lf
 assets/readme/**/*.svg text eol=lf
+hooks/*.wasm binary

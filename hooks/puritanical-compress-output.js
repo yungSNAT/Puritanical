@@ -68,7 +68,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { getClaudeDir, getCopilotDir, getOpencodeStateDir, readFlag, readRegularFile, getDefaultMode,
   secureDirectory, safeAtomicWrite } = require('./puritanical-config');
-const { filterCommand, ANSI_RE } = require('./puritanical-command-filters');
+const { filterCommand } = require('./puritanical-command-filters');
+const coreWasm = require('./puritanical-core-wasm.cjs');
 
 // One threshold. Env overrides all.
 // These are the values the old 'full' level used — the default,
@@ -100,61 +101,9 @@ const NEVER_COMPRESS_COPILOT = ['view', 'create', 'edit', 'str_replace', 'insert
 
 // MCP and other non-built-in tool names whose output is file or source content
 // the model may quote back or edit against: file readers, LSP tools and
-// code-host file and code-search tools (get_file_contents, search_code).
-// Matched anywhere in the name, server part included, so it errs towards not
-// compressing. One guard for every path: the Claude/Pi hook's mcp__ tools, the
-// stdio MCP proxy, and names allowlisted by PURITANICAL_COMPRESS_TOOLS (Copilot,
-// OpenCode), which cannot override it.
-const UNSAFE_TOOL_NAME_RE = /read|view|file|edit|write|patch|replace|insert|lsp|symbol|definition|declaration|implementation|reference|hover|content|source|blob|search_code/i;
-
-const unsafeToolName = name => UNSAFE_TOOL_NAME_RE.test(name);
-
-// Letter/digit boundaries, not \b: `_` is a word char, so \b missed severities
-// inside codes like FATAL_MEMORY_PROBE / APP_ERROR_CODE (#38), and `err!` then
-// a space has no trailing \b at all.
-const SALVAGE_RE = /(?<![A-Za-z0-9])(?:err!|(?:error|fail(ed|ure|ing)?|exception|traceback|panic|fatal|denied|refused|timed?[ _-]?out|assert(ion)?|segfault|npe|undefined reference|cannot find|not found|warning)(?![A-Za-z0-9]))/i;
-const MAX_SALVAGED = 12;      // error lines rescued from the elided middle
-const MAX_SALVAGE_LINE = 300; // per-line char cap on salvaged lines
-
-function splitsSurrogatePair(text, index) {
-  if (index <= 0 || index >= text.length) return false;
-  const before = text.charCodeAt(index - 1);
-  const after = text.charCodeAt(index);
-  return before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF;
-}
-
-function safePrefix(text, maxChars) {
-  let end = Math.max(0, Math.min(text.length, maxChars));
-  if (splitsSurrogatePair(text, end)) end -= 1;
-  return text.slice(0, end);
-}
-
-function safeSuffix(text, maxChars) {
-  let start = Math.max(0, text.length - Math.max(0, maxChars));
-  if (splitsSurrogatePair(text, start)) start += 1;
-  return text.slice(start);
-}
-
-function safeSlice(text, start, end) {
-  let safeStart = Math.max(0, Math.min(text.length, start));
-  let safeEnd = Math.max(safeStart, Math.min(text.length, end));
-  if (splitsSurrogatePair(text, safeStart)) safeStart += 1;
-  if (splitsSurrogatePair(text, safeEnd)) safeEnd -= 1;
-  return text.slice(safeStart, Math.max(safeStart, safeEnd));
-}
-
-function salvageLine(line) {
-  const match = SALVAGE_RE.exec(line.replace(/error-like/gi, 'diagnostic'));
-  if (!match) return null;
-  if (line.length <= MAX_SALVAGE_LINE) return line;
-  const contentLimit = MAX_SALVAGE_LINE - 2;
-  const start = Math.max(0, Math.min(
-    match.index - Math.floor((contentLimit - match[0].length) / 2),
-    line.length - contentLimit,
-  ));
-  const end = start + contentLimit;
-  return (start > 0 ? '…' : '') + safeSlice(line, start, end) + (end < line.length ? '…' : '');
-}
+// code-host file and code-search tools. Matched anywhere in the name, server
+// part included, so it errs towards not compressing.
+const unsafeToolName = name => coreWasm.unsafeToolName(name);
 
 function toolAllowed(name) {
   if (!name || typeof name !== 'string') return false;
@@ -202,27 +151,7 @@ function opencodeToolAllowed(name) {
 }
 
 function boundForOpencode(text, spillPath, maxChars) {
-  const outputLimit = maxChars || THRESHOLDS.maxChars;
-  if (text.length <= outputLimit) return text;
-  if (outputLimit < 7) return safePrefix(text, outputLimit);
-  const recover = spillPath ? ' Full output: ' + spillPath + ' (grep it, do not re-run)' : '';
-  let marker = '... [puritanical: rebound compressed output to ' +
-    outputLimit.toLocaleString('en-US') + ' chars.' + recover + '] ...';
-  if (marker.length > outputLimit - 2) marker = safePrefix(marker, outputLimit - 7) + '] ...';
-  const middle = [marker];
-  // Keep head/tail context without excluding diagnostics under small bounds.
-  const contextReserve = Math.min(2050, Math.floor(outputLimit / 4));
-  for (const line of text.split('\n')) {
-    if (middle.length > MAX_SALVAGED) break;
-    const candidate = salvageLine(line);
-    if (!candidate) continue;
-    if (middle.join('\n').length + candidate.length + 1 > outputLimit - contextReserve) break;
-    if (!middle.includes(candidate)) middle.push(candidate);
-  }
-  const center = middle.join('\n');
-  const remaining = Math.max(0, outputLimit - center.length - 2);
-  const headChars = Math.ceil(remaining / 2);
-  return safePrefix(text, headChars) + '\n' + center + '\n' + safeSuffix(text, Math.floor(remaining / 2));
+  return coreWasm.boundForOpencode(text, spillPath, maxChars);
 }
 
 // One OpenCode tool_result → replacement string, or null to keep the original.
@@ -316,71 +245,10 @@ function extractText(response) {
 }
 
 // ── Tier 1: lossless scrub ───────────────────────────────────────────────────
-// ANSI/OSC escapes are invisible to the model; blank runs and identical
-// consecutive lines carry their information in one copy.
 const SCRUB_MIN = 1024;      // below this, not worth a hook round-trip
-const REPEAT_MIN = 4;        // identical consecutive lines before collapsing
 const MIN_WIN = 64;          // emit updated output only if it saves this much
 
-// Status lines that differ only in names and numbers: passing tests and
-// progress output. Deliberately narrow, since a generic "similar lines" rule
-// would swallow CSV rows or log data the model was asked to read.
-const NOISE_RE = /^\s*(?:[✓✔√]\s|PASS\s|ok \d+\b|\[PASS\])|\sPASSED\b|^\s*(?:Downloading|Downloaded|Fetching|Resolving|Receiving objects|Compiling|Installing|Extracting|Unpacking|Progress)\b/;
-const NOISE_MIN = 6;         // consecutive status lines before collapsing
-
-// Pretty-printed JSON → minified, by dropping whitespace outside strings.
-// Text-level on purpose: JSON.parse + stringify would round big integer IDs.
-function minifyJson(text) {
-  const s = text.trim();
-  if (!/^[[{]/.test(s) || !/\n\s/.test(s)) return text;
-  try { JSON.parse(s); } catch { return text; }
-  let out = '', inStr = false;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charAt(i);
-    if (inStr) {
-      out += c;
-      if (c === '\\') out += s[++i];
-      else if (c === '"') inStr = false;
-    } else if (c === '"') { inStr = true; out += c; }
-    else if (c !== ' ' && c !== '\n' && c !== '\r' && c !== '\t') out += c;
-  }
-  return out;
-}
-
-function scrub(text) {
-  let t = minifyJson(text.replace(ANSI_RE, ''));
-  t = t.replace(/[ \t]+$/gm, '');            // trailing whitespace
-  t = t.replace(/\n{3,}/g, '\n\n');          // blank-line runs → one blank
-  // Collapse runs of identical non-empty lines.
-  const lines = t.split('\n');
-  const out = [];
-  for (let i = 0; i < lines.length; ) {
-    let j = i;
-    while (j < lines.length && lines.at(j) === lines.at(i)) j++;
-    const n = j - i;
-    if (n >= REPEAT_MIN && lines.at(i).trim()) {
-      out.push(lines.at(i), `... [puritanical: line repeated ${n}×] ...`);
-    } else {
-      for (let k = 0; k < n; k++) out.push(lines.at(i));
-    }
-    i = j;
-  }
-  // Collapse runs of passing-test / progress lines; error-like lines break a run.
-  const noisy = (l) => NOISE_RE.test(l) && !SALVAGE_RE.test(l);
-  const kept = [];
-  for (let i = 0; i < out.length; ) {
-    let j = i;
-    while (j < out.length && noisy(out.at(j))) j++;
-    if (j - i >= NOISE_MIN) {
-      kept.push(out.at(i), out[i + 1], `... [puritanical: ${j - i - 3} more passing/progress lines like these] ...`, out[j - 1]);
-    } else {
-      j = Math.max(j, i + 1);
-      for (let k = i; k < j; k++) kept.push(out.at(k));
-    }
-    i = j;
-  }
-  return kept.join('\n');
-}
+const scrub = text => coreWasm.scrub(text);
 
 // ── Dedup: identical to this tool's previous output ─────────────────────────
 // The identical content is already in context verbatim, so a marker loses
@@ -390,13 +258,7 @@ function scrub(text) {
 const DEDUP_MIN = 2048;
 
 function duplicateMarker(toolName, text, reference = 'previous') {
-  const lines = text.split('\n');
-  const prior = reference === 'previous' ? 'the previous' : 'an earlier';
-  const preview = lines.slice(0, 5)
-    .map(l => l.length > MAX_SALVAGE_LINE ? safePrefix(l, MAX_SALVAGE_LINE - 1) + '…' : l);
-  return '[puritanical: output byte-identical to ' + prior + ' ' + toolName + ' result — ' +
-    text.length.toLocaleString('en-US') + ' chars / ' + lines.length +
-    ' lines, unchanged. First lines:]\n' + preview.join('\n');
+  return coreWasm.duplicateMarker(toolName, text, reference);
 }
 
 const DEDUP_SESSION_KEEP = 20;
@@ -541,32 +403,7 @@ function pruneSpill(dir) {
 // output that carries a credential is never spilled; elision still happens,
 // without the recovery path. Patterns: PEM private keys, JWTs, AWS, GCP and
 // Azure keys, GitHub tokens and Authorization headers.
-const CREDENTIAL_RES = [
-  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY/,
-  // AWS key IDs; GCP API keys, OAuth tokens and client secrets; GitHub tokens.
-  /\b(?:(?:AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16}\b|AIza[\w-]{35}|ya29\.[\w-]{20,}|GOCSPX-[\w-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{22,})/,
-  /aws_secret_access_key["']?[ \t]*[:=][ \t]*["']?[A-Za-z0-9/+]{40}/i,
-  /\b(?:AccountKey|SharedAccessKey)=[A-Za-z0-9+/]{20,}/,
-  /[?&]sig=[A-Za-z0-9%+/]{20,}/,
-  /\b[\w~.-]{3}\dQ~[\w~.-]{31,34}/,
-];
-
-// Authorization header (any case, any scheme): a word in its first 200
-// characters is 24+ characters, or 8+ with a digit, symbol or inner capital,
-// so prose such as 'Authorization: token required' stays clean.
-const AUTH_HEADER_RE = /authorization["']?[ \t]*[:=]([^\r\n]{0,200})/gi;
-const authWord = word => word.length >= 24 || (word.length >= 8 && /[0-9=+/_.~-]|.[A-Z]/.test(word));
-const containsAuthHeader = text => Array.from(text.matchAll(AUTH_HEADER_RE)).some(m => m[1].split(/[\s"',;]+/).some(authWord));
-
-// JWT: 3 dot-separated base64url segments, the first holding 'eyJ'. A scan,
-// not a regex: '-' is a segment character, so a regex restarts at every
-// 'eyJ' in a long run and rescans it to the end (quadratic).
-const containsJwt = text => text.split(/[^\w.-]+/).some(token => token.split('.').some((part, i, parts) => {
-  const at = part.indexOf('eyJ');
-  return at !== -1 && part.length - at >= 13 && i + 2 < parts.length && parts.at(i + 1).length >= 10 && parts.at(i + 2).length >= 10;
-}));
-
-const containsCredential = text => CREDENTIAL_RES.some(re => re.test(text)) || containsJwt(text) || containsAuthHeader(text);
+const containsCredential = text => coreWasm.containsCredential(text);
 
 function spill(text, toolName, stateDir) {
   if (process.env.PURITANICAL_COMPRESS_SPILL === '0' || containsCredential(text)) return null;
@@ -590,38 +427,7 @@ function spill(text, toolName, stateDir) {
 }
 
 function compress(text, limits, spillPath) {
-  const { maxChars, headLines, tailLines } = limits;
-  const lines = text.split('\n');
-  const recover = spillPath ? ' Full output: ' + spillPath + ' (grep it, do not re-run)' : '';
-
-  if (lines.length <= headLines + tailLines) {
-    // Big in bytes, few lines (one giant line): hard char cut.
-    const keep = Math.floor(maxChars / 2);
-    const elided = text.length - 2 * keep;
-    if (elided <= 0) return null;
-    return safePrefix(text, keep) +
-      '\n... [puritanical: elided ' + elided.toLocaleString('en-US') + ' chars from the middle.' + recover + '] ...\n' +
-      safeSuffix(text, keep);
-  }
-
-  const head = lines.slice(0, headLines);
-  const tail = lines.slice(-tailLines);
-  const middle = lines.slice(headLines, lines.length - tailLines);
-
-  const salvaged = [];
-  for (const line of middle) {
-    if (salvaged.length >= MAX_SALVAGED) break;
-    const candidate = salvageLine(line);
-    if (candidate) salvaged.push(candidate);
-  }
-
-  const marker = '... [puritanical: elided ' + middle.length.toLocaleString('en-US') +
-    ' lines, kept first ' + headLines + ', last ' + tailLines +
-    (salvaged.length ? ', and ' + salvaged.length + ' error-like line(s) below' : '') +
-    '.' + recover + '] ...';
-
-  const out = head.concat([marker], salvaged, tail).join('\n');
-  return out.length < text.length ? out : null;
+  return coreWasm.compress(text, limits, spillPath);
 }
 
 // Best-effort savings ledger. Races between parallel tool calls can drop a

@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const coreWasm = require('./puritanical-core-wasm.cjs');
 
 // Puritanical was formerly Chisle, until 4.0.0. The old name finds what an older
 // install left behind, so an upgrade carries it across instead of orphaning it.
@@ -147,14 +148,12 @@ function migrateOldConfig() {
 // The status line an install before 4.0.0 configured, exactly: the old badge
 // script alone, run by bash or PowerShell. A status line that does more is the
 // user's own and stays.
-const NEW_STATUSLINE = /^(?:bash "[^"]*[\\/]puritanical-statusline\.sh"|(?:pwsh|powershell) -NoProfile -ExecutionPolicy Bypass -File "[^"]*[\\/]puritanical-statusline\.ps1")$/;
-const OLD_STATUSLINE = /^(?:bash "[^"]*[\\/]chisle-statusline\.sh"|(?:pwsh|powershell) -NoProfile -ExecutionPolicy Bypass -File "[^"]*[\\/]chisle-statusline\.ps1")$/; // formerly Chisle
-function isStatusLineMatch(sl, pattern) {
+function isStatusLineMatch(sl, check) {
   return !!sl && typeof sl === 'object' && sl.type === 'command' && typeof sl.command === 'string' &&
-    Object.keys(sl).length === 2 && pattern.test(sl.command);
+    Object.keys(sl).length === 2 && check(sl.command);
 }
-function isOldStatusLine(sl) { return isStatusLineMatch(sl, OLD_STATUSLINE); }
-function isOwnedStatusLine(sl) { return isStatusLineMatch(sl, NEW_STATUSLINE) || isOldStatusLine(sl); }
+function isOldStatusLine(sl) { return isStatusLineMatch(sl, coreWasm.isOldStatusLineCommand); }
+function isOwnedStatusLine(sl) { return isStatusLineMatch(sl, coreWasm.isOwnedStatusLineCommand); }
 
 // Larger settings are treated as unreadable, just like invalid JSON.
 const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
@@ -237,20 +236,7 @@ function filterSections(content, sections, proseHeadings, codeHeadings) {
     const prose = sections ? sections.prose !== false : true;
     const code = sections ? sections.code !== false : true;
     if (prose && code) return content;
-
-    const dropProse = proseHeadings || PROSE_HEADINGS;
-    const dropCode = codeHeadings || CODE_HEADINGS;
-
-    const chunks = content.split(/(?=^## .+$)/m);
-    const kept = chunks.filter((chunk) => {
-      const m = /^## (.+)$/m.exec(chunk);
-      if (!m) return true; // preamble chunk (no heading)
-      const heading = m[1].trim();
-      if (!prose && dropProse.includes(heading)) return false;
-      if (!code && dropCode.includes(heading)) return false;
-      return true;
-    });
-    return kept.join('');
+    return coreWasm.filterSections(content, prose, code, proseHeadings, codeHeadings);
   } catch {
     return content;
   }

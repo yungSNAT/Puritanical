@@ -16,6 +16,41 @@ permissions:
   contents: read
 
 jobs:
+  core:
+    name: core (${{ matrix.os }})
+    if: github.event_name != 'schedule'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: core
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: core
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Check the Wasm crate
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+          cargo build --release --locked --target wasm32-unknown-unknown
+      - name: Verify committed Wasm binary matches Linux build
+        if: runner.os == 'Linux'
+        run: cmp -s target/wasm32-unknown-unknown/release/puritanical_core.wasm ../hooks/puritanical-core.wasm
+
   check:
     name: tools (${{ matrix.os }})
     if: github.event_name != 'schedule'
