@@ -71,8 +71,8 @@ const FULL_INJECT_SOURCES = new Set(['startup']);
 function hasPwsh(envPath = process.env.PATH) {
   for (const dir of (envPath || '').split(path.delimiter)) {
     if (!dir) continue;
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Probes PATH entries for the fixed pwsh.exe host.
     // A Store install's App Execution Alias exists but fails stat with EACCES.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Probes PATH entries for the fixed pwsh.exe host.
     try { if (fs.statSync(path.join(dir, 'pwsh.exe')).isFile()) return true; } catch (error) { if (error.code === 'EACCES') return true; } // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename, javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   }
   return false;

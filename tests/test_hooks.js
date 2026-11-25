@@ -220,6 +220,7 @@ test('statuslineCommand picks pwsh when PATH holds a Store alias that stat refus
   const realStat = fs.statSync;
   t.mock.method(fs, 'statSync', (p, ...rest) => {
     if (p === under(aliasDir, 'pwsh.exe')) throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Passes the stubbed call through to the real stat.
     return realStat(p, ...rest);
   });
   assert.match(statuslineCommand(absolutePath('hooks-dir'), 'win32', aliasDir), /^pwsh -NoProfile /);
