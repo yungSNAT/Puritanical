@@ -69,8 +69,6 @@
     "build:chart": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- chart",
     "check:chart": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- chart --check",
     "bench": "bash benchmarks/run-live.sh",
-    "build:samples": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- samples",
-    "check:samples": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- samples --check",
     "build:readme-art": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- readme-art",
     "check:readme-art": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- readme-art --check"
   },

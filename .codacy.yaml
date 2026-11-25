@@ -1,12 +1,11 @@
 ---
 # Mirrors the global exclude in .codacy/codacy.config.json, which the codacy.yml
 # analyze job uses: the agentic fixtures are deliberately messy repositories the
-# benchmark asks agents to fix, the test fixtures are helper processes the tests
-# spawn, and samples.json is built by tools/src/samples.rs.
+# benchmark asks agents to fix, and the test fixtures are helper processes the
+# tests spawn.
 exclude_paths:
   - "benchmarks/agentic/fixtures/**"
   - "tests/fixtures/**"
-  - "site/src/data/samples.json"
 engines:
   lizard:
     # npm generates these files. OSV and Trivy scan their dependencies.

@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 use support::{cmd, copy_dir, ok, repo, write};
 
-const COMMANDS: [&str; 4] = ["rules", "chart", "samples", "readme-art"];
+const COMMANDS: [&str; 3] = ["rules", "chart", "readme-art"];
 
 /// Every generated file, relative to the repository root.
 fn outputs() -> Vec<String> {
@@ -26,7 +26,6 @@ fn outputs() -> Vec<String> {
     ] {
         all.push(format!("assets/{name}.svg"));
     }
-    all.push("site/src/data/samples.json".into());
     all.extend(
         readme_art::files()
             .into_iter()
@@ -38,7 +37,7 @@ fn outputs() -> Vec<String> {
 /// A scratch root holding only the benchmark results the generators read.
 fn inputs() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().expect("temp dir");
-    for run in ["raw-314-sidebyside", "raw-314-commands", "raw-nov"] {
+    for run in ["raw-314-sidebyside", "raw-314-commands"] {
         let rel = Path::new("benchmarks/results").join(run);
         copy_dir(&repo().join(&rel), &tmp.path().join(rel));
     }
@@ -61,7 +60,7 @@ fn a_fresh_write_reproduces_every_committed_byte() {
         assert!(ok(&cmd(tmp.path(), &[], &[c])).starts_with("wrote "), "{c}");
     }
     let files = outputs();
-    assert_eq!(files.len(), 32);
+    assert_eq!(files.len(), 31);
     for rel in &files {
         let want = fs::read(repo().join(rel)).expect("committed file");
         assert!(
@@ -103,16 +102,6 @@ fn drift_fails_the_check() {
         (
             1,
             "assets/benchmark-terminal-light.svg is stale. Run: npm run build:chart\n"
-        )
-    );
-
-    mutate("site/src/data/samples.json");
-    let out = cmd(root, &[], &["samples", "--check"]);
-    assert_eq!(
-        (out.code, out.stderr.as_str()),
-        (
-            1,
-            "site/src/data/samples.json is stale. Run: npm run build:samples\n"
         )
     );
 
@@ -171,10 +160,6 @@ fn missing_inputs_fail_cleanly() {
     // No side-by-side cells: the bars fall back to 0%.
     let out = cmd(root, &[], &["chart", "--json"]);
     assert!(ok(&out).contains("\"chisle-3.13\": 0"), "{}", out.stdout);
-    assert_eq!(
-        cmd(root, &[], &["samples"]).stderr,
-        "no complete rows in the samples run\n"
-    );
 }
 
 #[test]
@@ -182,12 +167,7 @@ fn unwritable_targets_report_the_path() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let root = tmp.path();
     // A file where a directory must go makes every write fail.
-    for blocker in [
-        ".cursor",
-        "assets",
-        "site",
-        "benchmarks/results/raw-nov/default-s1/x__y",
-    ] {
+    for blocker in [".cursor", "assets"] {
         write(&root.join(blocker), "");
     }
     let bad = |args: &[&str]| {
@@ -199,16 +179,10 @@ fn unwritable_targets_report_the_path() {
     assert!(bad(&["readme-art"]).contains("line.svg"));
     let tmp2 = inputs();
     write(&tmp2.path().join("assets"), "");
-    write(&tmp2.path().join("site"), "");
     assert!(
         cmd(tmp2.path(), &[], &["chart"])
             .stderr
             .contains("benchmark.svg")
-    );
-    assert!(
-        cmd(tmp2.path(), &[], &["samples"])
-            .stderr
-            .contains("samples.json")
     );
 }
 
@@ -237,30 +211,5 @@ fn incomplete_cells_are_left_out() {
         ok(&out).starts_with("[\n  {\n    \"n\": 0,"),
         "{}",
         out.stdout
-    );
-
-    let run = root.join("benchmarks/results/raw-nov/default-s1");
-    write(&run.join("README.md"), "");
-    write(&run.join("bad__vanilla.json"), "{");
-    write(
-        &run.join("cache__vanilla.json"),
-        r#"{"usage": {"output_tokens": 0}, "result": 5}"#,
-    );
-    for arm in ["caveman", "ponytail", "chisle"] {
-        write(
-            &run.join(format!("cache__{arm}.json")),
-            r#"{"usage": {"output_tokens": 4}, "result": "a\nb"}"#,
-        );
-    }
-    ok(&cmd(root, &[], &["samples"]));
-    let samples: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(root.join("site/src/data/samples.json")).expect("read"),
-    )
-    .expect("JSON");
-    assert_eq!(samples["tasks"][0]["arms"]["vanilla"]["text"], "");
-    assert_eq!(samples["tasks"][0]["arms"]["chisle"]["thinkingTokens"], 0);
-    assert_eq!(
-        samples["aggregates"]["groups"][0]["tokens"]["chisle"], 0,
-        "a zero baseline reads 0%"
     );
 }

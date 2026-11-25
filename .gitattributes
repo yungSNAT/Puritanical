@@ -7,4 +7,3 @@
 .agents/rules/puritanical.md text eol=lf
 assets/benchmark*.svg text eol=lf
 assets/readme/**/*.svg text eol=lf
-site/src/data/samples.json text eol=lf

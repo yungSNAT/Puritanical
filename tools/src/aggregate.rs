@@ -18,8 +18,7 @@ const SEGMENTS: [&str; 3] = ["coding", "noncoding", "all"];
 
 /// Task kinds: "coding" wants working code back; "noncoding" wants an
 /// explanation. Classified from what the prompt asks for, not from whether
-/// the answer happens to contain a fenced block. The single source of truth:
-/// `samples` reads it too.
+/// the answer happens to contain a fenced block.
 ///
 /// palindrome is the one genuine borderline: it asks for a one-liner, so it
 /// is filed as coding here, while the Sonnet writeup groups it with the small
