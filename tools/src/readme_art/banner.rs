@@ -330,8 +330,8 @@ fn banner_chisel(o: &mut Vec<String>, t: &Theme, pos: &[Placed], n_lines: usize)
 pub(super) fn stats(t: &Theme, l: &Lang) -> String {
     let (w, h) = (880.0, 248.0);
     let tiles = [
-        ("−31%", l.tiles[0], 0.69),
-        ("−49%", l.tiles[1], 0.51),
+        ("−47%", l.tiles[0], 0.53),
+        ("−51%", l.tiles[1], 0.49),
         ("−48%", l.tiles[2], 0.52),
         ("156/156", l.tiles[3], 1.0),
     ];
@@ -348,7 +348,7 @@ pub(super) fn stats(t: &Theme, l: &Lang) -> String {
         t,
         w,
         h,
-        "Chisle versus the same model with no ruleset: 31% fewer billed output tokens, answers 49% shorter, oversized tool output 48% smaller, accuracy 156 of 156, the same as the bare model.",
+        "Chisle versus the same model with no ruleset: on Sonnet 5.5, 47% fewer billed output tokens and answers 51% shorter; oversized tool output 48% smaller; accuracy 156 of 156, the same as the bare model.",
         &o,
         "",
     )

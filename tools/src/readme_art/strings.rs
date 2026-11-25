@@ -19,8 +19,8 @@ pub(super) const EN: Lang = Lang {
     same: "✓ same answer",
     stats_title: "Chisle vs the same model with no ruleset",
     tiles: [
-        ["billed output tokens", "69% of the bare model"],
-        ["answer length", "51% of the bare model"],
+        ["billed output tokens", "Sonnet 5.5: 53% of bare"],
+        ["answer length", "Sonnet 5.5: 49% of bare"],
         ["oversized tool output", "per trimmed tool output"],
         ["accuracy", "bare model: 156/156"],
     ],

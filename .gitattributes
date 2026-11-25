@@ -5,6 +5,5 @@
 .kiro/steering/puritanical.md text eol=lf
 .github/copilot-instructions.md text eol=lf
 .agents/rules/puritanical.md text eol=lf
-assets/benchmark*.svg text eol=lf
 assets/readme/**/*.svg text eol=lf
 hooks/*.wasm binary

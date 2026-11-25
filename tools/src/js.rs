@@ -170,23 +170,6 @@ pub fn pad(s: &str, width: usize, start: bool) -> String {
     }
 }
 
-/// `n.toLocaleString('en-US')` for a whole number.
-#[must_use]
-pub fn grouped(n: f64) -> String {
-    if !n.is_finite() || n.fract() != 0.0 || n.abs() >= 1e21 {
-        return num(n);
-    }
-    let digits = num(n.abs());
-    let mut out = String::from(if n < 0.0 { "-" } else { "" });
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out
-}
-
 /// Truthiness of a parsed JSON value; a missing value is `undefined`.
 #[must_use]
 pub fn truthy(v: Option<&Value>) -> bool {

@@ -6,7 +6,7 @@
 //! Every static attribute holds the final frame, so a renderer without SMIL
 //! shows the result.
 //!
-//! The figures mirror the README's benchmark sections; change them together.
+//! The figures mirror docs/benchmarks.md; change them together.
 
 use crate::Out;
 use crate::js::{self, num as n, to_fixed};

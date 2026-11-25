@@ -128,14 +128,6 @@ fn strings_measure_in_utf16_units() {
 }
 
 #[test]
-fn grouped_adds_thousands_separators() {
-    assert_eq!(grouped(1_234_567.0), "1,234,567");
-    assert_eq!(grouped(-1234.0), "-1,234");
-    assert_eq!(grouped(999.0), "999");
-    assert_eq!(grouped(12.5), "12.5");
-}
-
-#[test]
 fn values_convert_as_javascript_does() {
     let falsy = [json!(null), json!(false), json!(0), json!(""), json!(0.0)];
     assert!(falsy.iter().all(|v| !truthy(Some(v))));
