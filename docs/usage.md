@@ -203,4 +203,4 @@ Designed not to: allowlist keeps `Read`/`Edit` exact, error-looking lines are sa
 **Should the star count worry me?**
 Everyone starts at zero. Run `npx github:yungSNAT/Puritanical --dry-run`, see what it'd do, decide. And if the receipts convinced you, [a star](https://github.com/yungSNAT/Puritanical/stargazers) is how the next person finds them, and it's also the only payment a zero-dep MIT tool will ever ask for.
 
-→ [More FAQ and competitor comparison](comparison.md)
+→ [More FAQ](comparison.md)

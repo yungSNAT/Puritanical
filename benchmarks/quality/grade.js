@@ -18,8 +18,8 @@ const { spawnSync } = require('child_process');
 const { fisher, wilson, fmtP } = require('../stats.js');
 
 const HERE = __dirname;
-// Code answers run in grade-cell.js under bubblewrap, as the Astra replay's
-// answers do: no network, read-only system directories, an empty /tmp and no
+// Code answers run in grade-cell.js under bubblewrap:
+// no network, read-only system directories, an empty /tmp and no
 // inherited environment. Node's own permission model is not a boundary against hostile
 // code, so there is no fallback without bubblewrap.
 // A fixed path, not a PATH lookup, so a planted bwrap cannot stand in for it.

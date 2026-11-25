@@ -13,7 +13,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/yungSNAT/Puritanical/badge)](https://scorecard.dev/viewer/?uri=github.com/yungSNAT/Puritanical)<br>
 [![Code licence](https://img.shields.io/github/license/yungSNAT/Puritanical?label=licence&color=66023C&labelColor=000000)](LICENSE) [![GitHub release](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fgithub.com%2FyungSNAT%2FPuritanical%2Freleases.atom&query=concat%28substring%28%27none%20published%27%2C1%2C14%20%2A%20not%28%2F%2F%2A%5Blocal-name%28%29%3D%27entry%27%5D%29%29%2Csubstring-after%28%2F%2F%2A%5Blocal-name%28%29%3D%27entry%27%5D%5B1%5D%2F%2A%5Blocal-name%28%29%3D%27link%27%5D%2F%40href%2C%27%2Freleases%2Ftag%2F%27%29%29&label=release&color=66023C&labelColor=000000)](https://github.com/yungSNAT/Puritanical/releases) [![Fork parent](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2FyungSNAT%2FPuritanical&query=%24.parent.full_name&label=fork%20of&color=66023C&labelColor=000000)](https://github.com/JayPokale/Chisle)
 
-[Install](#install) · [Use](#use) · [The rules](#the-rules) · [Benchmarks](#benchmarks) · [Development](#development) · [Credits](#credits) · [Licence](#licence)
+[Install](#install) · [Use](#use) · [The rules](#the-rules) · [Development](#development) · [Credits](#credits) · [Licence](#licence)
 
 </div>
 
@@ -47,20 +47,6 @@ Use `/puritanical off` to pause the Claude Code plugin and `/puritanical` to res
 4. Keep input validation, security, accessibility and error handling that prevents data loss. Keep the explanation short enough to read and complete enough to act on.
 
 [Full coding rules](skills/puritanical/SKILL.md)
-
-## Benchmarks
-
-On 21 November 2026, GPT-6.2 Astra answered 8 coding tasks twice with each ruleset. Puritanical passed all 16 attempts and used the fewest total tokens. It used the most output tokens.
-
-![Passed attempts out of 16 on GPT-6.2 Astra. Puritanical 16, Chisle 15, Ponytail 14.](.github/assets/astra-results.svg)
-
-| Ruleset | Passed | Input tokens | Output tokens | Total tokens |
-| --- | ---: | ---: | ---: | ---: |
-| **Puritanical** | **16/16** | 200,652 | 4,306 | **204,958** |
-| Chisle | 15/16 | 202,220 | 4,281 | 206,501 |
-| Ponytail | 14/16 | 201,004 | 4,273 | 205,277 |
-
-The difference in passes came from the already-fixed pagination task. Puritanical left the files alone both times. Chisle added an unnecessary test once and Ponytail twice. All 3 repaired the paired task where pagination still failed. The 8 tasks were deliberately chosen and the model had no tools. [Method, per-task results and replay](benchmarks/results/2026-11-21-astra/README.md) · [All 48 answers and token counts](benchmarks/results/2026-11-21-astra/receipts.json)
 
 ## Development
 

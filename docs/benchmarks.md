@@ -1,21 +1,10 @@
 # Benchmarks
 
-Every result behind the [README](../README.md), in full. Each figure is recomputed from the committed raw cells by the scripts named beside it; nothing is estimated except where a section says "simulated". Earlier rounds (June–October 2026, rulesets up to v3.8) are retired; they stay in the git history.
+Every published result, in full. Each figure is recomputed from the committed raw cells by the scripts named beside it; nothing is estimated except where a section says "simulated". Earlier rounds (June–October 2026, rulesets up to v3.8) are retired; they stay in the git history.
 
 ## Chisle 3.14 (2026-11-19)
 
-The full suite again, with Chisle 3.13 beside 3.14. The two ship the same ruleset (unchanged since 3.10), so wherever only the ruleset is measured, the gap between them is run-to-run noise; they differ only in the hooks, which the agentic and input-axis sections measure. Rivals: caveman `ef6050c5e184`, ponytail 4.8.3, as before. Some results go against Chisle and are reported as measured.
-
-**Output axis, side by side.** Haiku 4.5, Claude Code, tools off, the 13 `run-live.sh` prompts × 2 seeds, 26 answers per arm, all five arms in one session ([raw cells](../benchmarks/results/raw-314-sidebyside/), [every prompt and answer](../benchmarks/results/raw-314-sidebyside/ANSWERS.md)). Pooled sums vs the bare model, 95% bootstrap intervals ([`pooled.rs`](../tools/src/pooled.rs)).
-
-| | billed | 95% CI | answer length | 95% CI | answer lines | reasoning | backfires | non-answers |
-|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| caveman | 69% | 56–84% | 56% | 44–68% | 67% | 144% | 9 / 26 | 4 |
-| ponytail | 80% | 64–105% | 63% | 49–82% | 67% | 182% | 14 / 26 | 4 |
-| Chisle 3.13 | 70% | 57–87% | 47% | 38–59% | 49% | 204% | 8 / 26 | 3 |
-| **Chisle 3.14** | **69%** | **59–81%** | **51%** | **43–59%** | **46%** | **172%** | **7 / 26** | **0** |
-
-Billed tokens tie with caveman this run (69% each, against 87% for caveman in the 3.9 run). Chisle writes the shortest answers, backfires least and is the only arm that answered every prompt. On the 20 prompts every arm answered: billed Chisle 3.14 75%, caveman 77%, Chisle 3.13 80%, ponytail 92%. Hidden reasoning rises with every ruleset on Haiku, as before.
+The full suite again, with Chisle 3.13 beside 3.14. The two ship the same ruleset (unchanged since 3.10), so wherever only the ruleset is measured, the gap between them is run-to-run noise; they differ only in the hooks, which the agentic and input-axis sections measure. Some results go against Chisle and are reported as measured.
 
 **Sonnet 5.5.** Bare vs Chisle 3.14, 12 prompts × 2 seeds ([raw cells](../benchmarks/results/raw-314-sonnet/), [every prompt and answer](../benchmarks/results/raw-314-sonnet/ANSWERS.md)): billed **53%** (95% CI 44–63%), answer length 49% (40–59%), lines 51%, reasoning 102%, backfires 4 / 24. The 13th prompt, `authflow`, is out of both arms: the bare model's answer ran past the runner's 4-minute limit on three tries.
 
@@ -33,18 +22,13 @@ Billed tokens tie with caveman this run (69% each, against 87% for caveman in th
 
 **Input axis.** Deterministic, no model calls.
 
-- Command corpus, 37 commands (14 held out, written before the 3.14 filters), chars the model reads ([`replay-commands.js`](../benchmarks/replay-commands.js), `CHISLE_PREV=<v3.13.0 checkout>` for the 3.13 arm): bare 100%, Chisle 3.12 (no filters) 57%, Chisle 3.13 47%, **Chisle 3.14 28%**, RTK 0.42.4 84%, RTK + Chisle 3.14 27%. Held out only: 3.13 34%, 3.14 31%, RTK 84%. Failed runs: 3.13 100% (untouched), 3.14 5%, RTK 92%. Chisle 3.14's output is smaller than RTK's on 31 commands, RTK's on 5, and 1 ties; RTK's five are where it drops information (directory names in `wc`, `.` in `ls`, a 7-char hash, three missing commit headers in `git log --stat`). caveman and ponytail are rulesets with no tool-output hook, so they read 100% by construction. Per-command data: [`raw-314-commands/commands.json`](../benchmarks/results/raw-314-commands/commands.json); the README's terminal chart is built from it (`npm run build:chart`).
 - Real sessions, the maintainer's 33,449 tool results (50.8M chars), replayed through the compressor ([`replay-compress.js`](../benchmarks/replay-compress.js)): saved 3.70M chars with filters off, 3.71M with 3.13's filters, **3.85M** with 3.14's. Small, because those sessions already ran under RTK and most of their Bash calls are `python3`, `sed` and `cat`.
 
 ```bash
-node benchmarks/run-ablation.js benchmarks/results/raw-314-sidebyside 2 4 vanilla caveman=<caveman SKILL.md> ponytail=<ponytail SKILL.md> chisle-3.13=<v3.13.0 SKILL.md> chisle=skills/chisle/SKILL.md
-ARMS=vanilla,caveman,ponytail,chisle-3.13,chisle cargo run --quiet --locked --manifest-path tools/Cargo.toml -- pooled benchmarks/results/raw-314-sidebyside/*/
 MODEL=claude-sonnet-5-5 node benchmarks/run-ablation.js benchmarks/results/raw-314-sonnet 2 4 vanilla chisle=skills/chisle/SKILL.md
 RAW_DIR=benchmarks/quality/raw-314 node benchmarks/quality/run.js claude-haiku-4-5-20251001 3 4
 ARMS=vanilla,chisle-hook RAW_DIR=benchmarks/agentic/raw-314 node benchmarks/agentic/run.js claude-haiku-4-5-20251001 5 5
 ARMS=vanilla,chisle-hook-3.13,chisle-hook RAW_DIR=benchmarks/agentic/raw-314 cargo run --quiet --locked --manifest-path tools/Cargo.toml -- agentic-score
-CHISLE_PREV=<v3.13.0 checkout> node benchmarks/replay-commands.js <fixtures-dir>
-cargo run --quiet --locked --manifest-path tools/Cargo.toml -- answers benchmarks/results/raw-314-sidebyside vanilla caveman ponytail chisle-3.13 chisle
 ```
 
 ## Output axis: Chisle 3.9 (2026-11-06)
@@ -59,16 +43,6 @@ cargo run --quiet --locked --manifest-path tools/Cargo.toml -- answers benchmark
 | **Chisle 3.9** | **71%** | **53–104%** | **55%** | **45%** | **157%** | **7 / 25** |
 
 Chisle 3.9 is leanest on every column (tied with 3.8.1 on backfires), but the gap to 3.8.1 is within noise. On Haiku every ruleset raises hidden reasoning; that tax is why billed savings trail the shorter answers.
-
-**Full suite, repo runner.** `run-live.sh`, all 13 prompts × 2 seeds, 26 cells per arm, current ruleset ([raw cells](../benchmarks/results/raw-nov/)):
-
-| | billed | 95% CI | answer length | answer lines | backfires |
-|---|--:|--:|--:|--:|--:|
-| caveman | 92% | 73–121% | 77% | 80% | 15 / 26 |
-| ponytail | 97% | 76–124% | 55% | 53% | 13 / 26 |
-| **Chisle 3.9** | **87%** | **75–101%** | 58% | 53% | **9 / 26** |
-
-Chisle bills least and backfires least; ponytail's answers are as short (55% vs 58%, overlapping intervals). Separate runs of the same rival versions have differed by 10–30 points, so compare arms within a run, never across runs.
 
 **Sonnet 5.5.** Bare vs Chisle 3.9, 34 cells ([raw cells](../benchmarks/results/raw-nov-sonnet/)): billed **57%** (95% CI 50–64%), answer length 54%, lines 55%, reasoning **84%**, backfires 5 / 34. Sonnet chooses how long to think, and with the ruleset it thinks less, so unlike Haiku nothing eats the shorter answers.
 

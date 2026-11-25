@@ -13,42 +13,8 @@ engines:
     exclude_paths:
       - "**/package-lock.json"
       - "tests/**"
-      # The published Astra replay and graders are frozen benchmark inputs.
-      - "benchmarks/results/2026-11-21-astra/replay.py"
-      - "benchmarks/results/2026-11-21-astra/retired_checks.py"
-  ruff:
-    # Replay checks the lengths before zip. See the subprocess rationale below.
-    exclude_paths:
-      - "benchmarks/results/2026-11-21-astra/replay.py"
-      - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
-  opengrep:
-    # The frozen Astra replay runs saved answers in bubblewrap and imports the
-    # original graders by name, as the Bandit note below explains.
-    exclude_paths:
-      - "benchmarks/results/2026-11-21-astra/replay.py"
-      - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
   agentlinter:
     # AGENTS.md is the shipped Puritanical rule text, tuned against the benchmarks.
     # Its absolute rules are deliberate; a wording change needs a new run.
     exclude_paths:
       - "AGENTS.md"
-  bandit:
-    # The replay runs the saved answers through bubblewrap without network
-    # access, with a fixed PATH and a private /tmp. Both "pass" values are
-    # Booleans. Trivy still scans these files for secrets. Checkov still scans
-    # the raw JSON receipts.
-    exclude_paths:
-      - "benchmarks/results/2026-11-21-astra/replay.py"
-      - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
-      - "benchmarks/results/2026-11-21-astra/retired_checks.py"
-  pylintpython3:
-    # Preserve the original grader imports. _find checks callable() before
-    # returning the function that Pylint flags as not callable.
-    exclude_paths:
-      - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
-      - "benchmarks/results/2026-11-21-astra/retired_checks.py"
-  prospector:
-    # Same frozen imports as the Pylint exceptions above.
-    exclude_paths:
-      - "benchmarks/results/2026-11-21-astra/ponytail_checks.py"
-      - "benchmarks/results/2026-11-21-astra/retired_checks.py"
