@@ -36,6 +36,38 @@ fn is_h2_line_start(s: &[u16], i: usize) -> Option<(usize, usize)> {
     }
 }
 
+fn collect_h2_splits(content: &[u16]) -> Vec<usize> {
+    let mut split_points = Vec::new();
+    for i in 1..content.len() {
+        if is_h2_line_start(content, i).is_some() && split_points.last().copied() != Some(i) {
+            split_points.push(i);
+        }
+    }
+    split_points
+}
+
+fn should_drop_chunk(
+    chunk: &[u16],
+    prose: bool,
+    code: bool,
+    prose_headings: Option<&[&[u16]]>,
+    code_headings: Option<&[&[u16]]>,
+) -> bool {
+    let Some(title) = find_first_h2_heading(chunk) else {
+        return false;
+    };
+    let t = trim(title);
+    let in_prose = match prose_headings {
+        Some(list) => list.contains(&t),
+        None => DEFAULT_PROSE_HEADINGS.iter().any(|&h| eq_ascii(t, h)),
+    };
+    let in_code = match code_headings {
+        Some(list) => list.contains(&t),
+        None => DEFAULT_CODE_HEADINGS.iter().any(|&h| eq_ascii(t, h)),
+    };
+    (!prose && in_prose) || (!code && in_code)
+}
+
 /// Drops `## Heading` sections whose trimmed title belongs to a disabled group.
 /// Returns `None` when nothing changes (caller keeps the original JS string).
 #[must_use]
@@ -49,53 +81,22 @@ pub fn filter_sections(
     if content.is_empty() || (prose && code) {
         return None;
     }
-
-    // Collect chunk boundaries matching `content.split(/(?=^## .+$)/m)`.
-    let mut split_points: Vec<usize> = Vec::new();
-    for i in 0..content.len() {
-        if is_h2_line_start(content, i).is_some()
-            && (split_points.last().copied() != Some(i))
-            && i > 0
-        {
-            split_points.push(i);
-        }
-    }
-
+    let split_points = collect_h2_splits(content);
     let mut out = Vec::with_capacity(content.len());
     let mut changed = false;
     let mut start = 0usize;
-    let ends = split_points
+    for end in split_points
         .into_iter()
-        .chain(std::iter::once(content.len()));
-
-    for end in ends {
+        .chain(std::iter::once(content.len()))
+    {
         let chunk = &content[start..end];
         start = end;
-
-        let heading = find_first_h2_heading(chunk);
-        let drop = match heading {
-            None => false,
-            Some(title) => {
-                let t = trim(title);
-                let in_prose = match prose_headings {
-                    Some(list) => list.contains(&t),
-                    None => DEFAULT_PROSE_HEADINGS.iter().any(|&h| eq_ascii(t, h)),
-                };
-                let in_code = match code_headings {
-                    Some(list) => list.contains(&t),
-                    None => DEFAULT_CODE_HEADINGS.iter().any(|&h| eq_ascii(t, h)),
-                };
-                (!prose && in_prose) || (!code && in_code)
-            }
-        };
-
-        if drop {
+        if should_drop_chunk(chunk, prose, code, prose_headings, code_headings) {
             changed = true;
         } else {
             out.extend_from_slice(chunk);
         }
     }
-
     changed.then_some(out)
 }
 

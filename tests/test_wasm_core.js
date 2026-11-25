@@ -20,6 +20,10 @@ test('puritanical-core-wasm handles edge arguments, surrogates, and custom headi
     coreWasm.filterSections('Pre\n## P\nbody\n## K\nkeep', false, true, ['P'], ['C']),
     'Pre\n## K\nkeep',
   );
+  assert.equal(
+    coreWasm.filterSections('Pre\n##   \nblank', false, true, [''], []),
+    'Pre\n',
+  );
   assert.equal(coreWasm.isOldStatusLineCommand('bash "/x/chisle-statusline.sh"'), true);
   assert.equal(coreWasm.isOwnedStatusLineCommand('bash "/x/puritanical-statusline.sh"'), true);
   assert.equal(coreWasm.isOwnedStatusLineCommand('echo hi'), false);
@@ -32,15 +36,35 @@ test('puritanical-core-wasm handles edge arguments, surrogates, and custom headi
   assert.equal(coreWasm.scrub('line\r\n\r\n\r\n  \nend'), 'line\r\n\r\n\r\n\nend');
   assert.match(coreWasm.duplicateMarker('Bash', 'a\nb', 'earlier'), /an earlier Bash result/);
   assert.equal(coreWasm.compress('short', { maxChars: 100, headLines: 5, tailLines: 5 }, null), null);
+  const big20 = Array.from({ length: 20 }, (_, i) => `line ${i} padding text`).join('\n');
+  assert.equal(coreWasm.compress(big20, { maxChars: 20, headLines: 5, tailLines: 0 }, null), null);
+  assert.match(
+    coreWasm.compress('hello world', { maxChars: -5, headLines: 5, tailLines: 5 }, null),
+    /elided 11 chars from the middle/,
+  );
   assert.equal(coreWasm.boundForOpencode('tiny', null, 0), 'tiny');
   assert.equal(coreWasm.boundForOpencode('tiny', null, Infinity), 'tiny');
   assert.equal(coreWasm.boundForOpencode('a\uD83D\uDE00b\uD83D\uDE00c', null, 4), 'a\uD83D\uDE00b');
 
   assert.equal(coreWasm.envAssignEnd('A=1 cmd', undefined), 4);
   assert.deepEqual([...coreWasm.kindsFor('git status')], ['git-status']);
+  assert.deepEqual([...coreWasm.kindsFor('cargo test')], ['test', 'progress']);
+  assert.deepEqual([...coreWasm.kindsFor('cargo test && git status')], ['test', 'progress', 'git-status']);
   assert.equal(coreWasm.kindsFor('echo ok'), null);
   assert.equal(coreWasm.wrappable('cargo test'), true);
   assert.equal(coreWasm.filterCommand('cat a', 'hi', null), null);
+  assert.equal(
+    coreWasm.filterCommand('pip install x', '   \u2501\u2501\u2501 10.2/10.2 MB 5.1 MB/s\nInstalled x\n', null),
+    'Installed x',
+  );
+  assert.equal(
+    coreWasm.filterCommand(
+      'cargo test',
+      'test result: ok. 1 passed; 0 failed; finished in 0.01s; finished in 0.02s\n',
+      null,
+    ),
+    'test result: ok. 1 passed; finished in 0.01s (0.02s)',
+  );
 });
 
 test('installers copy puritanical-core-wasm.cjs and puritanical-core.wasm to all hook targets', (t) => {
@@ -74,8 +98,12 @@ test('installers copy puritanical-core-wasm.cjs and puritanical-core.wasm to all
   execFileSync(process.execPath, [
     repoPath('bin', 'install.js'), '--only', 'opencode',
   ], { env, encoding: 'utf8' });
-  assert.ok(exists(under(opencodeDir, 'plugins', 'puritanical-hooks', 'puritanical-core-wasm.cjs'))
-    || exists(under(opencodeDir, 'plugins', 'puritanical', 'puritanical-hooks', 'puritanical-core-wasm.cjs')));
+  const ocA = under(opencodeDir, 'plugins', 'puritanical-hooks');
+  const ocB = under(opencodeDir, 'plugins', 'puritanical', 'puritanical-hooks');
+  assert.ok(
+    (exists(under(ocA, 'puritanical-core-wasm.cjs')) && exists(under(ocA, 'puritanical-core.wasm')))
+    || (exists(under(ocB, 'puritanical-core-wasm.cjs')) && exists(under(ocB, 'puritanical-core.wasm'))),
+  );
 
   execFileSync(process.execPath, [
     repoPath('bin', 'install.js'), '--only', 'copilot-cli',
