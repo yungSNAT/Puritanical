@@ -35,7 +35,7 @@ npm test                 # node --test tests/*.js
 cd tools && cargo test   # generators and benchmark analysis
 ```
 
-`tools/` is a Rust crate (`puritanical-tools`) that writes and checks the generated files (rule copies, charts, site samples, README art) and runs the benchmark analysis. It needs a Rust toolchain; `tools/rust-toolchain.toml` pins the version CI uses.
+`tools/` is a Rust crate (`puritanical-tools`) that writes and checks the generated files (rule copies, charts, README art) and runs the benchmark analysis. It needs a Rust toolchain; `tools/rust-toolchain.toml` pins the version CI uses.
 
 `.gitattributes` checks the generated files out with LF endings. A Windows clone made before that keeps CRLF copies, which fail `--check`: commit or stash your work, then check them out again with `git rm -r --cached -q . && git reset --hard`.
 
@@ -57,7 +57,7 @@ node benchmarks/replay-compress.js [claude|pi] [session-dir]     # input replay
 - [ ] SKILL.md and the `rules.rs` BODY both updated (if behavior changed) + `npm run build:rules`
 - [ ] Hook changes don't break the flag-file security model or the compressor invariants
 - [ ] New measurable behavior gets a benchmark task or replay receipt
-- [ ] `npm test` and `cd tools && cargo test` pass; `npm run check:rules`, `check:chart`, `check:samples` and `check:readme-art` clean
+- [ ] `npm test` and `cd tools && cargo test` pass; `npm run check:rules`, `check:chart` and `check:readme-art` clean
 
 ## Releases
 

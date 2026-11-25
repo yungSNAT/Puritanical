@@ -15,10 +15,3 @@ updates:
     directory: /.github/tools/codacy
     schedule:
       interval: weekly
-  - package-ecosystem: npm
-    directory: /site
-    schedule:
-      interval: weekly
-    groups:
-      site-patches:
-        update-types: [patch, minor]

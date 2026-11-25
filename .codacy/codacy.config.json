@@ -3100,7 +3100,6 @@
   ],
   "exclude": [
     "benchmarks/agentic/fixtures/**",
-    "tests/fixtures/**",
-    "site/src/data/samples.json"
+    "tests/fixtures/**"
   ]
 }
