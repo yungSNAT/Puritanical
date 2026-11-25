@@ -15,7 +15,7 @@ const { OLD_NAME, isOldStatusLine } = require('../../hooks/puritanical-config');
 
 const HOOK_FILES = ['package.json', 'puritanical-config.js', 'puritanical-activate.js',
   'puritanical-mode.js', 'puritanical-mode-tracker.js', 'puritanical-compress-output.js', 'puritanical-command-filters.js',
-  'puritanical-run.js', 'puritanical-statusline.sh', 'puritanical-statusline.ps1'];
+  'puritanical-core-wasm.cjs', 'puritanical-core.wasm', 'puritanical-run.js', 'puritanical-statusline.sh', 'puritanical-statusline.ps1'];
 
 function settingsPathFor(opts) { return path.join(ENV.claudeDir(opts), 'settings.json'); } // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
 

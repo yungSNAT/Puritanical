@@ -27,7 +27,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const PROXY_FILE = 'puritanical-mcp-proxy.js';
 // The proxy as `mcp wrap` installed it before 4.0.0: still recognised as wrapped.
 const OLD_PROXY_FILE = OLD_NAME + '-mcp-proxy.js';
-const PROXY_SOURCES = ['puritanical-mcp-proxy.js', 'puritanical-compress-output.js', 'puritanical-config.js', 'puritanical-command-filters.js'];
+const PROXY_SOURCES = ['puritanical-mcp-proxy.js', 'puritanical-compress-output.js', 'puritanical-config.js',
+  'puritanical-command-filters.js', 'puritanical-core-wasm.cjs', 'puritanical-core.wasm'];
 
 function home() { return process.env.PURITANICAL_HOME || os.homedir(); }
 function proxyDir() { return path.join(getConfigDir(), 'mcp-proxy'); }

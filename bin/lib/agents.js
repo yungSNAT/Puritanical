@@ -14,7 +14,8 @@ const crypto = require('crypto');
 const { NAME, OLD_NAME, isLink, moveIfAbsent } = require('../../hooks/puritanical-config');
 const OLD_RULES = require('./old-rules');
 
-const COMPRESSOR = ['puritanical-compress-output.js', 'puritanical-command-filters.js', 'puritanical-config.js'];
+const COMPRESSOR = ['puritanical-compress-output.js', 'puritanical-command-filters.js', 'puritanical-config.js',
+  'puritanical-core-wasm.cjs', 'puritanical-core.wasm'];
 const COMMONJS_PACKAGE = '{ "type": "commonjs" }\n';
 
 function blankLine() { process.stdout.write('\n'); }
