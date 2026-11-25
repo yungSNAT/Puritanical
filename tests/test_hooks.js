@@ -175,7 +175,44 @@ test('getDefaultMode ignores invalid PURITANICAL_DEFAULT_MODE', () => {
 
 // ── major-version update notice ──────────────────────────────────────────────
 
-const { majorOf, majorUpdateNotice, latestVersion } = require('../hooks/puritanical-activate');
+const { majorOf, majorUpdateNotice, latestVersion, statuslineCommand, statuslineNotice } = require('../hooks/puritanical-activate');
+const { isOwnedStatusLine } = require('../hooks/puritanical-config');
+const path = require('path');
+
+test('statuslineCommand matches the platform and produces a recognised statusline command', () => {
+  const hooksDir = absolutePath('hooks-dir');
+  const binDir = absolutePath('pwsh-bin');
+  const emptyBin = absolutePath('empty-bin');
+  makeDir('pwsh-bin');
+  makeDir('empty-bin');
+
+  const posixCmd = statuslineCommand(hooksDir, 'linux', '');
+  assert.equal(posixCmd, `bash "${under(hooksDir, 'puritanical-statusline.sh')}"`);
+  assert.equal(isOwnedStatusLine({ type: 'command', command: posixCmd }), true);
+
+  const darwinCmd = statuslineCommand(hooksDir, 'darwin', '');
+  assert.equal(darwinCmd, `bash "${under(hooksDir, 'puritanical-statusline.sh')}"`);
+
+  const psCmd = statuslineCommand(hooksDir, 'win32', `${path.delimiter}${emptyBin}`);
+  assert.equal(psCmd, `powershell -NoProfile -ExecutionPolicy Bypass -File "${under(hooksDir, 'puritanical-statusline.ps1')}"`);
+  assert.equal(isOwnedStatusLine({ type: 'command', command: psCmd }), true);
+
+  writeText(under(binDir, 'pwsh.exe'), '');
+  const pwshCmd = statuslineCommand(hooksDir, 'win32', `${emptyBin}${path.delimiter}${binDir}`);
+  assert.equal(pwshCmd, `pwsh -NoProfile -ExecutionPolicy Bypass -File "${under(hooksDir, 'puritanical-statusline.ps1')}"`);
+  assert.equal(isOwnedStatusLine({ type: 'command', command: pwshCmd }), true);
+
+  const missingSettings = under(absolutePath('hook'), 'missing-settings.json');
+  const winNotice = statuslineNotice(missingSettings, 'win32', binDir);
+  assert.match(winNotice, /STATUSLINE SETUP NEEDED:/);
+  assert.ok(winNotice.includes('puritanical-statusline.ps1'));
+  assert.ok(!winNotice.includes('puritanical-statusline.sh'));
+
+  const posixNotice = statuslineNotice(missingSettings, 'linux', '');
+  assert.match(posixNotice, /STATUSLINE SETUP NEEDED:/);
+  assert.ok(posixNotice.includes('puritanical-statusline.sh'));
+  assert.ok(!posixNotice.includes('puritanical-statusline.ps1'));
+});
 
 test('update lookup refreshes stale cache and reuses a fresh result offline', async (t) => {
   const dir = absolutePath('hook');

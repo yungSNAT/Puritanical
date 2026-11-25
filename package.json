@@ -91,9 +91,5 @@
     "README.md",
     "LICENSE",
     "NOTICE"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  }
+  ]
 }

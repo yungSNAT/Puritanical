@@ -12,11 +12,15 @@ on:
   push:
     branches: [main]
     paths:
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
       - "**/package-lock.json"
       - "**/package.json"
       - ".github/workflows/osv-scanner.yml"
   pull_request:
     paths:
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
       - "**/package-lock.json"
       - "**/package.json"
       - ".github/workflows/osv-scanner.yml"
