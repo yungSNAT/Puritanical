@@ -57,7 +57,7 @@ node benchmarks/replay-compress.js [claude|pi] [session-dir]     # input replay
 - [ ] SKILL.md and the `rules.rs` BODY both updated (if behavior changed) + `npm run build:rules`
 - [ ] Hook changes don't break the flag-file security model or the compressor invariants
 - [ ] New measurable behavior gets a benchmark task or replay receipt
-- [ ] `npm test` and `cd tools && cargo test` pass; `npm run check:rules`, `check:chart` and `check:readme-art` clean
+- [ ] `npm test` and `cd tools && cargo test` pass; `npm run check:rules` and `check:readme-art` clean
 
 ## Releases
 

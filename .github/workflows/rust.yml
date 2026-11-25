@@ -94,7 +94,7 @@ jobs:
             cargo test --locked
           fi
       - name: Check the generated files
-        run: for c in rules chart readme-art; do cargo run --quiet --locked -- "$c" --check; done
+        run: for c in rules readme-art; do cargo run --quiet --locked -- "$c" --check; done
       - name: Keep the coverage report for the Codecov upload
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -63,7 +63,7 @@ fn checks_run_against_the_crate_repository_or_puritanical_root() {
     );
 
     let out = bin()
-        .args(["chart", "--check"])
+        .args(["readme-art", "--check"])
         .current_dir(empty.path())
         .env("PURITANICAL_ROOT", repo())
         .output();

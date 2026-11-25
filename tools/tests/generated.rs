@@ -7,10 +7,9 @@ mod support;
 
 use puritanical_tools::{readme_art, rules};
 use std::fs;
-use std::path::Path;
-use support::{cmd, copy_dir, ok, repo, write};
+use support::{cmd, ok, repo, write};
 
-const COMMANDS: [&str; 3] = ["rules", "chart", "readme-art"];
+const COMMANDS: [&str; 2] = ["rules", "readme-art"];
 
 /// Every generated file, relative to the repository root.
 fn outputs() -> Vec<String> {
@@ -18,14 +17,6 @@ fn outputs() -> Vec<String> {
         .iter()
         .map(|(rel, _)| (*rel).to_string())
         .collect();
-    for name in [
-        "benchmark",
-        "benchmark-light",
-        "benchmark-terminal",
-        "benchmark-terminal-light",
-    ] {
-        all.push(format!("assets/{name}.svg"));
-    }
     all.extend(
         readme_art::files()
             .into_iter()
@@ -34,14 +25,9 @@ fn outputs() -> Vec<String> {
     all
 }
 
-/// A scratch root holding only the benchmark results the generators read.
+/// An empty scratch root: the generators read no repository files.
 fn inputs() -> tempfile::TempDir {
-    let tmp = tempfile::tempdir().expect("temp dir");
-    for run in ["raw-314-sidebyside", "raw-314-commands"] {
-        let rel = Path::new("benchmarks/results").join(run);
-        copy_dir(&repo().join(&rel), &tmp.path().join(rel));
-    }
-    tmp
+    tempfile::tempdir().expect("temp dir")
 }
 
 #[test]
@@ -60,7 +46,7 @@ fn a_fresh_write_reproduces_every_committed_byte() {
         assert!(ok(&cmd(tmp.path(), &[], &[c])).starts_with("wrote "), "{c}");
     }
     let files = outputs();
-    assert_eq!(files.len(), 31);
+    assert_eq!(files.len(), 23);
     for rel in &files {
         let want = fs::read(repo().join(rel)).expect("committed file");
         assert!(
@@ -95,71 +81,15 @@ fn drift_fails_the_check() {
         bytes.push(b' ');
         fs::write(path, bytes).expect("write");
     };
-    mutate("assets/benchmark-terminal-light.svg");
-    let out = cmd(root, &[], &["chart", "--check"]);
-    assert_eq!(
-        (out.code, out.stderr.as_str()),
-        (
-            1,
-            "assets/benchmark-terminal-light.svg is stale. Run: npm run build:chart\n"
-        )
-    );
-
-    mutate("assets/readme/race-light.svg");
+    mutate("assets/readme/trim-light.svg");
     fs::remove_file(root.join("assets/readme/line.svg")).expect("remove");
     let out = cmd(root, &[], &["readme-art", "--check"]);
     assert_eq!(out.code, 1);
     assert_eq!(out.stdout, "");
     assert_eq!(
         out.stderr,
-        "assets/readme/line.svg is stale. Run: npm run build:readme-art\nassets/readme/race-light.svg is stale. Run: npm run build:readme-art\n"
+        "assets/readme/line.svg is stale. Run: npm run build:readme-art\nassets/readme/trim-light.svg is stale. Run: npm run build:readme-art\n"
     );
-}
-
-#[test]
-fn chart_json_prints_both_charts_figures() {
-    let out = cmd(&repo(), &[], &["chart", "--json"]);
-    let stats: serde_json::Value = serde_json::from_str(ok(&out)).expect("JSON");
-    let keys = |i: usize| {
-        stats[i]
-            .as_object()
-            .expect("object")
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(
-        keys(0),
-        ["n", "caveman", "ponytail", "chisle-3.13", "chisle"]
-    );
-    assert_eq!(
-        keys(1),
-        ["n", "held", "caveman", "ponytail", "rtk", "chisle"]
-    );
-}
-
-#[test]
-fn missing_inputs_fail_cleanly() {
-    let tmp = tempfile::tempdir().expect("temp dir");
-    let root = tmp.path();
-    let out = cmd(root, &[], &["chart"]);
-    assert_eq!(out.code, 1);
-    assert!(out.stderr.starts_with("cannot read "), "{}", out.stderr);
-    write(
-        &root.join("benchmarks/results/raw-314-commands/commands.json"),
-        "{}",
-    );
-    assert_eq!(
-        cmd(root, &[], &["chart"]).stderr,
-        "commands.json is not an array\n"
-    );
-    write(
-        &root.join("benchmarks/results/raw-314-commands/commands.json"),
-        "[]",
-    );
-    // No side-by-side cells: the bars fall back to 0%.
-    let out = cmd(root, &[], &["chart", "--json"]);
-    assert!(ok(&out).contains("\"chisle-3.13\": 0"), "{}", out.stdout);
 }
 
 #[test]
@@ -177,39 +107,4 @@ fn unwritable_targets_report_the_path() {
     };
     assert!(bad(&["rules"]).contains("puritanical.mdc"));
     assert!(bad(&["readme-art"]).contains("line.svg"));
-    let tmp2 = inputs();
-    write(&tmp2.path().join("assets"), "");
-    assert!(
-        cmd(tmp2.path(), &[], &["chart"])
-            .stderr
-            .contains("benchmark.svg")
-    );
-}
-
-#[test]
-fn incomplete_cells_are_left_out() {
-    let tmp = tempfile::tempdir().expect("temp dir");
-    let root = tmp.path();
-    write(
-        &root.join("benchmarks/results/raw-314-commands/commands.json"),
-        "[]",
-    );
-    let side = root.join("benchmarks/results/raw-314-sidebyside");
-    write(&side.join("ANSWERS.md"), "");
-    write(&side.join("s1/notes.txt"), "");
-    write(&side.join("s1/x__vanilla.json"), "{");
-    write(
-        &side.join("s1/t__vanilla.json"),
-        r#"{"usage": {"output_tokens": 10}}"#,
-    );
-    write(
-        &side.join("s1/u__vanilla.json"),
-        r#"{"result": "no usage"}"#,
-    );
-    let out = cmd(root, &[], &["chart", "--json"]);
-    assert!(
-        ok(&out).starts_with("[\n  {\n    \"n\": 0,"),
-        "{}",
-        out.stdout
-    );
 }

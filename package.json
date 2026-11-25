@@ -67,8 +67,6 @@
     "test": "node --test tests/*.js",
     "build:rules": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- rules",
     "check:rules": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- rules --check",
-    "build:chart": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- chart",
-    "check:chart": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- chart --check",
     "bench": "bash benchmarks/run-live.sh",
     "build:readme-art": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- readme-art",
     "check:readme-art": "cargo run --quiet --locked --manifest-path tools/Cargo.toml -- readme-art --check"
