@@ -214,6 +214,18 @@ test('statuslineCommand matches the platform and produces a recognised statuslin
   assert.ok(!posixNotice.includes('puritanical-statusline.ps1'));
 });
 
+test('statuslineCommand picks pwsh when PATH holds a Store alias that stat refuses', (t) => {
+  const fs = require('fs');
+  const aliasDir = absolutePath('windows-apps');
+  const realStat = fs.statSync;
+  t.mock.method(fs, 'statSync', (p, ...rest) => {
+    if (p === under(aliasDir, 'pwsh.exe')) throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    return realStat(p, ...rest);
+  });
+  assert.match(statuslineCommand(absolutePath('hooks-dir'), 'win32', aliasDir), /^pwsh -NoProfile /);
+  assert.match(statuslineCommand(absolutePath('hooks-dir'), 'win32', absolutePath('no-such-bin')), /^powershell -NoProfile /);
+});
+
 test('update lookup refreshes stale cache and reuses a fresh result offline', async (t) => {
   const dir = absolutePath('hook');
   makeDir('hook');

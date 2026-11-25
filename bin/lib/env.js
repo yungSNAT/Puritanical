@@ -87,7 +87,13 @@ function ranOk(r) {
 }
 const CAPTURE_TIMEOUT_MS = 15000;
 function capture(cmd, args, timeout = CAPTURE_TIMEOUT_MS) {
-  try { return spawnX(cmd, args, { encoding: 'utf8', timeout, killSignal: 'SIGKILL' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
+  let r;
+  try { r = spawnX(cmd, args, { encoding: 'utf8', timeout, killSignal: 'SIGKILL' }); } catch { return { status: 1, stdout: '', stderr: '' }; }
+  // Callers read a timed-out child as "nothing listed", so say why.
+  if (r && r.error && r.error.code === 'ETIMEDOUT') {
+    process.stderr.write(`  warning: \`${cmd} ${args.join(' ')}\` gave no answer within ${Math.ceil(timeout / 1000)} s; its result was skipped\n`);
+  }
+  return r;
 }
 // True when `<cmd> <args>` exits 0 and its output matches pattern, by default
 // "puritanical" (plugin/extension lists).

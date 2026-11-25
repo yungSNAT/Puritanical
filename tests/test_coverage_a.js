@@ -133,9 +133,14 @@ test('capture enforces a bounded timeout and SIGKILL on hung child processes', (
   assert.equal(envMod.ranOk(fast), true);
   assert.equal(fast.stdout, 'ok');
 
+  const warned = [];
+  const stderrWrite = t.mock.method(process.stderr, 'write', (chunk) => { warned.push(String(chunk)); return true; });
   const started = Date.now();
   const hung = envMod.capture('node', ['-e', 'setTimeout(() => {}, 5000)'], 150);
   const elapsed = Date.now() - started;
+  stderrWrite.mock.restore();
+  assert.equal(warned.length, 1);
+  assert.match(warned[0], /warning: `node -e setTimeout\(\(\) => \{\}, 5000\)` gave no answer within 1 s; its result was skipped/);
   assert.equal(envMod.ranOk(hung), false);
   assert.equal(hung.status, null);
   assert.equal(hung.error && hung.error.code, 'ETIMEDOUT');
