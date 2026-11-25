@@ -6,7 +6,6 @@
 
 pub mod aggregate;
 pub mod answers;
-pub mod chart;
 pub mod js;
 pub mod normalize_pi;
 pub mod pooled;
@@ -20,7 +19,6 @@ use std::path::{Path, PathBuf};
 
 pub const USAGE: &str = "usage: puritanical-tools <command>
   rules [--check]          write (or verify) the per-agent rule copies
-  chart [--check|--json]   write (or verify) assets/benchmark*.svg
   readme-art [--check]     write (or verify) assets/readme/
   aggregate [--json]       billed tokens per arm (RAW_DIR, default benchmarks/results/raw)
   pooled <dir>...          pooled ratios with a bootstrap interval (ARMS)
@@ -124,7 +122,6 @@ fn generate(root: &Path, cmd: &str, rest: &[String]) -> Option<Out> {
     let check = has(rest, "--check");
     Some(match cmd {
         "rules" => rules::run(root, check),
-        "chart" => chart::run(root, check, has(rest, "--json")),
         "readme-art" => readme_art::run(root, check),
         _ => return None,
     })

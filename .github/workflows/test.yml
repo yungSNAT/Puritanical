@@ -75,7 +75,7 @@ jobs:
         working-directory: tools
         run: |
           cargo test --locked
-          for c in rules chart readme-art; do target/debug/puritanical-tools "$c" --check; done
+          for c in rules readme-art; do target/debug/puritanical-tools "$c" --check; done
           npm run --prefix .. check:rules
 
   windows-installer:

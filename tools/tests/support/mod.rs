@@ -31,19 +31,6 @@ pub fn write(path: &Path, text: &str) {
     fs::write(path, text).expect("write");
 }
 
-pub fn copy_dir(from: &Path, to: &Path) {
-    fs::create_dir_all(to).expect("create dir");
-    for entry in fs::read_dir(from).expect("list") {
-        let entry = entry.expect("entry");
-        let target = to.join(entry.file_name());
-        if entry.file_type().expect("type").is_dir() {
-            copy_dir(&entry.path(), &target);
-        } else {
-            fs::copy(entry.path(), target).expect("copy");
-        }
-    }
-}
-
 pub fn ok(out: &Out) -> &str {
     assert_eq!(out.code, 0, "stderr: {}", out.stderr);
     &out.stdout

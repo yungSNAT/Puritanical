@@ -2,13 +2,10 @@
 
 //! The panels' English strings.
 
-use super::{Lang, n};
+use super::Lang;
 
 fn en_words(a: usize, b: usize) -> String {
     format!("{a} words → {b} words")
-}
-fn en_cut(p: f64) -> String {
-    format!("−{}% vs no ruleset", n(p))
 }
 fn en_hit(k: usize, a: &str) -> String {
     format!("✓ rung {k}: {a}")
@@ -22,17 +19,11 @@ pub(super) const EN: Lang = Lang {
     same: "✓ same answer",
     stats_title: "Chisle vs the same model with no ruleset",
     tiles: [
-        ["billed output tokens", "69% of the bare model"],
-        ["answer length", "51% of the bare model"],
+        ["billed output tokens", "Sonnet 5.5: 53% of bare"],
+        ["answer length", "Sonnet 5.5: 49% of bare"],
         ["oversized tool output", "per trimmed tool output"],
         ["accuracy", "bare model: 156/156"],
     ],
-    race_title: "Same prompt. Four answers.",
-    race_note: "visible answer tokens · lower is leaner",
-    bare: "no ruleset",
-    tokens: " tokens",
-    cut: en_cut,
-    race_foot: "Claude Code + Haiku 4.5 · all four in one run · the verbatim answers are below",
     reads: "what Claude reads",
     kept: "  ← error kept",
     foot1: "Raw output is billed again on every later turn",
@@ -79,17 +70,6 @@ pub(super) const EN: Lang = Lang {
         "tool schemas you pay for but never use",
         "trim MCP output in any agent",
     ],
-    filt_title: "Knows the command. Drops the noise.",
-    filt_note: "raw output → what Claude reads",
-    filt_sub: "Command-aware filters, built in: no extra binary, any OS. Errors, failures and summaries always stay.",
-    filt_notes: [
-        "256 passing tests hidden, summary kept",
-        "400 passes hidden, the failure kept whole",
-        "long form rewritten in git's short form",
-        "one line per commit, long messages counted",
-    ],
-    filt_foot: "37 commands: Claude reads 28% of the raw output with Chisle, 84% with RTK. Failed runs filtered in bypass mode; | cat shows raw.",
-    chars: "chars",
     strip_title: "Chisle is free. Its benchmarks aren't.",
     strip_sub: "Saved you tokens? A coffee pays for the next benchmark run.",
     free: "Chisle is free.",

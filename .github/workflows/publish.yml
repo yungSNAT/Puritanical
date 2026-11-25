@@ -26,7 +26,7 @@ jobs:
         working-directory: tools
         run: |
           rustup toolchain install
-          for c in rules chart readme-art; do cargo run --quiet --locked -- "$c" --check; done
+          for c in rules readme-art; do cargo run --quiet --locked -- "$c" --check; done
 
   release:
     needs: test

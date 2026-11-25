@@ -6,12 +6,10 @@
 //! Every static attribute holds the final frame, so a renderer without SMIL
 //! shows the result.
 //!
-//! The figures mirror the README's benchmark sections; change them together.
-//! Race tokens: `benchmarks/results/raw-314-sidebyside/large-s2/statemachine__*.json`
-//! (`usage.output_tokens` minus `thinking_tokens`).
+//! The figures mirror docs/benchmarks.md; change them together.
 
 use crate::Out;
-use crate::js::{self, grouped, num as n, to_fixed};
+use crate::js::{self, num as n, to_fixed};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -24,7 +22,7 @@ mod strings;
 use banner::{banner, stats};
 use coffee::{strip, support};
 use ladder::{commands, install, ladder};
-use race::{filters, race, trim};
+use race::trim;
 use strings::EN;
 
 const SANS: &str =
@@ -46,7 +44,6 @@ struct Theme {
     fill: &'static str,
     track: &'static str,
     dot: &'static str,
-    bar: &'static str,
     green: &'static str,
     red: &'static str,
     glow: f64,
@@ -67,7 +64,6 @@ const THEMES: [(&str, Theme); 2] = [
             fill: "#d78a3c",
             track: "#21262d",
             dot: "#1f2630",
-            bar: "#484f58",
             green: "#3fb950",
             red: "#f85149",
             glow: 0.18,
@@ -87,7 +83,6 @@ const THEMES: [(&str, Theme); 2] = [
             fill: "#d78a3c",
             track: "#eaeef2",
             dot: "#e4e8ec",
-            bar: "#afb8c1",
             green: "#1a7f37",
             red: "#cf222e",
             glow: 0.12,
@@ -104,12 +99,6 @@ struct Lang {
     same: &'static str,
     stats_title: &'static str,
     tiles: [[&'static str; 2]; 4],
-    race_title: &'static str,
-    race_note: &'static str,
-    bare: &'static str,
-    tokens: &'static str,
-    cut: fn(f64) -> String,
-    race_foot: &'static str,
     reads: &'static str,
     kept: &'static str,
     foot1: &'static str,
@@ -122,12 +111,6 @@ struct Lang {
     hit: fn(usize, &str) -> String,
     sheet: &'static str,
     notes: [&'static str; 8],
-    filt_title: &'static str,
-    filt_note: &'static str,
-    filt_sub: &'static str,
-    filt_notes: [&'static str; 4],
-    filt_foot: &'static str,
-    chars: &'static str,
     strip_title: &'static str,
     strip_sub: &'static str,
     free: &'static str,
@@ -343,12 +326,10 @@ const LINE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="1200" heig
 
 type Panel = fn(&Theme, &Lang) -> String;
 
-const PANELS: [(&str, Panel); 9] = [
+const PANELS: [(&str, Panel); 7] = [
     ("banner", banner),
     ("stats", stats),
-    ("race", race),
     ("trim", trim),
-    ("filters", filters),
     ("ladder", ladder),
     ("commands", commands),
     ("strip", strip),
@@ -383,7 +364,7 @@ pub fn run(root: &Path, check: bool) -> Out {
         out.say(if check {
             "README art in sync.".to_string()
         } else {
-            "wrote assets/readme: line, banner, stats, race, trim, filters, ladder, commands, strip, support, install (dark, light)".to_string()
+            "wrote assets/readme: line, banner, stats, trim, ladder, commands, strip, support, install (dark, light)".to_string()
         });
     }
     out

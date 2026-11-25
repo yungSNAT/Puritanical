@@ -55,7 +55,6 @@ Edit the [canonical skill](skills/puritanical/SKILL.md), then run `npm run build
 ```powershell
 npm test
 npm run check:rules
-npm run check:chart
 npm run check:readme-art
 ```
 
