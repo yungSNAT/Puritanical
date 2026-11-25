@@ -164,7 +164,7 @@ One command covers every agent that already has Puritanical:
 npx github:yungSNAT/Puritanical --update
 ```
 
-It refreshes what is installed and adds nothing new. Plain `npx github:yungSNAT/Puritanical` does not upgrade: every install path skips what is already present, so an upgrade run reports success and changes nothing.
+It refreshes what is installed and adds nothing new. Plain `npx github:yungSNAT/Puritanical` skips agents that already have Puritanical installed, so running it to refresh Puritanical changes nothing. Upgrading an older 3.x Chisle install replaces the old wiring under either `--update` or a plain install so the two never run side by side.
 
 ### Upgrading from 3.x
 

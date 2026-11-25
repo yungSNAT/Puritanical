@@ -147,11 +147,14 @@ function migrateOldConfig() {
 // The status line an install before 4.0.0 configured, exactly: the old badge
 // script alone, run by bash or PowerShell. A status line that does more is the
 // user's own and stays.
+const NEW_STATUSLINE = /^(?:bash "[^"]*[\\/]puritanical-statusline\.sh"|(?:pwsh|powershell) -NoProfile -ExecutionPolicy Bypass -File "[^"]*[\\/]puritanical-statusline\.ps1")$/;
 const OLD_STATUSLINE = /^(?:bash "[^"]*[\\/]chisle-statusline\.sh"|(?:pwsh|powershell) -NoProfile -ExecutionPolicy Bypass -File "[^"]*[\\/]chisle-statusline\.ps1")$/; // formerly Chisle
-function isOldStatusLine(sl) {
+function isStatusLineMatch(sl, pattern) {
   return !!sl && typeof sl === 'object' && sl.type === 'command' && typeof sl.command === 'string' &&
-    Object.keys(sl).length === 2 && OLD_STATUSLINE.test(sl.command);
+    Object.keys(sl).length === 2 && pattern.test(sl.command);
 }
+function isOldStatusLine(sl) { return isStatusLineMatch(sl, OLD_STATUSLINE); }
+function isOwnedStatusLine(sl) { return isStatusLineMatch(sl, NEW_STATUSLINE) || isOldStatusLine(sl); }
 
 // Larger settings are treated as unreadable, just like invalid JSON.
 const MAX_CONFIG_BYTES = 4 * 1024 * 1024;
@@ -516,7 +519,7 @@ function safeAtomicWrite(p, content, root) {
 }
 
 module.exports = {
-  NAME, OLD_NAME, aliasOldEnv, getOldConfigDir, moveIfAbsent, migrateOldState, migrateOldConfig, isOldStatusLine,
+  NAME, OLD_NAME, aliasOldEnv, getOldConfigDir, isLink, moveIfAbsent, migrateOldState, migrateOldConfig, isOldStatusLine, isOwnedStatusLine,
   LEGACY_MODES, legacySetting, getDefaultMode, getClaudeDir, getCopilotDir, getOpencodeDir, getOpencodeStateDir, getConfigDir,
   VALID_MODES, safeWriteFlag, readFlag, readJsonFile, readRegularFile, readSettingsText, secureDirectory, safeAtomicWrite,
   PROSE_HEADINGS, CODE_HEADINGS, getSections, filterSections,

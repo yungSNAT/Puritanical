@@ -90,36 +90,7 @@ function statuslineNotice(settingsPath) {
 }
 
 // ── Hook body ───────────────────────────────────────────────────────────────
-function run(source) {
-  const claudeDir = getClaudeDir();
-  const flagPath = path.join(claudeDir, '.puritanical-active');
-  const settingsPath = path.join(claudeDir, 'settings.json');
-
-  // Carry an older install's state and settings across first, so the mode
-  // below comes from the user's own config.
-  migrateOldState(claudeDir);
-  migrateOldConfig();
-  const mode = getDefaultMode();
-
-  if (mode === 'off') {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The fixed .puritanical-active entry is unlinked without following its target.
-    try { fs.unlinkSync(flagPath); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    process.stdout.write('OK');
-    process.exit(0);
-  }
-
-  // 1. Write flag
-  safeWriteFlag(flagPath, mode);
-
-  // 2. Resumed/cleared/compacted session: reactivate, don't re-teach.
-  if (!FULL_INJECT_SOURCES.has(source)) {
-    process.stdout.write(
-      'PURITANICAL ACTIVE (resumed). ' +
-      'Ruleset already in context; see the puritanical skill if it is not.'
-    );
-    return;
-  }
-
+function buildActivationOutput(claudeDir, settingsPath) {
   // 3. Read SKILL.md — single source of truth for behaviour. No level
   // filtering any more: there is one mode, so the whole body ships, minus
   // whatever `sections` in config.json opts out of (prose and/or code rules;
@@ -166,6 +137,40 @@ function run(source) {
       '. Intensity levels were removed in 3.0.0 — there is one mode now, and it is ' +
       'active. Set it to `on` or `off`, or drop it entirely. Mention this once.';
   }
+  return output;
+}
+
+function run(source) {
+  const claudeDir = getClaudeDir();
+  const flagPath = path.join(claudeDir, '.puritanical-active');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  // Carry an older install's state and settings across first, so the mode
+  // below comes from the user's own config.
+  migrateOldState(claudeDir);
+  migrateOldConfig();
+  const mode = getDefaultMode();
+
+  if (mode === 'off') {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The fixed .puritanical-active entry is unlinked without following its target.
+    try { fs.unlinkSync(flagPath); } catch {} // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+    process.stdout.write('OK');
+    process.exit(0);
+  }
+
+  // 1. Write flag
+  safeWriteFlag(flagPath, mode);
+
+  // 2. Resumed/cleared/compacted session: reactivate, don't re-teach.
+  if (!FULL_INJECT_SOURCES.has(source)) {
+    process.stdout.write(
+      'PURITANICAL ACTIVE (resumed). ' +
+      'Ruleset already in context; see the puritanical skill if it is not.'
+    );
+    return;
+  }
+
+  let output = buildActivationOutput(claudeDir, settingsPath);
 
   // 4. Update notice, then emit. PURITANICAL_UPDATE_CHECK=0 disables.
   void (async () => {

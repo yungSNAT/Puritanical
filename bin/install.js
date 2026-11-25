@@ -355,8 +355,8 @@ function main() {
 
   if (opts.help) return printHelp(c);
   if (opts.list) return printList(c);
-  if (!opts.dryRun) migrateOld(opts);
   if (opts.stats) return printStats(c, opts);
+  if (!opts.dryRun) migrateOld(opts);
 
   const results = { detected: 0, installed: [], skipped: [], failed: [] };
   const say = (s) => process.stdout.write(s + '\n');

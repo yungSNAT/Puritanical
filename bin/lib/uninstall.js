@@ -12,7 +12,7 @@ const TOOLS = require('./tools');
 const ENV = require('./env');
 const FENCE = require('./fence');
 const CLAUDE = require('./claude');
-const { NAME, OLD_NAME } = require('../../hooks/puritanical-config');
+const { NAME, OLD_NAME, isOwnedStatusLine } = require('../../hooks/puritanical-config');
 
 // Entry names under both the current name and the one installs before 4.0.0 used.
 function bothNames(names) {
@@ -49,18 +49,13 @@ function uninstallClaudePlugin(ctx) {
   return n;
 }
 
-function isPuritanicalStatusLine(sl) {
-  return !!sl && typeof sl.command === 'string' &&
-    (sl.command.includes('puritanical-statusline') || sl.command.includes(OLD_NAME + '-statusline'));
-}
-
 // Standalone hooks + statusline in settings.json.
 function uninstallClaudeSettings(ctx, cfg) {
   const settingsPath = path.join(cfg, 'settings.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
   const settings = SETTINGS.readSettings(settingsPath);
   if (!settings) return 0;
   const removed = SETTINGS.removeHooks(settings, 'puritanical-') + SETTINGS.removeHooks(settings, OLD_NAME + '-');
-  const slRemoved = isPuritanicalStatusLine(settings.statusLine);
+  const slRemoved = isOwnedStatusLine(settings.statusLine);
   if (slRemoved) delete settings.statusLine;
   if (removed === 0 && !slRemoved) return 0;
   if (!ctx.opts.dryRun) { SETTINGS.validateHookFields(settings); SETTINGS.writeSettings(settingsPath, settings); }

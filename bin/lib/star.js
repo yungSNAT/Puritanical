@@ -6,19 +6,22 @@
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
-const { getConfigDir } = require('../../hooks/puritanical-config');
+const { NAME, OLD_NAME, getConfigDir } = require('../../hooks/puritanical-config');
 const { hasCmd, claudeDir } = require('./env');
 
 // The compressor's savings ledger, or null when absent/unreadable.
 function readStats(dir) {
-  const p = path.join(dir, '.puritanical-compress-stats.json'); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
-  try {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed ledger name in the Claude, OpenCode state or Copilot directory.
-    if (fs.lstatSync(p).isSymbolicLink()) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Same ledger, checked above not to be a symlink.
-    const parsed = JSON.parse(fs.readFileSync(p, 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
-    return parsed && Number.isFinite(parsed.savedChars) && Number.isFinite(parsed.events) ? parsed : null;
-  } catch { return null; }
+  for (const file of [`.${NAME}-compress-stats.json`, `.${OLD_NAME}-compress-stats.json`]) {
+    const p = path.join(dir, file); // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Fixed ledger name in the Claude, OpenCode state or Copilot directory.
+      if (fs.lstatSync(p).isSymbolicLink()) return null; // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Same ledger, checked above not to be a symlink.
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8')); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      return parsed && Number.isFinite(parsed.savedChars) && Number.isFinite(parsed.events) ? parsed : null;
+    } catch {}
+  }
+  return null;
 }
 
 // ── star prompt ─────────────────────────────────────────────────────────────

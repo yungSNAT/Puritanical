@@ -51,14 +51,20 @@ function claude() {
 
 function gemini() {
   if (line === 'extensions list') return out(state.extensions.map(e => e + ' (1.0.0)\n').join(''));
-  if (args[1] === 'uninstall') return drop('extensions', e => e === args[2]);
+  if (args[1] === 'uninstall') {
+    if (state.fail.includes('uninstall')) return 1;
+    return drop('extensions', e => e === args[2]);
+  }
   if (args[1] === 'install') return add('extensions', args[2].split('/').pop().toLowerCase());
   return 0;
 }
 
 function pi() {
   if (line === 'list') return out('User packages:\n' + state.packages.map(p => '  ' + p + '\n').join(''));
-  if (args[0] === 'remove') return drop('packages', p => p.replace(/@[^/@]+$/, '') === args[1]);
+  if (args[0] === 'remove') {
+    if (state.fail.includes('uninstall')) return 1;
+    return drop('packages', p => p.replace(/@[^/@]+$/, '') === args[1]);
+  }
   if (args[0] === 'install') return add('packages', args[1]);
   return 0;
 }

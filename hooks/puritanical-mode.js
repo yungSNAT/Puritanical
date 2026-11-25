@@ -13,14 +13,19 @@ function requestedMode(prompt) {
   const legacy = legacyMode(text);
   if (legacy) return legacy;
 
-  const slash = /^\/puritanical(?::puritanical)?\b(?:\s+(\S+))?/.exec(text);
-  if (slash) return OFF_ARGS.has(slash[1]) ? 'off' : 'on';
+  const slash = /^\/puritanical(?::puritanical)?\b/.exec(text);
+  if (slash) {
+    const arg = /^\s+(\S+)/.exec(text.slice(slash[0].length));
+    return OFF_ARGS.has(arg && arg[1]) ? 'off' : 'on';
+  }
   let order = text.replace(/^please\s+/, '');
   while (order.endsWith('.') || order.endsWith('!')) order = order.slice(0, -1);
-  const named = /^puritanical(\s+mode)?(?:\s+(on|off))?$/.exec(order);
-  if (named && (named[1] || named[2])) return named[2] === 'off' ? 'off' : 'on';
-  if (/^(?:activate|enable|turn on|start)\s+puritanical(?:\s+mode)?$/.test(order)) return 'on';
-  if (/^(?:stop|disable|deactivate|turn off|exit|kill)\s+puritanical(?:\s+mode)?$/.test(order)) return 'off';
+  const named = /^puritanical\s+mode\s+(on|off)$/.exec(order) || /^puritanical\s+(on|off)$/.exec(order);
+  if (named) return named[1];
+  if (/^puritanical\s+mode$/.test(order)) return 'on';
+  const withoutMode = order.replace(/\s+mode$/, '');
+  if (/^(?:activate|enable|turn on|start)\s+puritanical$/.test(withoutMode)) return 'on';
+  if (/^(?:stop|disable|deactivate|turn off|exit|kill)\s+puritanical$/.test(withoutMode)) return 'off';
   return null;
 }
 

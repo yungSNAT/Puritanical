@@ -11,7 +11,7 @@ const ENV = require('./env');
 const FENCE = require('./fence');
 const { piSources } = require('./uninstall');
 const crypto = require('crypto');
-const { NAME, OLD_NAME, moveIfAbsent } = require('../../hooks/puritanical-config');
+const { NAME, OLD_NAME, isLink, moveIfAbsent } = require('../../hooks/puritanical-config');
 const OLD_RULES = require('./old-rules');
 
 const COMPRESSOR = ['puritanical-compress-output.js', 'puritanical-command-filters.js', 'puritanical-config.js'];
@@ -22,14 +22,19 @@ function failure(e, fallback) { return (e && e.message) || fallback; }
 
 // ── Pi ──────────────────────────────────────────────────────────────────────
 function installPi(ctx) {
-  const { say, note, opts, results } = ctx;
+  const { say, note, warn, opts, results } = ctx;
   results.detected++;
   say('→ Pi detected');
   // Sources from before the fork took the name (npm:chisle, upstream git) go
   // first, so the old package never loads beside this one.
   const sources = piSources(ENV.capture('pi', ['list']).stdout);
   const ours = s => s.toLowerCase().includes(ENV.REPO.toLowerCase());
-  for (const old of sources.filter(s => !ours(s))) ENV.run('pi', ['remove', old], opts.dryRun);
+  for (const old of sources.filter(s => !ours(s))) {
+    if (!ENV.ranOk(ENV.run('pi', ['remove', old], opts.dryRun))) {
+      warn('  could not remove old pi package ' + old + '; leaving pi unchanged');
+      results.failed.push(['pi', 'could not remove ' + old]); blankLine(); return;
+    }
+  }
   if (!opts.force && sources.some(ours)) {
     note('  puritanical package already installed (use --force)');
     results.skipped.push(['pi', 'already installed']); blankLine(); return;
@@ -42,11 +47,14 @@ function installPi(ctx) {
 
 // ── Gemini ──────────────────────────────────────────────────────────────────
 function installGemini(ctx) {
-  const { say, note, opts, results } = ctx;
+  const { say, note, warn, opts, results } = ctx;
   results.detected++;
   say('→ Gemini CLI detected');
   if (ENV.listsPuritanical('gemini', ['extensions', 'list'], ENV.OLD_LISTED)) {
-    ENV.run('gemini', ['extensions', 'uninstall', OLD_NAME], opts.dryRun);
+    if (!ENV.ranOk(ENV.run('gemini', ['extensions', 'uninstall', OLD_NAME], opts.dryRun))) {
+      warn('  could not remove old Gemini CLI extension; leaving Gemini CLI unchanged');
+      results.failed.push(['gemini', 'could not remove old extension']); blankLine(); return;
+    }
   }
   if (!opts.force && ENV.listsPuritanical('gemini', ['extensions', 'list'])) {
     note('  puritanical extension already installed (use --force)');
@@ -273,8 +281,10 @@ function removeOldRule(note, rule) {
     return;
   }
   const base = old + '.' + OLD_NAME + '-bak';
-  let bak = null;
-  for (let n = 1; !bak && n <= 99; n++) if (moveIfAbsent(old, n === 1 ? base : base + '-' + n)) bak = n === 1 ? base : base + '-' + n;
+  let n = 1;
+  while (FENCE.exists(n === 1 ? base : base + '-' + n) || isLink(n === 1 ? base : base + '-' + n)) n++;
+  const candidate = n === 1 ? base : base + '-' + n;
+  const bak = moveIfAbsent(old, candidate) ? candidate : null;
   note(bak ? '  moved the pre-4.0.0 rule ' + old + ' to ' + bak + ': it differs from every released copy, so your additions are there; copy what you need into ' + rule
     : '  left ' + old + ': it could not be moved aside; move your additions into ' + rule + ' and delete it');
 }

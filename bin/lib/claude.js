@@ -83,8 +83,9 @@ function removeMarketplace(ctx, name) {
 // of that name. Both go, so the two plugins never run side by side; the
 // marketplace stays while any copy of the old plugin does.
 function removeOldPlugin(ctx) {
-  if (uninstallPlugin(ctx, ENV.OLD_PLUGIN, ENV.OLD_LISTED).left) ctx.warn(`  kept the ${OLD_NAME} marketplace while the old plugin is installed`);
-  else removeMarketplace(ctx, OLD_NAME);
+  const { removed, left } = uninstallPlugin(ctx, ENV.OLD_PLUGIN, ENV.OLD_LISTED);
+  if (left) ctx.warn(`  kept the ${OLD_NAME} marketplace while the old plugin is installed`);
+  else if (removed) removeMarketplace(ctx, OLD_NAME);
 }
 
 // A status line that runs the old badge script among other commands stays

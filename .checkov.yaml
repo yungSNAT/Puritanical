@@ -8,4 +8,4 @@ skip-check:
   - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sonnet/default-s1/pooling__vanilla\.json$'
   - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sonnet/default-s2/pooling__vanilla\.json$'
   - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov-sonnet/default-s3/pooling__vanilla\.json$'
-  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov/large-s2/authflow__puritanical\.json$'
+  - 'CKV_SECRET_4:(^|(?<=/))benchmarks/results/raw-nov/large-s2/authflow__chisle\.json$'

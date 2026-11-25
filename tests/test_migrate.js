@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global __dirname, globalThis, process, require -- Node.js runtime */
+/* global __dirname, process, require -- Node.js runtime */
 // Upgrades from Chisle, the name this package had before 4.0.0: what an old
 // install left behind is moved, replaced or removed, never duplicated.
 // Run: node --test tests/test_migrate.js
@@ -55,7 +55,7 @@ function sandbox(t) {
     PATH: process.platform === 'win32' ? process.env.PATH : dir('bin'),
     PURITANICAL_UPDATE_CHECK: '0', PURITANICAL_DEFAULT_MODE: undefined,
   };
-  for (const key of Object.keys(env)) if (key.startsWith('CHISLE_')) delete env[key];
+  for (const key of Object.keys(env)) if (key.startsWith('CHISLE_')) Reflect.deleteProperty(env, key);
   // A stand-in claude, gemini or pi CLI (tests/fixtures/fake-cli.js) with the given state.
   const fake = (name, state) => {
     put(dir('bin', name), `#!/bin/sh\nexec "${process.execPath}" "${FAKE_CLI}" ${name} "${root}" "$@"\n`, { mode: 0o755 });
@@ -382,6 +382,10 @@ test('an old project rule goes only while it is a released copy', t => {
   assert.ok(!exists(old));
   assert.equal(readText(bak + '-2'), 'my own cursor rules\n');
   assert.equal(readText(bak), edited);
+
+  put(old, 'third copy\n');
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /moved the pre-4\.0\.0 rule .*chisle\.mdc to .*chisle\.mdc\.chisle-bak-3/);
+  assert.equal(readText(bak + '-3'), 'third copy\n');
 });
 
 test('a second --update changes no file and removes nothing', POSIX, t => {
@@ -409,20 +413,20 @@ test('a second --update changes no file and removes nothing', POSIX, t => {
   const logged = ['claude', 'gemini', 'pi'].map(name => s.log(name).length);
   run();
   assert.deepEqual(snapshot(s.dir()), before, 'the second run changed a file');
-  const second = ['claude', 'gemini', 'pi'].map((name, i) => s.log(name).slice(logged[i])).join('');
+  const second = ['claude', 'gemini', 'pi'].map((name, i) => s.log(name).slice(logged.at(i))).join('');
   assert.doesNotMatch(second, /uninstall|remove/, 'the second run removed something');
 });
 
 // Every file under root except the stand-in CLIs' logs and state, by content.
 function snapshot(root, rel = '') {
-  const files = {};
+  const entries = [];
   for (const entry of listDir(under(root, rel))) {
     const name = rel ? rel + '/' + entry : entry;
     if (name === 'bin' || /\.(?:log|state\.json)$/.test(name)) continue;
-    if (linkStat(under(root, name)).isDirectory()) Object.assign(files, snapshot(root, name));
-    else files[name] = readText(under(root, name));
+    if (linkStat(under(root, name)).isDirectory()) entries.push(...Object.entries(snapshot(root, name)));
+    else entries.push([name, readText(under(root, name))]);
   }
-  return files;
+  return Object.fromEntries(entries);
 }
 
 test('MCP servers wrapped by the old proxy move to the new one; uninstall unwraps both', POSIX, t => {
@@ -478,4 +482,78 @@ test('the pi extension moves an old config and honours old session entries', asy
   await rules.handlers.get('session_start')({ type: 'session_start' }, rules.ctx);
   assert.equal(await rules.handlers.get('before_agent_start')({ systemPrompt: 'base' }, rules.ctx), undefined,
     'rules injected again beside an old rules entry');
+});
+
+// ── follow-up regression checks ─────────────────────────────────────────────
+
+test('--uninstall preserves a combined statusLine while removing standalone owned badges', POSIX, t => {
+  const s = sandbox(t);
+  for (const command of [
+    'bash "/c/chisle-hooks/chisle-statusline.sh"; git branch --show-current',
+    'bash "/c/puritanical-hooks/puritanical-statusline.sh" && date',
+  ]) {
+    putJson(s.dir('claude', 'settings.json'), { statusLine: { type: 'command', command } });
+    s.cli(['--uninstall', '--only', 'claude']);
+    assert.deepEqual(readJson(s.dir('claude', 'settings.json')), { statusLine: { type: 'command', command } });
+  }
+  putJson(s.dir('claude', 'settings.json'), {
+    statusLine: { type: 'command', command: 'bash "/c/puritanical-hooks/puritanical-statusline.sh"' },
+  });
+  assert.match(s.cli(['--uninstall', '--only', 'claude']), /statusline/);
+  assert.deepEqual(readJson(s.dir('claude', 'settings.json')), {});
+});
+
+test('plain Claude install leaves an unrelated old marketplace intact when no old plugin is present', POSIX, t => {
+  const s = sandbox(t);
+  s.fake('claude', { plugins: [], marketplaces: ['chisle'] });
+  s.cli(['--only', 'claude']);
+  assert.deepEqual(readJson(s.dir('claude.state.json')).marketplaces, ['chisle', 'puritanical']);
+  assert.doesNotMatch(s.log('claude'), /marketplace remove/);
+});
+
+test('removeOldRule continues past 99 existing backups to .chisle-bak-100', t => {
+  const s = sandbox(t);
+  const proj = s.dir('proj99');
+  const old = under(proj, '.cursor', 'rules', 'chisle.mdc');
+  put(old, 'user-edit-100\n');
+  put(old + '.chisle-bak', 'b1\n');
+  for (let n = 2; n <= 99; n++) put(old + '.chisle-bak-' + n, 'b' + n + '\n');
+  assert.match(s.cli(['--only', 'cursor', '--update'], { cwd: proj }), /chisle\.mdc\.chisle-bak-100/);
+  assert.ok(!exists(old));
+  assert.equal(readText(old + '.chisle-bak-100'), 'user-edit-100\n');
+});
+
+test('--stats reads the old ledger without modifying disk', t => {
+  const s = sandbox(t);
+  putJson(s.dir('claude', '.chisle-compress-stats.json'), { savedChars: 1200, events: 3 });
+  const out = s.cli(['--stats']);
+  assert.match(out, /1,200 chars/);
+  assert.ok(exists(s.dir('claude', '.chisle-compress-stats.json')));
+  assert.ok(!exists(s.dir('claude', '.puritanical-compress-stats.json')));
+});
+
+test('pi and Gemini CLI abort cleanly when removing the old installation fails', POSIX, t => {
+  const s = sandbox(t);
+  s.fake('pi', { packages: ['npm:chisle@3.14.2'], fail: ['uninstall'] });
+  s.fake('gemini', { extensions: ['chisle'], fail: ['uninstall'] });
+  assert.match(s.cli(['--only', 'pi']), /could not remove/);
+  assert.doesNotMatch(s.log('pi'), /^install /m);
+  assert.match(s.cli(['--only', 'gemini']), /could not remove/);
+  assert.doesNotMatch(s.log('gemini'), /extensions install/);
+});
+
+test('fenced ruleset migration backs up user-edited pre-4.0.0 content without overwriting existing backups', t => {
+  const s = sandbox(t);
+  const file = s.dir('home', '.codex', 'AGENTS.md');
+  const firstOld = '# mine\n\n<!-- chisle-begin -->\ncustom note inside fence\n<!-- chisle-end -->\n';
+  put(file, firstOld);
+  const out1 = s.cli(['--only', 'codex', '--update']);
+  assert.match(out1, /backed up pre-4\.0\.0 instructions to .*AGENTS\.md\.chisle-bak/);
+  assert.equal(readText(file + '.chisle-bak'), firstOld);
+
+  const secondOld = '# mine\n\n<!-- chisle-begin -->\nsecond custom note\n<!-- chisle-end -->\n';
+  put(file, secondOld);
+  s.cli(['--only', 'codex', '--update']);
+  assert.equal(readText(file + '.chisle-bak'), firstOld);
+  assert.equal(readText(file + '.chisle-bak-2'), secondOld);
 });

@@ -69,6 +69,20 @@ function copyFile(src, dst) {
   fs.copyFileSync(src, dst); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
 }
 
+function noteOldFenceBackup(target, txt, note) {
+  if (!txt.includes(OLD_MARKERS[0])) return;
+  const base = target + '.' + OLD_NAME + '-bak';
+  for (let n = 1; ; n++) {
+    const dst = n === 1 ? base : base + '-' + n;
+    try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- Collision-safe backup alongside the target instructions file.
+      fs.writeFileSync(dst, txt, { flag: 'wx', mode: 0o644 }); // nosemgrep: javascript_pathtraversal_rule-non-literal-fs-filename
+      note('  backed up pre-4.0.0 instructions to ' + dst);
+      return;
+    } catch (e) { if (e && e.code !== 'EEXIST') return; }
+  }
+}
+
 // Fenced AGENTS.md append/refresh for Codex-style targets. Appends after
 // existing content (never prepends, never clobbers), refreshes one fenced
 // block in place under --force. Returns 'installed', 'refreshed', 'skipped'.
@@ -87,6 +101,7 @@ function writeFencedRuleset(target, opts, note) {
   }
   if (!opts.force && !old) {
     if (existing !== found) {
+      noteOldFenceBackup(target, found, note);
       writeText(target, existing);
       process.stdout.write('  removed the pre-4.0.0 ruleset from ' + target + '\n');
     }
@@ -102,6 +117,7 @@ function writeFencedRuleset(target, opts, note) {
     note('  remove the stray marker by hand, then re-run');
     return 'skipped';
   }
+  noteOldFenceBackup(target, found, note);
   let tail = existing.slice(end);
   if (tail.charAt(0) === '\n') tail = tail.slice(1);
   writeText(target, existing.slice(0, b) + block + tail);
