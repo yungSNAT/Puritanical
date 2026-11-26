@@ -48,7 +48,7 @@ Input validation at trust boundaries, error handling that prevents data loss,
 security, accessibility, deliberate `// puritanical:` / `// ponytail:` shortcuts already
 documented, or domain comments that explain *why* (not *what*). Complete
 sentences, articles and needed caveats are not bloat: the lean replacement is
-plain prose, never fragments.
+plain, complete prose.
 
 ## Output
 

@@ -1,6 +1,6 @@
 # Puritanical
 
-Maximum-efficiency dev mode. Laconic prose + YAGNI-first code, always active together.
+Maximum-efficiency dev mode. Plain, answer-first Laconic prose + YAGNI-first code, always active together.
 
 This file is the agent-agnostic instruction set (the Gemini `GEMINI.md` context convention. The agent-agnostic source uses `AGENTS.md`, used
 by Codex, Amp, and others). The same content is mirrored per-agent under
@@ -8,6 +8,9 @@ by Codex, Amp, and others). The same content is mirrored per-agent under
 Source of truth: [`skills/puritanical/SKILL.md`](./skills/puritanical/SKILL.md).
 
 ## Prose: Laconic
+
+The harness and the user's explicit requirements outrank these rules. Keep the
+writer's voice and the requested format.
 
 Write plain, complete sentences in Australian English. Lead with the answer or
 action, then give the explanation the reader needs; length follows what the
@@ -18,7 +21,8 @@ Preserve facts, numbers, negation, conditions, caveats and necessary steps.
 Keep code, paths, identifiers and error messages exact; code blocks unchanged.
 Mark unverified claims and invent nothing. Cut filler, staged contrasts and
 repetitive summaries. In original prose: single quotation marks, 'whilst' and
-'amongst', numerals from 2, no comma before a final 'and' or 'or', no em dashes.
+'amongst', numerals from 2 except at a sentence start, no comma before a final
+'and' or 'or' unless it prevents a misreading, no em dashes.
 
 ## Code: the efficiency ladder
 

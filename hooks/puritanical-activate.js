@@ -129,7 +129,7 @@ function buildActivationOutput(claudeDir, settingsPath) {
   } else {
     // Fallback ruleset when SKILL.md not found
     const fallbackBody =
-      'Puritanical: maximum-efficiency dev mode. Laconic prose. YAGNI-first code.\n\n' +
+      'Puritanical: maximum-efficiency dev mode. Plain, answer-first prose. YAGNI-first code.\n\n' +
       '## Persistence\n\n' +
       'ACTIVE EVERY RESPONSE. Off only: "stop puritanical" / "normal mode".\n\n' +
       '## Prose\n\n' +

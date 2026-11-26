@@ -20,7 +20,7 @@ const DEDUP_MIN = 2048;
 // would leave the fallback ignoring a user's sections.prose:false the moment
 // SKILL.md became unreadable — puritanical-activate.js's fallback is shaped the
 // same way for the same reason. The safety line stays outside both groups.
-const FALLBACK_BODY = `Puritanical: maximum-efficiency dev mode. Laconic prose. YAGNI-first code.
+const FALLBACK_BODY = `Puritanical: maximum-efficiency dev mode. Plain, answer-first prose. YAGNI-first code.
 
 ## Prose
 

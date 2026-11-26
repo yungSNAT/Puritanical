@@ -9,13 +9,13 @@ const path = require('path');
 const { getClaudeDir, safeWriteFlag, readFlag, resolveSections } = require('./puritanical-config');
 const { requestedMode } = require('./puritanical-mode');
 
-// Per-turn reinforcement clauses. `Code/commits/security: write normal.` is
+// Per-turn reinforcement clauses. `Commits, PRs and security warnings: project conventions, full detail.` is
 // the Boundaries carve-out (always-on in SKILL.md) and ships regardless of
 // `sections`; the prose/code clauses honor it the same way the SessionStart
 // ruleset does.
 const PROSE_CLAUSE = 'Prose: plain sentences, answer first, no preamble or recap. Keep facts and caveats.';
 const CODE_CLAUSE = 'Code: YAGNI ladder first (reuse → stdlib → native → dep → one line → min code).';
-const BOUNDARIES_CLAUSE = 'Code/commits/security: write normal.';
+const BOUNDARIES_CLAUSE = 'Commits, PRs and security warnings: project conventions, full detail.';
 
 function reinforcementLine(sections) {
   const prose = sections ? sections.prose !== false : true;

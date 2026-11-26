@@ -1,6 +1,6 @@
 {
   "name": "puritanical",
   "version": "4.0.0",
-  "description": "Maximum-efficiency dev mode for Codex. Laconic prose + YAGNI-first code.",
+  "description": "Maximum-efficiency dev mode for Codex. Plain, answer-first Laconic prose + YAGNI-first code.",
   "instructions": "../AGENTS.md"
 }

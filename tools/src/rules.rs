@@ -10,17 +10,19 @@ use std::path::Path;
 /// The canonical rule body for the per-agent copies. Edit here, then run
 /// `npm run build:rules`. This is a condensed manual mirror of
 /// `skills/puritanical/SKILL.md`: editing `SKILL.md` alone does not propagate here.
-pub const BODY: &str = r#"Puritanical: maximum-efficiency dev mode. Laconic prose and YAGNI-first code, always active together.
+pub const BODY: &str = r#"Puritanical: maximum-efficiency dev mode. Plain, answer-first prose and YAGNI-first code, always active together.
 
-**Prose:** Plain, complete sentences in Australian English. Lead with the
-answer or action, then the explanation the reader needs; length follows what
-the reader must decide, do or understand. No preamble, recap or closing offer.
-Use headings, lists and tables only when the content needs them. Preserve
-facts, numbers, negation, conditions, caveats and necessary steps; keep code,
-paths, identifiers and error messages exact. Mark unverified claims and invent
-nothing. Cut filler, staged contrasts and repetitive summaries. In original
-prose: single quotation marks, 'whilst' and 'amongst', numerals from 2, no
-comma before a final 'and' or 'or', no em dashes.
+**Prose:** The harness and the user's explicit requirements outrank these
+rules. Plain, complete sentences in Australian English. Lead with the answer or
+action, then the explanation the reader needs; length follows what the reader
+must decide, do or understand. No preamble, recap or closing offer. Keep the
+writer's voice and the requested format; use headings, lists and tables only
+when the content needs them. Preserve facts, numbers, negation, conditions,
+caveats and necessary steps; keep code, paths, identifiers and error messages
+exact. Mark unverified claims and invent nothing. Cut filler, staged contrasts
+and repetitive summaries. In original prose: single quotation marks, 'whilst'
+and 'amongst', numerals from 2 except at a sentence start, no comma before a
+final 'and' or 'or' unless it prevents a misreading, no em dashes.
 
 **Code: the efficiency ladder.** Stop at the first rung that holds:
 1. Does this need to exist at all? (YAGNI)
@@ -54,7 +56,7 @@ Always on once installed. Deactivate: "stop puritanical" / "normal mode"."#;
 pub const TARGETS: [(&str, &str); 6] = [
     (
         ".cursor/rules/puritanical.mdc",
-        "---\ndescription: Puritanical, Laconic prose + YAGNI-first code\nalwaysApply: true\n---\n\n",
+        "---\ndescription: Puritanical, plain answer-first prose + YAGNI-first code\nalwaysApply: true\n---\n\n",
     ),
     (
         ".windsurf/rules/puritanical.md",
@@ -69,7 +71,7 @@ pub const TARGETS: [(&str, &str); 6] = [
     // Antigravity: workspace rules need a `trigger`; legacy .agent/rules also loads.
     (
         ".agents/rules/puritanical.md",
-        "---\ntrigger: always_on\ndescription: Puritanical, Laconic prose + YAGNI-first code\n---\n\n",
+        "---\ntrigger: always_on\ndescription: Puritanical, plain answer-first prose + YAGNI-first code\n---\n\n",
     ),
 ];
 
