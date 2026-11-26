@@ -176,7 +176,7 @@ Puritanical borrows the best published token-saving techniques and implements th
 
 | technique | source | in Puritanical? |
 |---|---|---|
-| Prose compression persona | [caveman](https://github.com/JuliusBrussee/caveman) | ❌ Puritanical's prose rules started from it; [Laconic](https://github.com/yungSNAT/Laconic)'s plain, answer-first prose rules have replaced them |
+| Plain, answer-first prose rules | [Laconic](https://github.com/yungSNAT/Laconic) | ✅ Puritanical's prose section follows it |
 | YAGNI/lazy-code ruleset | [ponytail](https://github.com/dietrichgebert/ponytail) | ✅ Puritanical's code rules started from it |
 | Tool-output elision (head/tail) | [headroom](https://github.com/headroomlabs-ai/headroom)-style, proxy-free | ✅ hook, no proxy, works on subscription OAuth |
 | ANSI strip / log crush / dedup | headroom transforms | ✅ scrub + dedup tiers |
