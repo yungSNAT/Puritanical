@@ -86,11 +86,11 @@ test('activate emits the fallback ruleset and writes the active flag when SKILL.
   assert.equal(result.stderr, '');
   assert.ok(result.stdout.startsWith('PURITANICAL ACTIVE\n\n'));
   assert.ok(result.stdout.includes(
-    'Puritanical: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.'
+    'Puritanical: maximum-efficiency dev mode. Plain, answer-first prose. YAGNI-first code.'
   ));
   assert.ok(result.stdout.includes('## Persistence'));
   assert.ok(result.stdout.includes('## Prose'));
-  assert.ok(result.stdout.includes('Drop articles/filler/pleasantries/hedging.'));
+  assert.ok(result.stdout.includes('Plain sentences, answer first. No preamble or recap.'));
   assert.ok(result.stdout.includes('## Code'));
   assert.ok(result.stdout.includes('Ladder: YAGNI → reuse → stdlib → native'));
   assert.ok(result.stdout.includes('STATUSLINE SETUP NEEDED:'));

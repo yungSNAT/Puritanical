@@ -71,7 +71,7 @@ puritanical: tool-output savings
 
 In Claude Code the statusline badge carries the same number live: `[PURITANICAL] ⇣22k tok`. Pi shows it in the footer for the current session.
 
-This is the **input axis only**, and deliberately so. Chars elided have a real baseline, since the hook knows exactly what it cut. The output axis has none: there is no way to know what the model would have written without the ruleset, which is why that half is measured with A/B benchmark arms instead of a counter. A number that blended the two would be inventing the interesting half.
+This is the **input axis only**, and deliberately so. Chars elided have a real baseline, since the hook knows exactly what it cut. The output axis has none: there is no way to know what the model would have written without the ruleset, so no counter can measure it. Benchmark arms measured it for Chisle's earlier prose rules; the current prose rules have not been measured. A number that blended the two would be inventing the interesting half.
 
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 
@@ -132,9 +132,9 @@ export PURITANICAL_DEFAULT_MODE=off
 Resolution: env var → config file → `on`. Valid: `off`, `on`.
 
 **Output styles are detected automatically.** Claude Code's output-style mechanism also governs
-prose structure, so an active style and Puritanical's prose section give directly conflicting
-instructions — the style mandates tables and bullets for comparisons, Puritanical's prose section forbids
-manufactured tables and bullets the question didn't ask for. Puritanical now reads the active style and
+prose structure and tone, so an active style and Puritanical's prose section give conflicting
+instructions: the style can mandate tables and bullets for comparisons, whilst Puritanical's prose section
+asks for plain, answer-first sentences and structure only where the content needs it. Puritanical now reads the active style and
 steps its prose rules aside on its own. Nothing to configure: run `/output-style Explanatory` and the
 prose section stops shipping; switch back to `default` and it returns.
 
@@ -176,7 +176,6 @@ Puritanical borrows the best published token-saving techniques and implements th
 
 | technique | source | in Puritanical? |
 |---|---|---|
-| Prose compression persona | [caveman](https://github.com/JuliusBrussee/caveman) | ✅ Puritanical's prose rules started from it |
 | YAGNI/lazy-code ruleset | [ponytail](https://github.com/dietrichgebert/ponytail) | ✅ Puritanical's code rules started from it |
 | Tool-output elision (head/tail) | [headroom](https://github.com/headroomlabs-ai/headroom)-style, proxy-free | ✅ hook, no proxy, works on subscription OAuth |
 | ANSI strip / log crush / dedup | headroom transforms | ✅ scrub + dedup tiers |
@@ -184,12 +183,14 @@ Puritanical borrows the best published token-saving techniques and implements th
 | MCP/codebase-graph indexing | context-mode, [token-optimizer-mcp](https://github.com/ooples/token-optimizer-mcp) | ❌ stacks, orthogonal layer |
 | CLAUDE.md dieting | [community guides](https://www.firecrawl.dev/blog/claude-code-token-efficiency) | ✅ `/puritanical-audit` flags bloated docs/config prose |
 
+The prose rules follow [Laconic](https://github.com/yungSNAT/Laconic)'s plain prose rules for clarity; their effect on tokens has not been measured.
+
 ## FAQ
 
 **Doesn't injecting a persona every turn cost tokens?**
 Claude Code uses a ruleset at session start (~900 tokens) plus a ~50-token reminder per turn. Pi injects one persistent rules message only when project `AGENTS.md` does not already provide it; resume/reload does not duplicate it, and compaction restores it only if removed.
 
-Worth reading the dissent before you take that on faith: [@enc0ded](https://github.com/enc0ded) measured 173 of their own sessions ([#2](https://github.com/JayPokale/Chisle/issues/2)) and found the injection overhead roughly cancelling the compressor's savings, because the ruleset was being re-sent on every resume and clear, not just at startup. That re-injection is fixed, which removes most of the overhead they measured, but their wider point stands: prose is only ~25% of what the model emits, so the ceiling on the output axis is lower than the headline suggests, and on a one-line throwaway prompt the overhead still exceeds the saving.
+Worth reading the dissent before you take that on faith: [@enc0ded](https://github.com/enc0ded) measured 173 of their own sessions ([#2](https://github.com/JayPokale/Chisle/issues/2)) and found the injection overhead roughly cancelling the compressor's savings, because the ruleset was being re-sent on every resume and clear, not just at startup. That re-injection is fixed, which removes most of the overhead they measured. Their figures are for Chisle's earlier prose rules; nothing has measured the current ones, and on a one-line throwaway prompt the injected ruleset can still cost more than it saves.
 
 **Will it golf my code into clever one-liners?**
 No. Boring over clever. Deletion beats addition; obfuscation isn't deletion.

@@ -5,8 +5,8 @@ metadata:
 description: >
   One-shot efficiency audit of a file, diff, or whole repo across BOTH axes at
   once: over-engineered code (reinvented stdlib, needless abstractions,
-  speculative config) AND bloated prose (verbose comments, padded docstrings,
-  redundant doc sections). Neither a pure code-minimizer nor a pure prose
+  speculative config) AND bloated prose (preamble, recaps, padding, verbose
+  comments, redundant doc sections). Neither a pure code-minimizer nor a pure prose
   compressor does both in one pass. That's the point. Ranked report, biggest
   saving first; changes nothing. Use when the user says "puritanical audit", "/puritanical-audit",
   "audit this for bloat", "what can I cut", "review this PR for over-engineering
@@ -34,10 +34,11 @@ both axes. One-shot. Read-only: never edit, never write a flag, never apply fixe
 - Speculative "for later" scaffolding with no current caller
 - Verbose code where a native platform feature (CSS, DB constraint, `<input type>`) does it
 
-**Prose (the compression axis), the half a code-only auditor misses:**
+**Prose (judged by Laconic's rules), the half a code-only auditor misses:**
 - Comments that restate the code (`i += 1  // increment i`)
-- Docstrings/READMEs padded with filler, hedging, ceremony, or duplicated content
-- Multi-paragraph explanations where one tight sentence carries the meaning
+- Preamble, recaps, closing offers and repeated content in docs, docstrings and READMEs
+- Filler, hedging the evidence does not need, puffery and other AI writing patterns
+- Multi-paragraph explanations where one plain sentence carries the meaning
 - Decorative tables/emoji/headings that add tokens, not information
 - Dead prose: TODO graveyards, stale "see also" links, obsolete sections
 
@@ -45,7 +46,9 @@ both axes. One-shot. Read-only: never edit, never write a flag, never apply fixe
 
 Input validation at trust boundaries, error handling that prevents data loss,
 security, accessibility, deliberate `// puritanical:` / `// ponytail:` shortcuts already
-documented, or domain comments that explain *why* (not *what*).
+documented, or domain comments that explain *why* (not *what*). Complete
+sentences, articles and needed caveats are not bloat: the lean replacement is
+plain, complete prose.
 
 ## Output
 

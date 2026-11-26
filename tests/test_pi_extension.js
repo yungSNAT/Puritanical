@@ -177,8 +177,16 @@ test('injects rules once, skips an existing AGENTS.md ruleset, and reinjects aft
   await start(covered);
   assert.equal(await covered.handlers.get('before_agent_start')({
     ...event,
-    systemPromptOptions: { contextFiles: [{ content: '# Puritanical\n\n## Prose: zero fluff\n\n## Code: the efficiency ladder' }] },
+    systemPromptOptions: { contextFiles: [{ content: '# Puritanical\n\n## Prose: Laconic\n\n## Code: the efficiency ladder' }] },
   }, covered.ctx), undefined);
+
+  // An AGENTS.md copied before the Laconic prose rules still counts.
+  const legacy = makeHarness();
+  await start(legacy);
+  assert.equal(await legacy.handlers.get('before_agent_start')({
+    ...event,
+    systemPromptOptions: { contextFiles: [{ content: '# Puritanical\n\n## Prose: zero fluff\n\n## Code: the efficiency ladder' }] },
+  }, legacy.ctx), undefined);
 });
 
 test('OMP system prompt segments receive rules as a system prompt instead of a trailing message', async () => {

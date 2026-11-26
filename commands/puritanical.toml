@@ -4,4 +4,4 @@
 
 [command]
 name = "puritanical"
-description = "Activate puritanical: zero-fluff prose + YAGNI ladder code decisions. /puritanical off to stop."
+description = "Activate puritanical: plain, answer-first Laconic prose + YAGNI ladder code decisions. /puritanical off to stop."

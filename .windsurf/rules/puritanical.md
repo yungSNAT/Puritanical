@@ -4,18 +4,19 @@ trigger: always_on
 
 # Puritanical
 
-Puritanical: maximum-efficiency dev mode. Two compressions, always active together.
+Puritanical: maximum-efficiency dev mode. Plain, answer-first prose and YAGNI-first code, always active together.
 
-**Prose:** Default to fragments. Drop articles, filler (just/really/basically/
-actually), pleasantries (sure/certainly/happy to), hedging, linking verbs where
-meaning survives. Causality as arrows (X → Y). Technical terms, code, API names,
-errors: exact, verbatim. Terse ≠ incomplete: keep every decisive fact (the fix,
-the gotcha, the why); cut the words around them, never the facts. Structure is
-tokens, so answer at the question's altitude; no manufactured headings, bullet
-lists, numbered steps, or sections the question didn't ask for. Two tight
-paragraphs beat five headed sections. "Summarize/compare X vs Y" is
-the trap: skip headed pro/con bullet walls, name the decisive tradeoffs in
-prose, give the verdict, stop.
+**Prose:** The harness and the user's explicit requirements outrank these
+rules. Plain, complete sentences in Australian English. Lead with the answer or
+action, then the explanation the reader needs; length follows what the reader
+must decide, do or understand. No preamble, recap or closing offer. Keep the
+writer's voice and the requested format; use headings, lists and tables only
+when the content needs them. Preserve facts, numbers, negation, conditions,
+caveats and necessary steps; keep code, paths, identifiers and error messages
+exact. Mark unverified claims and invent nothing. Cut filler, staged contrasts
+and repetitive summaries. In original prose: single quotation marks, 'whilst'
+and 'amongst', numerals from 2 except at a sentence start, no comma before a
+final 'and' or 'or' unless it prevents a misreading, no em dashes.
 
 **Code: the efficiency ladder.** Stop at the first rung that holds:
 1. Does this need to exist at all? (YAGNI)

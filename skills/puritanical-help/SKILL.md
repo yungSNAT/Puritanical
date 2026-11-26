@@ -10,7 +10,7 @@ description: >
 
 # Puritanical quick reference
 
-**What it is:** maximum-efficiency dev mode. Zero-fluff prose + YAGNI-first code, always on together.
+**What it is:** maximum-efficiency dev mode. Plain, answer-first Laconic prose + YAGNI-first code, always on together.
 
 ## Commands
 

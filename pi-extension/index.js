@@ -20,11 +20,11 @@ const DEDUP_MIN = 2048;
 // would leave the fallback ignoring a user's sections.prose:false the moment
 // SKILL.md became unreadable — puritanical-activate.js's fallback is shaped the
 // same way for the same reason. The safety line stays outside both groups.
-const FALLBACK_BODY = `Puritanical: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.
+const FALLBACK_BODY = `Puritanical: maximum-efficiency dev mode. Plain, answer-first prose. YAGNI-first code.
 
 ## Prose
 
-Drop articles, filler, pleasantries, and hedging. Fragments OK; technical terms exact.
+Plain sentences, answer first. No preamble or recap. Keep facts, caveats and exact literals.
 
 ## Code
 
@@ -84,7 +84,8 @@ function promptHasRules(event) {
     // group, but never the header or "## Boundaries".
     if (/^PURITANICAL ACTIVE\s*$/m.test(text) && text.includes('## Boundaries')) return true;
     return /^# Puritanical\s*$/m.test(text) &&
-      ((text.includes('## Prose: zero fluff') && text.includes('## Code: the efficiency ladder')) ||
+      (((text.includes('## Prose: Laconic') || text.includes('## Prose: zero fluff')) &&
+        text.includes('## Code: the efficiency ladder')) ||
         (text.includes('## Persistence') && text.includes('## Code:')));
   };
   const systemPrompt = Array.isArray(event.systemPrompt)

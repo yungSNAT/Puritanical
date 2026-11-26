@@ -90,7 +90,7 @@ test('REGRESSION: "puritanical please stop the server" stays active', () => {
 // ── sections config: per-turn reinforcement line ─────────────────────────────
 // `sections.prose`/`sections.code` in config.json must gate the same clauses
 // in the reinforcement line as the SessionStart ruleset. The Boundaries
-// carve-out ("Code/commits/security: write normal.") is always-on and ships
+// carve-out ("Commits, PRs and security warnings: project conventions, full detail.") is always-on and ships
 // regardless.
 
 function runTrackerOutput(prompt, { preActive = 'on', sectionsValue } = {}) {
@@ -123,9 +123,9 @@ test('reinforcement: no config → unchanged (byte-identical to prior hardcoded 
   assert.equal(
     line,
     'PURITANICAL ACTIVE. ' +
-      'Prose: drop articles/filler/pleasantries/hedging. Fragments OK. ' +
+      'Prose: plain sentences, answer first, no preamble or recap. Keep facts and caveats. ' +
       'Code: YAGNI ladder first (reuse → stdlib → native → dep → one line → min code). ' +
-      'Code/commits/security: write normal.'
+      'Commits, PRs and security warnings: project conventions, full detail.'
   );
 });
 
@@ -133,21 +133,21 @@ test('reinforcement: sections.prose false drops the prose clause, keeps code + b
   const line = runTrackerOutput('hello', { sectionsValue: { prose: false } });
   assert.ok(!line.includes('Prose:'), line);
   assert.ok(line.includes('Code: YAGNI ladder'), line);
-  assert.ok(line.includes('Code/commits/security: write normal.'), line);
+  assert.ok(line.includes('Commits, PRs and security warnings: project conventions, full detail.'), line);
 });
 
 test('reinforcement: sections.code false drops the code clause, keeps prose + boundaries', () => {
   const line = runTrackerOutput('hello', { sectionsValue: { code: false } });
   assert.ok(!line.includes('Code: YAGNI ladder'), line);
   assert.ok(line.includes('Prose:'), line);
-  assert.ok(line.includes('Code/commits/security: write normal.'), line);
+  assert.ok(line.includes('Commits, PRs and security warnings: project conventions, full detail.'), line);
 });
 
 test('reinforcement: both false still ships the always-on Boundaries clause', () => {
   const line = runTrackerOutput('hello', { sectionsValue: { prose: false, code: false } });
   assert.ok(!line.includes('Prose:'), line);
   assert.ok(!line.includes('Code: YAGNI ladder'), line);
-  assert.equal(line, 'PURITANICAL ACTIVE. Code/commits/security: write normal.');
+  assert.equal(line, 'PURITANICAL ACTIVE. Commits, PRs and security warnings: project conventions, full detail.');
 });
 
 test('reinforcement: malformed sections value falls back to enabled, no throw', () => {
