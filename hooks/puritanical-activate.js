@@ -129,11 +129,11 @@ function buildActivationOutput(claudeDir, settingsPath) {
   } else {
     // Fallback ruleset when SKILL.md not found
     const fallbackBody =
-      'Puritanical: maximum-efficiency dev mode. Zero-fluff prose. YAGNI-first code.\n\n' +
+      'Puritanical: maximum-efficiency dev mode. Laconic prose. YAGNI-first code.\n\n' +
       '## Persistence\n\n' +
       'ACTIVE EVERY RESPONSE. Off only: "stop puritanical" / "normal mode".\n\n' +
       '## Prose\n\n' +
-      'Drop articles/filler/pleasantries/hedging. Fragments OK. Technical terms exact.\n\n' +
+      'Plain sentences, answer first. No preamble or recap. Keep facts, caveats and exact literals.\n\n' +
       '## Code\n\n' +
       'Ladder: YAGNI → reuse → stdlib → native → installed dep → one line → min code.\n' +
       'No unrequested abstractions. Deletion over addition. Shortest diff wins. Check the reported and related cases. Leave correct code alone. Preserve caller contracts: report skips in best-effort imports; reject invalid atomic batches before mutation.';

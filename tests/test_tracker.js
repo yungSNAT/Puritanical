@@ -123,7 +123,7 @@ test('reinforcement: no config → unchanged (byte-identical to prior hardcoded 
   assert.equal(
     line,
     'PURITANICAL ACTIVE. ' +
-      'Prose: drop articles/filler/pleasantries/hedging. Fragments OK. ' +
+      'Prose: plain sentences, answer first, no preamble or recap. Keep facts and caveats. ' +
       'Code: YAGNI ladder first (reuse → stdlib → native → dep → one line → min code). ' +
       'Code/commits/security: write normal.'
   );

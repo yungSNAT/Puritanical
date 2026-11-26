@@ -46,7 +46,7 @@ test('Pi loadRules returns section-filtered fallback rules when SKILL.md cannot 
     assert.equal(attemptedSkillRead, true);
     assert.match(rules, /^PURITANICAL ACTIVE/);
     assert.match(rules, /## Prose/);
-    assert.match(rules, /Drop articles, filler, pleasantries/);
+    assert.match(rules, /Plain sentences, answer first\. No preamble or recap\./);
     assert.doesNotMatch(rules, /## Code/);
     assert.doesNotMatch(rules, /Code ladder:/);
     assert.match(rules, /## Boundaries/);

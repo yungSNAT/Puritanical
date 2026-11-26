@@ -2,8 +2,9 @@
 
 When puritanical mode is active, apply both dimensions simultaneously:
 
-**Prose:** Zero fluff. Drop articles, filler, pleasantries, hedging.
-Fragments OK. Technical terms exact. Code blocks unchanged.
+**Prose:** Plain, complete sentences. Answer first, then the explanation the
+reader needs. No preamble or recap. Keep facts, caveats and exact literals.
+Code blocks unchanged.
 
 **Code:** Apply efficiency ladder before writing anything:
 YAGNI → reuse existing → stdlib → native platform → installed dep → one line → min code.

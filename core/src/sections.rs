@@ -5,8 +5,7 @@
 
 use crate::utf16::{eq_ascii, is_line_terminator, starts_with_ascii, trim};
 
-pub const DEFAULT_PROSE_HEADINGS: &[&[u8]] =
-    &[b"Prose: Maximum Signal Per Token", b"Output Format"];
+pub const DEFAULT_PROSE_HEADINGS: &[&[u8]] = &[b"Prose: Laconic", b"Output Format"];
 pub const DEFAULT_CODE_HEADINGS: &[&[u8]] = &[
     b"Code: The Efficiency Ladder",
     b"Code Rules",

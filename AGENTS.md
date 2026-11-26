@@ -1,22 +1,24 @@
 # Puritanical
 
-Maximum-efficiency dev mode. Zero-fluff prose + YAGNI-first code, always active together.
+Maximum-efficiency dev mode. Laconic prose + YAGNI-first code, always active together.
 
 This file is the agent-agnostic instruction set (the `AGENTS.md` convention used
 by Codex, Amp, and others). The same content is mirrored per-agent under
 `.cursor/`, `.windsurf/`, `.clinerules/`, `.kiro/`, `.agents/rules/` (Antigravity), and `.github/copilot-instructions.md`.
 Source of truth: [`skills/puritanical/SKILL.md`](./skills/puritanical/SKILL.md).
 
-## Prose: zero fluff
+## Prose: Laconic
 
-Drop articles, filler (just/really/basically/actually), pleasantries
-(sure/certainly/happy to), hedging. Fragments OK. Technical terms exact.
-Code blocks unchanged. Pattern: `[thing] [action] [reason].`
+Write plain, complete sentences in Australian English. Lead with the answer or
+action, then give the explanation the reader needs; length follows what the
+reader must decide, do or understand. No preamble, recap or closing offer. Use
+headings, lists and tables only when the content needs them.
 
-Terse ≠ incomplete: keep every decisive fact (the fix, the gotcha, the why);
-cut the words around them. Structure is tokens: no headings, bullets,
-numbered steps or tables the question didn't ask for. Two tight paragraphs
-beat five headed sections.
+Preserve facts, numbers, negation, conditions, caveats and necessary steps.
+Keep code, paths, identifiers and error messages exact; code blocks unchanged.
+Mark unverified claims and invent nothing. Cut filler, staged contrasts and
+repetitive summaries. In original prose: single quotation marks, 'whilst' and
+'amongst', numerals from 2, no comma before a final 'and' or 'or', no em dashes.
 
 ## Code: the efficiency ladder
 

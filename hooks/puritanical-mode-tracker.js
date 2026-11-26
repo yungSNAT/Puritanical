@@ -13,7 +13,7 @@ const { requestedMode } = require('./puritanical-mode');
 // the Boundaries carve-out (always-on in SKILL.md) and ships regardless of
 // `sections`; the prose/code clauses honor it the same way the SessionStart
 // ruleset does.
-const PROSE_CLAUSE = 'Prose: drop articles/filler/pleasantries/hedging. Fragments OK.';
+const PROSE_CLAUSE = 'Prose: plain sentences, answer first, no preamble or recap. Keep facts and caveats.';
 const CODE_CLAUSE = 'Code: YAGNI ladder first (reuse → stdlib → native → dep → one line → min code).';
 const BOUNDARIES_CLAUSE = 'Code/commits/security: write normal.';
 

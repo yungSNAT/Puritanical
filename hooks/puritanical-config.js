@@ -199,7 +199,7 @@ function getDefaultMode() {
 
 // Headings from skills/puritanical/SKILL.md, grouped by section.
 const PROSE_HEADINGS = [
-  'Prose: Maximum Signal Per Token',
+  'Prose: Laconic',
   'Output Format',
 ];
 const CODE_HEADINGS = [
