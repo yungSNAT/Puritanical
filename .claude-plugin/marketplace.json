@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "puritanical",
-  "description": "Maximum-efficiency dev mode for Claude Code. Zero-fluff prose and YAGNI-first code decisions, always active simultaneously.",
+  "description": "Maximum-efficiency dev mode for Claude Code. Plain, answer-first Laconic prose and YAGNI-first code decisions, always active together.",
   "owner": {
     "name": "yungSNAT",
     "url": "https://github.com/yungSNAT"

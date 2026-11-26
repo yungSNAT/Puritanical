@@ -8,6 +8,11 @@ own licence, as stated below.
 Versions made available before this change remain available under the
 licence they were released with, the MIT License.
 
+The prose rules (the 'Prose: Laconic' section of skills/puritanical/SKILL.md
+and the rule copies, fallbacks and reminder made from it) adapt Laconic,
+https://github.com/yungSNAT/Laconic by Ryan Duguid
+(https://github.com/ryanduguid), Apache-2.0.
+
 Puritanical is a fork of Chisle (https://github.com/JayPokale/Chisle). Chisle's
 code, and the portions of Puritanical that derive from it, remain under the
 MIT License:

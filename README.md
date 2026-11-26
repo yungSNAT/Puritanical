@@ -45,8 +45,9 @@ Use `/puritanical off` to pause the Claude Code plugin and `/puritanical` to res
 2. Reuse existing code, the standard library, platform features or installed dependencies where they meet the request. Write new code when the simpler options fall short.
 3. Follow the caller’s error policy. A best-effort CSV import can keep valid rows and report skips. An atomic inventory update must reject an invalid batch before changing any stock.
 4. Keep input validation, security, accessibility and error handling that prevents data loss. Keep the explanation short enough to read and complete enough to act on.
+5. Write in plain, answer-first Australian English that follows [Laconic](https://github.com/yungSNAT/Laconic)'s prose rules: no preamble or recap, and every fact, caveat and exact literal kept.
 
-[Full coding rules](skills/puritanical/SKILL.md)
+[Full rules](skills/puritanical/SKILL.md)
 
 ## Development
 
@@ -66,7 +67,7 @@ The test suite runs on Node.js 18, 20 and 22, and the [Rust workflow](.github/wo
 
 ## Credits
 
-Ryan Duguid maintains Puritanical. Jay Pokale wrote the upstream plugin. The original Puritanical banner uses Cascadia Mono and Besley lettering. [Upstream and third-party credits](NOTICE)
+Ryan Duguid maintains Puritanical. Jay Pokale wrote the upstream plugin. The prose rules adapt [Laconic](https://github.com/yungSNAT/Laconic), also by Ryan Duguid, under Apache-2.0. The original Puritanical banner uses Cascadia Mono and Besley lettering. [Upstream and third-party credits](NOTICE)
 
 ## Licence
 

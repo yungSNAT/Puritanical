@@ -3,7 +3,9 @@
 Every number below is recomputed from the committed `raw*/` cells by the
 scripts in this directory; no hand-copied figures. Full tables, intervals and
 reading notes: [docs/benchmarks.md](../docs/benchmarks.md). Earlier rounds
-(June–October 2026) are retired and live in the git history.
+(June–October 2026) are retired and live in the git history. The runs here
+measured Chisle's terse prose rules; Puritanical now uses Laconic's prose
+rules, which no run here has measured.
 
 ## Results at a glance (Chisle 3.9, November 2026)
 
