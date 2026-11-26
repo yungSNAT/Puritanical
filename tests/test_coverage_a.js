@@ -335,6 +335,23 @@ test('Codex installation separates an unterminated user file from the fenced rul
   assert.match(written, /<!-- puritanical-end -->\n$/);
 });
 
+test('fenced installation preserves an existing file when its read fails', (t) => {
+  const fs = require('node:fs');
+  const { writeFencedRuleset } = require('../bin/lib/fence');
+  const target = under(tempDir(t), 'AGENTS.md');
+  const original = 'my existing instructions\n';
+  writeText(target, original);
+  const read = fs.readFileSync;
+  const denied = Object.assign(new Error('read denied'), { code: 'EACCES' });
+  const patched = t.mock.method(fs, 'readFileSync', function (file, ...args) {
+    if (file === target) throw denied;
+    return read.call(this, file, ...args);
+  });
+  assert.throws(() => writeFencedRuleset(target, {}, () => {}), (err) => err === denied);
+  patched.mock.restore();
+  assert.equal(readText(target), original);
+});
+
 test('Copilot CLI dry-run describes all files and writes nothing', (t) => {
   const root = tempDir(t);
   const home = under(root, 'home');
