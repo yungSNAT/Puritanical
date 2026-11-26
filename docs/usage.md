@@ -190,7 +190,7 @@ The prose rules follow [Laconic](https://github.com/yungSNAT/Laconic)'s plain pr
 **Doesn't injecting a persona every turn cost tokens?**
 Claude Code uses a ruleset at session start (~900 tokens) plus a ~50-token reminder per turn. Pi injects one persistent rules message only when project `AGENTS.md` does not already provide it; resume/reload does not duplicate it, and compaction restores it only if removed.
 
-Worth reading the dissent before you take that on faith: [@enc0ded](https://github.com/enc0ded) measured 173 of their own sessions ([#2](https://github.com/JayPokale/Chisle/issues/2)) and found the injection overhead roughly cancelling the compressor's savings, because the ruleset was being re-sent on every resume and clear, not just at startup. That re-injection is fixed, which removes most of the overhead they measured, but on a one-line throwaway prompt the overhead still exceeds the saving.
+Worth reading the dissent before you take that on faith: [@enc0ded](https://github.com/enc0ded) measured 173 of their own sessions ([#2](https://github.com/JayPokale/Chisle/issues/2)) and found the injection overhead roughly cancelling the compressor's savings, because the ruleset was being re-sent on every resume and clear, not just at startup. That re-injection is fixed, which removes most of the overhead they measured. Their figures are for Chisle's earlier prose rules; nothing has measured the current ones, and on a one-line throwaway prompt the injected ruleset can still cost more than it saves.
 
 **Will it golf my code into clever one-liners?**
 No. Boring over clever. Deletion beats addition; obfuscation isn't deletion.

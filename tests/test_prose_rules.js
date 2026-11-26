@@ -59,7 +59,15 @@ for (const parts of [...RULE_FILES, ...OTHER_SOURCES]) {
   });
 }
 
-for (const parts of RULE_FILES) {
+// The fallback rulesets and the per-turn reminder must say the same thing as the
+// rule files, so a later sync that misses one of them fails here.
+const FALLBACK_SOURCES = [
+  ['hooks', 'puritanical-activate.js'],
+  ['pi-extension', 'index.js'],
+  ['hooks', 'puritanical-mode-tracker.js'],
+];
+
+for (const parts of [...RULE_FILES, ...FALLBACK_SOURCES]) {
   test(`${parts.join('/')} carries the Laconic prose rules`, () => {
     const text = read(parts);
     assert.match(text, /answer first|Lead with the\s+answer/i);
