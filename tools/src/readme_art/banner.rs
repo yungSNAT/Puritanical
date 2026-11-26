@@ -8,13 +8,15 @@ use super::{
 };
 
 // ── Banner: a wordy answer is chiselled down to the line that matters ─────────
-const VERBOSE: &str = "Great question! Deep-copying objects in JavaScript can be surprisingly tricky. You could write a recursive helper, or install lodash and use cloneDeep, but honestly the simplest modern approach is structuredClone(config), which is built in, so there's no dependency to install. Hope this helps! Let me know if you have any other questions.";
-const KEEP: [&str; 5] = [
-    "structuredClone(config),",
-    "built",
-    "in,",
+const VERBOSE: &str = "Great question! Deep-copying objects in JavaScript can be surprisingly tricky. You could write a recursive helper, or install lodash and use cloneDeep, but honestly the simplest modern approach? Use structuredClone(config): it is built in, so it needs no dependency. Hope this helps! Let me know if you have any other questions.";
+// The kept words read as one plain sentence: the fact and its reason.
+const KEEP: [&str; 6] = [
+    "Use",
+    "structuredClone(config):",
+    "it",
+    "needs",
     "no",
-    "dependency",
+    "dependency.",
 ];
 
 struct Placed<'a> {
@@ -81,7 +83,7 @@ pub(super) fn banner(t: &Theme, l: &Lang) -> String {
     let words: Vec<&str> = VERBOSE.split(' ').collect();
     banner_terminal(&mut o, t, l, &words);
     let label = format!(
-        "Puritanical: fewer tokens in, fewer tokens out, same answers. Animated: a {}-word AI answer is chiselled down to \"structuredClone(config), built in, no dependency\".",
+        "Puritanical: plain sentences, answer first. Animated: a {}-word AI answer loses its opener and closer and becomes one plain sentence, \"Use structuredClone(config): it needs no dependency.\"",
         words.len()
     );
     svg(t, w, h, &label, &o, &defs)

@@ -13,10 +13,10 @@ fn en_hit(k: usize, a: &str) -> String {
 
 pub(super) const EN: Lang = Lang {
     pill: "Claude Code plugin · 13 agents · 0 deps",
-    tag1: "Fewer tokens in. Fewer tokens out.",
-    tag2: "Same answers.",
+    tag1: "Plain sentences, answer first.",
+    tag2: "The smallest correct change.",
     words: en_words,
-    same: "✓ same answer",
+    same: "✓ fact and reason kept",
     stats_title: "Chisle vs the same model with no ruleset",
     tiles: [
         ["billed output tokens", "Sonnet 5.5: 53% of bare"],
