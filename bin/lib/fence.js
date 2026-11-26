@@ -91,7 +91,9 @@ function writeFencedRuleset(target, opts, note) {
   const block = FENCE_BEGIN + '\n' + raw.trimEnd() + '\n' + FENCE_END + '\n';
   mkdirp(path.dirname(target));
   let found = '';
-  try { found = readText(target); } catch {}
+  try { found = readText(target); } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
   const existing = withoutOldFence(found);
   const { b, e, end, old } = fenceSpan(existing);
   if (b === -1) {
