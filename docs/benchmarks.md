@@ -1,6 +1,6 @@
 # Benchmarks
 
-Every published result, in full. Each figure is recomputed from the committed raw cells by the scripts named beside it; nothing is estimated except where a section says "simulated". Earlier rounds (June–October 2026, rulesets up to v3.8) are retired; they stay in the git history. The runs on this page measured Chisle's terse prose rules; Puritanical now uses Laconic's prose rules, which no run here has measured.
+Every published result, in full. Each figure is recomputed from the committed raw cells by the scripts named beside it; nothing is estimated except where a section says "simulated". Earlier rounds (June–October 2026, rulesets up to v3.8) are retired; they stay in the git history. The ruleset runs on this page measured Chisle's terse prose rules; Puritanical now uses Laconic's prose rules, which no run here has measured.
 
 ## Chisle 3.14 (2026-11-19)
 

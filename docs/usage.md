@@ -71,7 +71,7 @@ puritanical: tool-output savings
 
 In Claude Code the statusline badge carries the same number live: `[PURITANICAL] ⇣22k tok`. Pi shows it in the footer for the current session.
 
-This is the **input axis only**, and deliberately so. Chars elided have a real baseline, since the hook knows exactly what it cut. The output axis has none: there is no way to know what the model would have written without the ruleset, which is why that half is measured with A/B benchmark arms instead of a counter. A number that blended the two would be inventing the interesting half.
+This is the **input axis only**, and deliberately so. Chars elided have a real baseline, since the hook knows exactly what it cut. The output axis has none: there is no way to know what the model would have written without the ruleset, so no counter can measure it. Benchmark arms measured it for Chisle's earlier prose rules; the current prose rules have not been measured. A number that blended the two would be inventing the interesting half.
 
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 
@@ -176,13 +176,14 @@ Puritanical borrows the best published token-saving techniques and implements th
 
 | technique | source | in Puritanical? |
 |---|---|---|
-| Plain, answer-first prose rules | [Laconic](https://github.com/yungSNAT/Laconic) | ✅ Puritanical's prose section follows it |
 | YAGNI/lazy-code ruleset | [ponytail](https://github.com/dietrichgebert/ponytail) | ✅ Puritanical's code rules started from it |
 | Tool-output elision (head/tail) | [headroom](https://github.com/headroomlabs-ai/headroom)-style, proxy-free | ✅ hook, no proxy, works on subscription OAuth |
 | ANSI strip / log crush / dedup | headroom transforms | ✅ scrub + dedup tiers |
 | Command-aware output filters | [RTK](https://github.com/rtk-ai/rtk)-style ([writeup](https://andrewpatterson.dev/posts/token-savings-rtk-headroom/)) | ✅ follows RTK's design (command rewriting, output shapes) in the same hook, no binary, any OS: git status/log/show/diff/branch, `ls -l`, `wc`, `grep -rn`, passing tests, install noise; on Claude Code a `PreToolUse` wrapper filters failed test/build runs too; skips commands already run through `rtk` |
 | MCP/codebase-graph indexing | context-mode, [token-optimizer-mcp](https://github.com/ooples/token-optimizer-mcp) | ❌ stacks, orthogonal layer |
 | CLAUDE.md dieting | [community guides](https://www.firecrawl.dev/blog/claude-code-token-efficiency) | ✅ `/puritanical-audit` flags bloated docs/config prose |
+
+The prose rules follow [Laconic](https://github.com/yungSNAT/Laconic)'s plain prose rules for clarity; their effect on tokens has not been measured.
 
 ## FAQ
 

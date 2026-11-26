@@ -39,6 +39,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+The prose rules adapted from Laconic may carry portions of the MIT-licensed
+works Laconic's compact prose rule draws on: i-have-adhd
+(https://github.com/ayghri/i-have-adhd), No AI Slop and Stop Slop. Their
+notices, under the MIT permission notice above:
+
+Copyright (c) 2026 Ayoub Ghriss
+Copyright (c) 2026 Peter Yang
+Copyright (c) 2025 Hardik Pandya
+
 Chisle's NOTICE follows unchanged; its 'LICENSE' is the MIT License above.
 
 Chisle
