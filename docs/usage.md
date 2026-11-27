@@ -102,7 +102,7 @@ Sizes are bytes or characters, never estimated tokens. Every input is optional, 
 { "mcpServers": { "puritanical": { "command": "puritanical-tools", "args": ["mcp"] } } }
 ```
 
-Paths are relative to the directory the server starts in: an absolute path or one containing `..` is refused before any lookup, and a path that resolves outside the directory through a symlink is refused. These checks guard against the client's arguments, not against another local process that swaps a link in the directory between the check and the read. A file that is not UTF-8 text is refused. A message over 1 MiB and a file over 16 MiB are refused. No tool writes a file or starts a process.
+Paths are relative to the directory the server starts in: an absolute path or one containing `..` is refused before any lookup, and a path through a symbolic link or junction is refused before the link is followed, wherever it points. These checks guard against the client's arguments, not against another local process that swaps in a link between the check and the read. A file that is not UTF-8 text is refused. A message over 1 MiB and a file over 16 MiB are refused. No tool writes a file or starts a process.
 
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 

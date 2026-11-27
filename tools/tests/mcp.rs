@@ -263,11 +263,57 @@ fn safety_no_path_outside_the_working_root() {
         assert!(err);
         assert_eq!(text, format!("{unc}: outside the working root"));
     }
+}
+
+/// A symbolic link or junction is refused before it is followed, wherever it
+/// points: following one that names a UNC path would contact that host.
+#[test]
+fn safety_links_are_refused_before_they_are_followed() {
+    let outer = root();
+    let inner = outer.path().join("work");
+    let sub = inner.join("sub");
+    std::fs::create_dir_all(&sub).expect("dir");
+    std::fs::write(sub.join("a.txt"), "src/a.rs:1  [code]  x\n").expect("write");
+    std::fs::write(outer.path().join("secret.txt"), "src/a.rs:1  [code]  x\n").expect("write");
+    let (text, err) = call(&inner, "audit_findings", &json!({"path": "sub/a.txt"}));
+    assert!(!err, "{text}");
     #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink(&secret, inner.join("link.txt")).expect("symlink");
-        let (text, err) = call(&inner, "audit_findings", &json!({"path": "link.txt"}));
-        assert!(err && text.ends_with("outside the working root"), "{text}");
+    let paths = {
+        let link = |target: &Path, name: &str| {
+            std::os::unix::fs::symlink(target, inner.join(name)).expect("symlink");
+        };
+        link(&outer.path().join("secret.txt"), "out.txt");
+        link(&sub.join("a.txt"), "in.txt");
+        link(Path::new("/puritanical-mcp-missing/a.txt"), "gone.txt");
+        link(outer.path(), "outdir");
+        link(&sub, "indir");
+        [
+            "out.txt",
+            "in.txt",
+            "gone.txt",
+            "outdir/secret.txt",
+            "indir/a.txt",
+        ]
+    };
+    #[cfg(windows)]
+    let paths = {
+        let junction = |target: &Path, name: &str| {
+            let made = Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(inner.join(name))
+                .arg(target)
+                .output()
+                .expect("mklink");
+            assert!(made.status.success(), "{made:?}");
+        };
+        junction(outer.path(), "outdir");
+        junction(&sub, "indir");
+        [r"outdir\secret.txt", r"indir\a.txt"]
+    };
+    for path in paths {
+        let (text, err) = call(&inner, "audit_findings", &json!({"path": path}));
+        assert!(err);
+        assert_eq!(text, format!("{path}: symbolic links are not followed"));
     }
 }
 

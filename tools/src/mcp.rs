@@ -6,7 +6,8 @@
 //! with `initialize`.
 //!
 //! Hostile input: a message over `MAX_MESSAGE` bytes is refused unread, every
-//! path must resolve inside the working root, a file is read up to `MAX_FILE`
+//! path must name a file inside the working root through no symbolic link or
+//! junction, a file is read up to `MAX_FILE`
 //! bytes, and no tool starts a process or writes a file.
 
 use crate::report::{self, Args};
@@ -280,8 +281,8 @@ fn tool_report(
     Ok(report::markdown(&report::measure(&r, read)?))
 }
 
-/// Reads `rel` if it resolves inside `root` (symbolic links followed) and is
-/// at most `MAX_FILE` bytes.
+/// Reads `rel` if it names a file inside `root` through no symbolic link or
+/// junction and is at most `MAX_FILE` bytes.
 fn file(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
     // Refused by form, before any filesystem call: on Windows, resolving a
     // drive or UNC path opens it, which can reach a host the client names,
@@ -295,13 +296,20 @@ fn file(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
     if Path::new(rel).components().any(escapes) {
         return Err(format!("{rel}: outside the working root"));
     }
-    let path = root
-        .join(rel)
-        .canonicalize()
-        .map_err(|e| format!("{rel}: {e}"))?;
-    if !path.starts_with(root) {
-        return Err(format!("{rel}: outside the working root"));
+    // Each component is looked at without following it, and a link or
+    // junction is refused wherever it points: following one that names a
+    // UNC path would contact that host.
+    let mut path = root.to_path_buf();
+    for c in Path::new(rel).components() {
+        path.push(c);
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("{rel}: {e}"))?;
+        if meta.file_type().is_symlink() {
+            return Err(format!("{rel}: symbolic links are not followed"));
+        }
     }
+    // With no link on the way, this cannot leave the root; kept as a backstop.
+    let path = path.canonicalize().ok().filter(|p| p.starts_with(root));
+    let path = path.ok_or_else(|| format!("{rel}: outside the working root"))?;
     let mut bytes = Vec::new();
     std::fs::File::open(&path)
         .and_then(|f| f.take(MAX_FILE + 1).read_to_end(&mut bytes))
