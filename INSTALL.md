@@ -164,14 +164,14 @@ Covers `~/.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`,
 cargo install --locked --git https://github.com/yungSNAT/Puritanical puritanical-tools
 ```
 
-Releases from 4.0.0 also attach prebuilt binaries for Linux (x86_64 and arm64), Windows (x86_64) and macOS (Apple silicon), a `SHA256SUMS` file and a signed build provenance attestation for each binary. Download one and check where it was built:
+Releases from 4.0.0 also attach prebuilt binaries for Linux (x86_64 and arm64, statically linked, so any distribution), Windows (x86_64) and macOS (Apple silicon), a `SHA256SUMS` file and a signed build provenance attestation for each binary. Download one and check where it was built:
 
 ```bash
-gh release download --repo yungSNAT/Puritanical --pattern 'puritanical-tools-x86_64-unknown-linux-gnu'
-gh attestation verify puritanical-tools-x86_64-unknown-linux-gnu --repo yungSNAT/Puritanical
+gh release download --repo yungSNAT/Puritanical --pattern 'puritanical-tools-x86_64-unknown-linux-musl'
+gh attestation verify puritanical-tools-x86_64-unknown-linux-musl --repo yungSNAT/Puritanical
 ```
 
-The other names are `puritanical-tools-aarch64-unknown-linux-gnu`, `puritanical-tools-x86_64-pc-windows-msvc.exe` and `puritanical-tools-aarch64-apple-darwin`. Without `gh`, download from `https://github.com/yungSNAT/Puritanical/releases/latest/download/<name>` and compare its SHA-256 with `SHA256SUMS`. Commands that write this repository's generated files (`rules`, `readme-art`) need `PURITANICAL_ROOT` set to a clone.
+The other names are `puritanical-tools-aarch64-unknown-linux-musl`, `puritanical-tools-x86_64-pc-windows-msvc.exe` and `puritanical-tools-aarch64-apple-darwin`. Without `gh`, download from `https://github.com/yungSNAT/Puritanical/releases/latest/download/<name>` and compare its SHA-256 with `SHA256SUMS`. Commands that read or write this repository's files (`rules`, `readme-art`, `answers`, and the benchmark commands without `RAW_DIR`) need `PURITANICAL_ROOT` set to a clone; `rules` and `readme-art` refuse to run without one. On macOS a browser download is quarantined: clear it with `xattr -d com.apple.quarantine puritanical-tools-aarch64-apple-darwin`. The tool has its own version number, separate from the plugin's.
 
 ## Upgrading
 

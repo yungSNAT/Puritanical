@@ -25,9 +25,12 @@ fn outputs() -> Vec<String> {
     all
 }
 
-/// An empty scratch root: the generators read no repository files.
+/// A scratch root holding only the clone marker: the generators read no
+/// repository files.
 fn inputs() -> tempfile::TempDir {
-    tempfile::tempdir().expect("temp dir")
+    let tmp = tempfile::tempdir().expect("temp dir");
+    write(&tmp.path().join("package.json"), "{}");
+    tmp
 }
 
 #[test]
@@ -94,7 +97,7 @@ fn drift_fails_the_check() {
 
 #[test]
 fn unwritable_targets_report_the_path() {
-    let tmp = tempfile::tempdir().expect("temp dir");
+    let tmp = inputs();
     let root = tmp.path();
     // A file where a directory must go makes every write fail.
     for blocker in [".cursor", "assets"] {

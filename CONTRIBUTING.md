@@ -61,7 +61,7 @@ node benchmarks/replay-compress.js [claude|pi] [session-dir]     # input replay
 
 ## Releases
 
-Pushing a `v*` tag runs `.github/workflows/publish.yml`, which reruns the Node suite and the generated-file checks on the tagged commit, builds `puritanical-tools` for 4 targets, then creates a GitHub release with generated notes, the binaries, `SHA256SUMS` and a build provenance attestation; nothing is published to npm or crates.io.
+Pushing a `v*` tag runs `.github/workflows/publish.yml`, which reruns the Node suite and the generated-file checks on the tagged commit, builds `puritanical-tools` for 4 targets, then creates a GitHub release with generated notes, the binaries and `SHA256SUMS`, and records a build provenance attestation for each binary; nothing is published to npm or crates.io.
 
 ## Hacktoberfest
 

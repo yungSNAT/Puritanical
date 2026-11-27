@@ -117,14 +117,22 @@ fn has(rest: &[String], flag: &str) -> bool {
     rest.iter().any(|a| a == flag)
 }
 
-/// The generated-file commands.
+/// The generated-file commands. They write only into a Puritanical clone, so
+/// a release binary run outside one (its built-in root is the build
+/// machine's checkout) refuses instead of creating that path.
 fn generate(root: &Path, cmd: &str, rest: &[String]) -> Option<Out> {
-    let check = has(rest, "--check");
-    Some(match cmd {
-        "rules" => rules::run(root, check),
-        "readme-art" => readme_art::run(root, check),
+    let run: fn(&Path, bool) -> Out = match cmd {
+        "rules" => rules::run,
+        "readme-art" => readme_art::run,
         _ => return None,
-    })
+    };
+    if !root.join("package.json").is_file() {
+        return Some(Out::fail(format!(
+            "{}: not a Puritanical clone; set PURITANICAL_ROOT to one",
+            root.display()
+        )));
+    }
+    Some(run(root, has(rest, "--check")))
 }
 
 /// The benchmark analysis commands.

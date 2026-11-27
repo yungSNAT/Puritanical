@@ -10,9 +10,11 @@ on:
     paths:
       - .github/workflows/publish.yml
       - tools/Cargo.toml
+      - tools/src/**
       - tools/Cargo.lock
       - tools/rust-toolchain.toml
       - core/Cargo.toml
+      - core/src/**
   workflow_dispatch:
 
 permissions:
@@ -45,10 +47,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+          # musl: static Linux binaries with no glibc floor.
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
           - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
+            target: aarch64-unknown-linux-musl
           - os: windows-latest
             target: x86_64-pc-windows-msvc
           - os: macos-latest
@@ -115,7 +118,7 @@ jobs:
           fi
           draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || echo none)
           case "$draft" in
-            false) echo "The verified tag already has a published release." ;;
+            false) echo "::warning::The verified tag already has a published release; nothing was attached." ;;
             true) gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber ;;
             *) gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes ;;
           esac

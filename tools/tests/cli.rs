@@ -4,6 +4,7 @@
 
 mod support;
 
+use std::fs;
 use std::process::Command;
 use support::repo;
 
@@ -50,17 +51,23 @@ fn checks_run_against_the_crate_repository_or_puritanical_root() {
         "All rule copies in sync.\n"
     );
 
+    // A root that is not a clone (as a release binary's built-in one is not
+    // on the user's machine) is refused, and nothing is written into it.
     let empty = tempfile::tempdir().expect("temp dir");
-    let out = bin()
-        .args(["rules", "--check"])
-        .env("PURITANICAL_ROOT", empty.path())
-        .output()
-        .expect("run");
-    assert_eq!(out.status.code(), Some(1));
-    assert!(
-        String::from_utf8_lossy(&out.stderr)
-            .ends_with("6 file(s) out of sync. Run: npm run build:rules\n")
-    );
+    for c in ["rules", "readme-art"] {
+        let out = bin()
+            .arg(c)
+            .env("PURITANICAL_ROOT", empty.path())
+            .output()
+            .expect("run");
+        assert_eq!(out.status.code(), Some(1), "{c}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr)
+                .ends_with(": not a Puritanical clone; set PURITANICAL_ROOT to one\n"),
+            "{c}"
+        );
+    }
+    assert_eq!(fs::read_dir(empty.path()).expect("read dir").count(), 0);
 
     let out = bin()
         .args(["readme-art", "--check"])

@@ -21,7 +21,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
-- Releases attach prebuilt `puritanical-tools` binaries for Linux (x86_64, arm64), Windows (x86_64) and macOS (Apple silicon), with `SHA256SUMS` and a build provenance attestation for each binary. A pull request that changes the release workflow or the crate's build inputs builds them without releasing. INSTALL.md gives the download and `cargo install --git` commands.
+- Releases attach prebuilt `puritanical-tools` binaries for Linux (x86_64, arm64; static musl builds), Windows (x86_64) and macOS (Apple silicon), with `SHA256SUMS` and a build provenance attestation for each binary. A pull request that changes the release workflow or the crate's build inputs builds them without releasing. INSTALL.md gives the download and `cargo install --git` commands.
 
 ### Changed
 
