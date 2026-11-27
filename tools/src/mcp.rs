@@ -261,7 +261,7 @@ fn tool_report(
             .transpose()
     };
     let outputs = match args.get("outputs") {
-        None => Vec::new(),
+        None | Some(Value::Null) => Vec::new(),
         Some(v) => v
             .as_array()
             .and_then(|a| a.iter().map(Value::as_str).collect::<Option<Vec<_>>>())
@@ -283,10 +283,16 @@ fn tool_report(
 /// Reads `rel` if it resolves inside `root` (symbolic links followed) and is
 /// at most `MAX_FILE` bytes.
 fn file(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
-    // Refused before any filesystem call: on Windows, resolving a drive or
-    // UNC path opens it, which can reach a host the client names.
-    let rooted = |c| matches!(c, Component::Prefix(_) | Component::RootDir);
-    if Path::new(rel).components().any(rooted) {
+    // Refused by form, before any filesystem call: on Windows, resolving a
+    // drive or UNC path opens it, which can reach a host the client names,
+    // and resolving `..` would reveal whether a file outside the root exists.
+    let escapes = |c| {
+        matches!(
+            c,
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+        )
+    };
+    if Path::new(rel).components().any(escapes) {
         return Err(format!("{rel}: outside the working root"));
     }
     let path = root

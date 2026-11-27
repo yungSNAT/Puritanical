@@ -219,6 +219,14 @@ fn tool_argument_errors_are_tool_results() {
         r[0]["result"]["isError"], false,
         "arguments may be left out"
     );
+    // A null optional argument counts as absent, `outputs` included.
+    std::fs::write(dir.path().join("a.log"), "x\n").expect("write");
+    let (text, err) = call(
+        dir.path(),
+        "report",
+        &json!({"outputs": null, "stats": null, "audit_before": "a.log"}),
+    );
+    assert!(!err, "{text}");
 }
 
 #[test]
@@ -228,13 +236,16 @@ fn safety_no_path_outside_the_working_root() {
     std::fs::create_dir(&inner).expect("dir");
     let secret = outer.path().join("secret.txt");
     std::fs::write(&secret, "src/a.rs:1  [code]  x\n").expect("write");
-    // Absolute paths are refused before any lookup: a missing one gives the
-    // same refusal as an existing one, not an OS error.
+    // Absolute paths and `..` are refused before any lookup: a missing one
+    // gives the same refusal as an existing one, so nothing outside the root
+    // is revealed, not even whether a file exists.
     let missing = std::env::temp_dir()
         .join("puritanical-mcp-missing")
         .join("a.txt");
     for path in [
         "../secret.txt",
+        "../missing.txt",
+        "work/../../secret.txt",
         secret.to_str().expect("utf-8"),
         missing.to_str().expect("utf-8"),
         "/puritanical-mcp-missing/a.txt",
