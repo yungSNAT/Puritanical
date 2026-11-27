@@ -88,7 +88,8 @@ jobs:
 
   release:
     needs: [test, binaries]
-    if: github.event_name == 'push'
+    # Only a pushed v* tag: the permission boundary does not rest on the triggers alone.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -101,9 +102,14 @@ jobs:
           pattern: binary-*
           path: dist
           merge-multiple: true
-      - name: Write the checksums
+      - name: Check all 4 binaries are present, then write the checksums
         working-directory: dist
-        run: sha256sum puritanical-tools-* > SHA256SUMS
+        run: |
+          for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-pc-windows-msvc.exe aarch64-apple-darwin; do
+            [[ -f "puritanical-tools-$t" ]] || { echo "::error::puritanical-tools-$t is missing."; exit 1; }
+          done
+          [[ $(find . -type f | wc -l) -eq 4 ]] || { echo "::error::dist holds files other than the 4 binaries."; exit 1; }
+          sha256sum puritanical-tools-* > SHA256SUMS
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/puritanical-tools-*
@@ -116,9 +122,10 @@ jobs:
             echo "::error::The tag has moved since its tests ran."
             exit 1
           fi
-          draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || echo none)
-          case "$draft" in
-            false) echo "::warning::The verified tag already has a published release; nothing was attached." ;;
-            true) gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber ;;
-            *) gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes ;;
-          esac
+          # An existing release, draft or published, is never modified: a draft
+          # could be published between a check and an upload.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::warning::The tag already has a release; nothing was attached. Delete a draft and rerun to attach the binaries."
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          fi
