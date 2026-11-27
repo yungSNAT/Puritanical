@@ -115,6 +115,13 @@ fn sizes_match_the_hooks_transform() {
         writeln!(wide, "{i}:{}", "abcdefghij".repeat(30)).expect("write");
     }
     assert_eq!(compressed(&wide).len(), 8060);
+    // Non-ASCII: units are UTF-16 (each emoji is 2) and the cut may split a
+    // surrogate pair, which both sides write as U+FFFD; sizes are UTF-8 bytes.
+    let mut wide = String::new();
+    for i in 0..50 {
+        writeln!(wide, "{i}:{}", "é😀".repeat(60)).expect("write");
+    }
+    assert_eq!(compressed(&wide).len(), 15896);
 }
 
 #[test]
@@ -143,6 +150,7 @@ fn audit_findings_are_counted_before_and_after_with_a_card() {
          README.md:9  [prose]  recap → cut. (~2 lines)\n\
          lib/b.js:1  [code]  dead branch → delete. (~3 lines)\n\
          docs/my notes.md:4  [prose]  recap → cut.\n\
+         docs/my  [notes].md:5  [prose]  recap → cut.\n\
          nocolon  [code]  not a finding\n\
          src/d.rs:x  [code]  not a line number\n\
          src/c.rs:2  [other]  not a kind\n\
@@ -160,20 +168,20 @@ fn audit_findings_are_counted_before_and_after_with_a_card() {
     ]);
     let md = ok(&out);
     assert!(md.contains(
-        "| Kind | Before | After |\n|---|---:|---:|\n| code | 2 | 1 |\n| prose | 2 | 0 |\n| all | 4 | 1 |\n"
+        "| Kind | Before | After |\n|---|---:|---:|\n| code | 2 | 1 |\n| prose | 3 | 0 |\n| all | 5 | 1 |\n"
     ), "{md}");
     assert!(!md.contains("## Tool output"));
 
     let svg = fs::read_to_string(&card).expect("card written");
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains(">Audit findings</text>"));
-    assert!(svg.contains("Before: 4 findings") && svg.contains("After: 1 findings"));
+    assert!(svg.contains("Before: 5 findings") && svg.contains("After: 1 findings"));
     for colour in [
         "#000000", "#9B7735", "#E5E4E2", "#FFFFF0", "#66023C", "#990024",
     ] {
         assert!(svg.contains(colour), "{colour}");
     }
-    assert!(svg.contains("width=\"380\"") && svg.contains("width=\"95\""));
+    assert!(svg.contains("width=\"380\"") && svg.contains("width=\"76\""));
 }
 
 #[test]
@@ -244,7 +252,7 @@ fn the_ledger_line_reports_characters_and_the_card_shows_it() {
     let svg = fs::read_to_string(&card).expect("card written");
     assert!(svg.contains("Tool output: "));
     assert!(svg.contains(&format!("Before: {} bytes", sep(long_log().len()))));
-    assert!(svg.contains("Compressor ledger: 1,234,567 characters removed from 42 outputs"));
+    assert!(svg.contains("Compressor ledger: 1,234,567 UTF-16 code units removed from 42 outputs"));
 }
 
 #[test]

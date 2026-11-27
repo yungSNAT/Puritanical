@@ -143,23 +143,24 @@ pub fn compressed(text: &str) -> String {
 /// output. Fields are separated by 2 spaces, so a path may hold single ones.
 fn findings(text: &str) -> [usize; 2] {
     let mut n = [0, 0];
-    for line in text.lines() {
-        let Some((at, rest)) = line.split_once("  [") else {
-            continue;
-        };
-        if at
-            .rsplit_once(':')
-            .is_none_or(|(_, l)| l.parse::<u32>().is_err())
-        {
-            continue;
-        }
-        if rest.starts_with("code]") {
-            n[0] += 1;
-        } else if rest.starts_with("prose]") {
-            n[1] += 1;
-        }
+    for k in text.lines().filter_map(kind) {
+        n[k] += 1;
     }
     n
+}
+
+/// 0 for a code finding, 1 for prose: the first `  [` that follows a
+/// `:<line>` and opens a known kind, so a path may even hold `  [`.
+fn kind(line: &str) -> Option<usize> {
+    line.match_indices("  [").find_map(|(i, _)| {
+        let numbered = line[..i]
+            .rsplit_once(':')
+            .is_some_and(|(_, l)| l.parse::<u32>().is_ok());
+        let rest = &line[i + 3..];
+        numbered
+            .then(|| ["code]", "prose]"].iter().position(|k| rest.starts_with(k)))
+            .flatten()
+    })
 }
 
 /// The hook's savings ledger (`.puritanical-compress-stats.json`), named by
@@ -332,7 +333,7 @@ fn svg(r: &Report) -> String {
     if let Some((_, chars, events)) = &r.ledger {
         let _ = write!(
             body,
-            "<text x=\"24\" y=\"{}\" fill=\"#FFFFF0\" font-size=\"13\">Compressor ledger: {} characters removed from {} outputs</text>",
+            "<text x=\"24\" y=\"{}\" fill=\"#FFFFF0\" font-size=\"13\">Compressor ledger: {} UTF-16 code units removed from {} outputs</text>",
             y + 13,
             commas(*chars),
             commas(*events)

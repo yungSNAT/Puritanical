@@ -1,11 +1,13 @@
 // The hook's side of `puritanical-tools report` parity: these sizes are pinned
 // in `tools/tests/report.rs` (`sizes_match_the_hooks_transform`) too, so a
 // change to either side's thresholds or tiers fails one of the 2 tests.
+/* global require, Buffer -- Node.js runtime */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { transform, THRESHOLDS } = require('../hooks/puritanical-compress-output.js');
 
-const size = (text) => (transform(text, THRESHOLDS, null, null, null) ?? text).length;
+// UTF-8 bytes, as the report counts them.
+const size = (text) => Buffer.byteLength(transform(text, THRESHOLDS, null, null, null) ?? text);
 
 function padded(n, spaces) {
   let s = 'x'.repeat(1100) + '\n';
@@ -22,4 +24,7 @@ test('report fixtures compress to the sizes the Rust report pins', () => {
   let wide = '';
   for (let i = 0; i < 50; i++) wide += `${i}:${'abcdefghij'.repeat(30)}\n`;
   assert.equal(size(wide), 8060);
+  let uni = '';
+  for (let i = 0; i < 50; i++) uni += `${i}:${'é😀'.repeat(60)}\n`;
+  assert.equal(size(uni), 15896);
 });
