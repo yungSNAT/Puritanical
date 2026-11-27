@@ -200,7 +200,10 @@ fn package_has_platform_cfg(dir: &Path) -> bool {
             let name = e.file_name().to_string_lossy().into_owned();
             let kind = e.file_type().ok();
             if kind.is_some_and(|t| t.is_dir()) {
-                return name != "target" && !name.starts_with('.') && package_has_platform_cfg(&p);
+                // Cargo tags every build folder; a module folder may be named `target`.
+                return !p.join("CACHEDIR.TAG").is_file()
+                    && !name.starts_with('.')
+                    && package_has_platform_cfg(&p);
             }
             kind.is_some_and(|t| t.is_file())
                 && name.ends_with(".rs")
@@ -526,8 +529,11 @@ mod tests {
         let d = tempfile::tempdir().expect("temp dir");
         let at = |p: &str| d.path().join(p);
         std::fs::create_dir_all(at("target/debug")).expect("build dir");
-        std::fs::write(at("target/CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55\n")
-            .expect("tag");
+        std::fs::write(
+            at("target/CACHEDIR.TAG"),
+            "Signature: 8a477f597d28d172789f06886806bc55\n",
+        )
+        .expect("tag");
         std::fs::write(at("target/debug/out.rs"), "#[cfg(windows)] fn f() {}\n").expect("out");
         assert!(!package_has_platform_cfg(d.path()));
         // `mod target;` is ordinary Rust: its cfgs count.
