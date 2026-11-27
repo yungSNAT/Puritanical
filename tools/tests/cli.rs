@@ -56,7 +56,12 @@ fn checks_run_against_the_crate_repository_or_puritanical_root() {
     let empty = tempfile::tempdir().expect("temp dir");
     let other = tempfile::tempdir().expect("temp dir");
     fs::write(other.path().join("package.json"), r#"{"name":"other"}"#).expect("write");
-    for (c, root) in [("rules", &empty), ("readme-art", &empty), ("rules", &other)] {
+    for (c, root) in [
+        ("rules", &empty),
+        ("readme-art", &empty),
+        ("rules", &other),
+        ("readme-art", &other),
+    ] {
         let out = bin()
             .arg(c)
             .env("PURITANICAL_ROOT", root.path())
