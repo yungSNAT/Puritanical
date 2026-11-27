@@ -14,6 +14,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - `CHISLE_*` variables still apply when the matching `PURITANICAL_*` one is unset; 'stop chisle', 'chisle mode' and `/chisle` still switch the mode. Because 'puritanical' is an everyday word, it switches the mode only in a whole instruction: `/puritanical`, 'puritanical mode', 'puritanical off', or 'activate' or 'stop puritanical' standing alone. `--uninstall` removes both sets of names, the marketplaces included.
 - The update notice checks this fork's GitHub releases instead of npm, and points at `claude plugin update puritanical@puritanical` or `npx github:yungSNAT/Puritanical --update`.
 
+### Added
+
+- `puritanical-tools prune` removes dead Rust code from an existing repository: the items rustc reports as `dead_code` in the production and test builds, with default and all features, each cut whole from a `syn` parse together with its attributes, doc comments and, for a type or trait, its `impl` blocks. It is a dry run unless `--apply -- <check>` is given; then it keeps a cut only if the check exits 0 and no test runner's passed count falls, splits a failing batch to find the cut at fault, and writes a journal before each first edit so `prune undo` restores every byte, after a crash as well. It refuses a dirty tree, a failing or count-less check (unless `--uncounted`) and a check that edits files; items behind other attributes or in packages with platform `cfg`s need `--risky`. See [docs/prune.md](docs/prune.md).
+
 ### Security
 
 - MCP tools whose names mark them as file or source readers (`read_file`, `get_file_contents`, `search_code`, and LSP-style hover, definition, reference and symbol tools) are no longer compressed by the Claude Code and Pi hooks. The check is by name, so a tool named otherwise is not covered. One name guard now covers those hooks, the MCP proxy, and tools named in `CHISLE_COMPRESS_TOOLS` for Copilot CLI and OpenCode, which can no longer re-enable them.

@@ -39,6 +39,8 @@ Ask the agent to ‘fix pagination dropping the first item on page 2’. If the 
 
 Use `/puritanical off` to pause the Claude Code plugin and `/puritanical` to resume it. Its review skill looks for unnecessary code in a diff. [Commands and configuration](docs/usage.md#usage) · [Review skill](skills/puritanical-review/SKILL.md)
 
+For dead code already in a Rust repository, `puritanical-tools prune` cuts what the compiler reports dead, keeps each cut only if your own check still passes, and can restore every byte. [Prune](docs/prune.md)
+
 ## The rules
 
 1. Check the report against the current implementation and its callers.
