@@ -165,27 +165,26 @@ fn uncovered_cfg(text: &str) -> bool {
     text.match_indices("cfg").any(|(i, _)| {
         let rest = &text[i + 3..];
         let attr = rest.starts_with("_attr");
-        let rest = rest
-            .strip_prefix("_attr")
-            .or_else(|| rest.strip_prefix('!'))
-            .unwrap_or(rest)
-            .trim_start();
-        rest.strip_prefix('(').is_some_and(|body| {
-            // String literals (feature names) dropped; brackets kept.
-            let pred: String = group(body, attr).split('"').step_by(2).collect();
-            let other = pred
-                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                .any(|w| !["", "test", "feature", "all", "any", "not"].contains(&w));
-            let negated = pred.match_indices("not").any(|(j, _)| {
-                let after = pred[j + 3..].trim_start();
-                after
-                    .strip_prefix('(')
-                    .is_some_and(|b| group(b, false).contains("feature"))
-            });
-            // A comment can hide `not` from this scan.
-            let comment = pred.contains('/');
-            other || negated || comment
-        })
+        let rest = rest.strip_prefix("_attr").unwrap_or(rest).trim_start();
+        let rest = rest.strip_prefix('!').unwrap_or(rest).trim_start();
+        // A comment before the `(` hides the whole predicate.
+        rest.starts_with('/')
+            || rest.strip_prefix('(').is_some_and(|body| {
+                // String literals (feature names) dropped; brackets kept.
+                let pred: String = group(body, attr).split('"').step_by(2).collect();
+                let other = pred
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .any(|w| !["", "test", "feature", "all", "any", "not"].contains(&w));
+                let negated = pred.match_indices("not").any(|(j, _)| {
+                    let after = pred[j + 3..].trim_start();
+                    after
+                        .strip_prefix('(')
+                        .is_some_and(|b| group(b, false).contains("feature"))
+                });
+                // A comment can hide `not` from this scan.
+                let comment = pred.contains('/');
+                other || negated || comment
+            })
     })
 }
 
@@ -450,6 +449,13 @@ mod tests {
     fn a_comment_in_a_cfg_or_a_macro_call_among_items_is_not_followed() {
         // A comment can hide `not` from the scan: prune does not read through one.
         assert!(uncovered_cfg("#[cfg(not/**/(feature = \"std\"))]"));
+        // So can one between `cfg` and its `(`; `cfg ! (..)` is a call too.
+        assert!(uncovered_cfg("#[cfg /* c */ (not(feature = \"std\"))]"));
+        assert!(uncovered_cfg(
+            "#[cfg_attr // c\n (not(feature = \"a\"), no_std)]"
+        ));
+        assert!(uncovered_cfg("cfg ! (unix)"));
+        assert!(!uncovered_cfg("#[cfg (test)]"));
         assert!(uncovered_cfg(
             "#[cfg(all(test, // test\n feature = \"a\"))]"
         ));

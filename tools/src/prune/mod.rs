@@ -217,7 +217,8 @@ fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<String>, Str
     let mut entries = out.split('\0').filter(|e| !e.is_empty());
     while let Some(e) = entries.next() {
         paths.push(e[3..].to_string());
-        if e.starts_with(['R', 'C']) {
+        // `R` or `C` in either column: a staged or a work-tree rename or copy.
+        if e[..2].contains(['R', 'C']) {
             paths.extend(entries.next().map(str::to_string));
         }
     }

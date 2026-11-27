@@ -95,7 +95,7 @@ impl Session<'_> {
             || self
                 .orig
                 .iter()
-                .any(|(p, t)| !self.journal.keeps(p, t.as_bytes()));
+                .any(|(p, t)| !self.journal.keeps(p, t.as_bytes(), self.disk[p].as_bytes()));
         if changed.is_empty() && !lost {
             return Ok(());
         }

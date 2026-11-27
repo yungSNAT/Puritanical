@@ -116,12 +116,16 @@ impl Journal {
             .all(|p| self.dir.join(p).exists())
     }
 
-    /// Whether the journal's copy of `rel`'s bytes before the run is still
-    /// `orig` (true when it has no entry for `rel`): a check may overwrite it.
+    /// Whether the journal's copies of `rel` still hold its bytes before the
+    /// run, `orig`, and what prune last wrote, `now` (true when it has no
+    /// entry for `rel`): a check may overwrite them.
     #[must_use]
-    pub fn keeps(&self, rel: &str, orig: &[u8]) -> bool {
+    pub fn keeps(&self, rel: &str, orig: &[u8], now: &[u8]) -> bool {
         self.files.iter().position(|f| f == rel).is_none_or(|n| {
-            fs::read(self.dir.join("orig").join(n.to_string())).is_ok_and(|b| b == orig)
+            let holds = |sub: &str, want: &[u8]| {
+                fs::read(self.dir.join(sub).join(n.to_string())).is_ok_and(|b| b == want)
+            };
+            holds("orig", orig) && holds("wrote", now)
         })
     }
 

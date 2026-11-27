@@ -119,6 +119,7 @@ fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
     for script in [
         "echo bad > .puritanical-prune/orig/0",
         "rm .puritanical-prune/orig/0",
+        "echo bad > .puritanical-prune/wrote/0",
         "rm .puritanical-prune/journal.json",
         "rm .puritanical-prune/.gitignore",
         "rm -r .puritanical-prune",
@@ -152,6 +153,8 @@ fn undo_restores_what_the_run_began_with_whatever_the_check_staged() {
         "git rm -q other.txt",
         "git mv other.txt moved.txt",
         "git mv ab ba; echo y >> other.txt",
+        // A rename only in the work tree has its `R` in the second column.
+        "mv ab ba; git add -N ba; echo y >> other.txt",
     ] {
         let out = once_cut(dir, script);
         assert!(
