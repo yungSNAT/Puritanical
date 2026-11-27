@@ -164,7 +164,7 @@ Covers `~/.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`,
 cargo install --locked --git https://github.com/yungSNAT/Puritanical puritanical-tools
 ```
 
-Releases from 4.0.0 also attach prebuilt binaries for Linux (x86_64 and arm64, statically linked, so any distribution), Windows (x86_64) and macOS (Apple silicon), a `SHA256SUMS` file and a signed build provenance attestation for each binary. Download one and check where it was built:
+Releases from 4.0.0 also attach prebuilt binaries for Linux (x86_64 and arm64, statically linked, so no glibc version is needed), Windows (x86_64) and macOS (Apple silicon), a `SHA256SUMS` file and a signed build provenance attestation for each binary. Download one and check where it was built:
 
 ```bash
 gh release download --repo yungSNAT/Puritanical --pattern 'puritanical-tools-x86_64-unknown-linux-musl'
