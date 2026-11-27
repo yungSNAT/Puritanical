@@ -216,7 +216,7 @@ fn code(s: &str) -> String {
 fn markdown(r: &Report) -> String {
     let mut md = String::from("# Puritanical report\n");
     if !r.outputs.is_empty() {
-        md += "\n## Tool output\n\nUTF-8 bytes of each file before and after the PostToolUse compressor's generic tiers, run through `puritanical-core` with the hook's defaults: scrub above 1,024 UTF-16 code units; above 8,000, keep the first 60 and last 40 lines and error-like lines, or the first and last 4,000 units of an output of 100 lines or fewer; keep the original unless at least 64 units go. No command filter or spill-file note is applied. File names appear as given. Bytes, not tokens.\n\n| File | Bytes before | Bytes after | Saved |\n|---|---:|---:|---:|\n";
+        md += "\n## Tool output\n\nUTF-8 bytes of each file before and after the PostToolUse compressor's generic tiers, run through `puritanical-core` with the hook's defaults: scrub above 1,024 UTF-16 code units; above 8,000, keep the first 60 and last 40 lines and error-like lines, or the first and last 4,000 units of an output of 100 lines or fewer; keep the original unless at least 64 units go. No command filter or spill-file note is applied. Paths appear as given. Bytes, not tokens.\n\n| File | Bytes before | Bytes after | Saved |\n|---|---:|---:|---:|\n";
         for (name, before, after) in &r.outputs {
             let _ = writeln!(
                 md,

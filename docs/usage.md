@@ -87,7 +87,7 @@ puritanical-tools report build.log test.log \
 - Each saved `puritanical-audit` output: its finding lines, counted by kind.
 - The savings ledger: characters removed and outputs compressed, as the hook recorded them.
 
-Sizes are bytes or characters, never estimated tokens. Every input is optional, but give at least one. Tool output and audit paths appear in the report as you give them, so pass relative paths if you will share it; the ledger appears by file name alone. Each file is read whole into memory.
+Sizes are bytes or characters, never estimated tokens. Every input is optional, but give at least one. Tool output paths appear in the report as you give them, so pass relative paths if you will share it; the ledger appears by file name alone. Each file is read whole into memory.
 
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 
