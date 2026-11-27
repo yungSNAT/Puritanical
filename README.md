@@ -21,17 +21,24 @@ Puritanical guides coding agents towards the smallest correct change. It asks th
 
 ## Install
 
-For Codex, clone the fork and install its rules with Node.js 18 or later.
+Clone the repository:
 
 ```powershell
 git clone https://github.com/yungSNAT/Puritanical.git
 Set-Location Puritanical
+```
+
+For one Claude Code session, run `claude --plugin-dir .` from the clone.
+
+For Codex, install the rules from the clone with Node.js 18 or later:
+
+```powershell
 node bin/install.js --only codex
 ```
 
 The installer adds a marked block to your personal `~/.codex/AGENTS.md`. If the block already exists, add `--force` to refresh it. Start a new chat to load the rules. To remove the block, run `node bin/install.js --uninstall --only codex`.
 
-For one Claude Code session, run `claude --plugin-dir .` from the clone. For a project that reads `AGENTS.md`, you can also copy the [project rules](AGENTS.md) into its existing instructions.
+For a project that reads `AGENTS.md`, you can also copy the [project rules](AGENTS.md) into its existing instructions.
 
 ## Use
 
