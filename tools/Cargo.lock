@@ -109,9 +109,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "puritanical-core"
+version = "4.0.0"
+
+[[package]]
 name = "puritanical-tools"
 version = "1.0.0"
 dependencies = [
+ "puritanical-core",
  "serde_json",
  "tempfile",
 ]
