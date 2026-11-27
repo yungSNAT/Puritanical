@@ -117,6 +117,10 @@ pub fn run(
         }
         std::thread::sleep(Duration::from_millis(20));
     };
+    // What the check left running would change files after prune looked: on
+    // Unix its process group goes too. (Windows would need a job object.)
+    #[cfg(unix)]
+    kill_tree(child.id());
     let text = std::fs::read(log).map_err(super::io(log))?;
     let text = String::from_utf8_lossy(&text);
     let lines: Vec<&str> = text.lines().collect();

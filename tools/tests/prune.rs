@@ -329,6 +329,17 @@ fn a_failing_baseline_shows_its_output_and_zero_counts_need_uncounted() {
             .stderr
             .contains("prints no test count above 0")
     );
+    // What a refused baseline changed is named, so the user can put it back.
+    assert_eq!(
+        alias("rm src/lib.rs; exit 1").stderr,
+        "prune: the check fails before any cut; after the baseline check, the working tree is not clean: src/lib.rs\n"
+    );
+    git(dir, &["checkout", "--", "src/lib.rs"]);
+    assert_eq!(
+        alias("echo z > new.txt; echo 'test result: ok. 0 passed;'").stderr,
+        "prune: after the baseline check, the working tree is not clean: new.txt\n"
+    );
+    std::fs::remove_file(dir.join("new.txt")).expect("rm");
     clean(dir);
 }
 

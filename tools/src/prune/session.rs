@@ -76,7 +76,8 @@ impl Session<'_> {
     }
 
     /// Stops the run when the check changed a file (one prune did not write,
-    /// or one prune wrote whose bytes now differ) or removed the journal.
+    /// or one prune wrote whose bytes now differ) or removed or overwrote
+    /// part of the journal.
     fn untouched(&mut self) -> Result<(), String> {
         // `true`: a file prune wrote. The journal's own files are judged by `intact`.
         let inside = format!("{}/", journal::DIR);
@@ -90,7 +91,11 @@ impl Session<'_> {
                 changed.push((path.clone(), true));
             }
         }
-        let lost = !self.journal.intact();
+        let lost = !self.journal.intact()
+            || self
+                .orig
+                .iter()
+                .any(|(p, t)| !self.journal.keeps(p, t.as_bytes()));
         if changed.is_empty() && !lost {
             return Ok(());
         }
@@ -114,12 +119,7 @@ impl Session<'_> {
         // Listed first, so a failure below never lets the journal go.
         self.stopped.extend(changed.iter().map(|(p, _)| p.clone()));
         if lost {
-            journal::clear(self.root)?;
-            self.journal = Journal::create(self.root)?;
-            for (path, text) in &self.disk {
-                let n = self.journal.track(path, Some(self.orig[path].as_bytes()))?;
-                self.journal.seen(n, Some(text.as_bytes()))?;
-            }
+            self.journal.repair(&self.orig, &self.disk)?;
         }
         for (path, ours) in changed {
             let now = std::fs::read(safe_path(self.root, path)?).ok();
@@ -230,18 +230,21 @@ fn baseline(
         &journal.log("baseline.log"),
         Duration::MAX,
     )?;
+    // Read before any refusal, so what the check changed is always named.
+    let dirty = clean(root, env, "after the baseline check");
     if !base.ok {
+        let changed = dirty.err().map_or_default(|e| format!("; {e}"));
         let tail = if base.tail.is_empty() {
             String::new()
         } else {
             format!("; its output ends:\n{}", base.tail)
         };
-        return Err(format!("the check fails before any cut{tail}"));
+        return Err(format!("the check fails before any cut{changed}{tail}"));
     }
+    dirty?;
     if base.counts.values().all(|&n| n == 0) && !o.uncounted {
         return Err("the check prints no test count above 0 that prune can read; pass --uncounted to rely on its exit status alone".into());
     }
-    clean(root, env, "after the baseline check")?;
     Ok(base)
 }
 

@@ -114,9 +114,11 @@ fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
     assert_eq!(prune(dir, &["undo"]).code, 0);
     clean(dir);
 
-    // The check removes the journal's index, or all of it: prune rebuilds it
-    // from memory.
+    // The check removes or overwrites part of the journal, or all of it:
+    // prune rebuilds it from memory.
     for script in [
+        "echo bad > .puritanical-prune/orig/0",
+        "rm .puritanical-prune/orig/0",
         "rm .puritanical-prune/journal.json",
         "rm .puritanical-prune/.gitignore",
         "rm -r .puritanical-prune",
@@ -126,6 +128,15 @@ fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
         assert_eq!(lost.stderr, want);
         clean(dir);
     }
+    // The rebuilt journal also records what else the check changed.
+    let both = once_cut(dir, "rm -r .puritanical-prune; echo y >> other.txt");
+    assert_eq!(
+        both.stderr,
+        stopped("other.txt, .puritanical-prune", FOR_UNDO)
+    );
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
+    assert_eq!(read(dir, "other.txt"), "x\n");
 }
 
 #[test]
@@ -173,6 +184,18 @@ fn a_file_prune_cannot_record_is_named_and_the_journal_kept() {
     fs::remove_file(dir.join("link.txt")).expect("rm");
     assert_eq!(prune(dir, &["undo"]).code, 0);
     clean(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn what_a_passing_check_leaves_running_is_stopped_with_it() {
+    let d = repo_d();
+    let dir = d.path();
+    let check = "(sleep 1; echo late >> other.txt) & echo 'test result: ok. 1 passed;'";
+    let out = prune(dir, &["--apply", "--", "sh", "-c", check]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    assert_eq!(read(dir, "other.txt"), "x\n");
 }
 
 #[cfg(unix)]

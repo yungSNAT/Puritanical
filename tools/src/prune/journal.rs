@@ -6,6 +6,7 @@
 
 use super::{io, safe_path};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
@@ -115,6 +116,15 @@ impl Journal {
             .all(|p| self.dir.join(p).exists())
     }
 
+    /// Whether the journal's copy of `rel`'s bytes before the run is still
+    /// `orig` (true when it has no entry for `rel`): a check may overwrite it.
+    #[must_use]
+    pub fn keeps(&self, rel: &str, orig: &[u8]) -> bool {
+        self.files.iter().position(|f| f == rel).is_none_or(|n| {
+            fs::read(self.dir.join("orig").join(n.to_string())).is_ok_and(|b| b == orig)
+        })
+    }
+
     /// A path in the journal folder for a check log.
     #[must_use]
     pub fn log(&self, name: &str) -> PathBuf {
@@ -202,6 +212,33 @@ impl Journal {
         sync_dir(&wrote)
     }
 
+    /// Writes again, in place, every part of the journal a check removed or
+    /// overwrote: its folders, `.gitignore`, each entry's bytes before the
+    /// run (from `orig`) and what prune wrote (from `now`), then the index.
+    /// Nothing is removed first, so a crash part way loses no copy.
+    ///
+    /// # Errors
+    /// The journal cannot be written.
+    pub fn repair(
+        &self,
+        orig: &BTreeMap<String, String>,
+        now: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        dir_of(&self.root)?;
+        for sub in ["orig", "wrote"] {
+            let d = self.dir.join(sub);
+            fs::create_dir_all(&d).map_err(io(&d))?;
+        }
+        sync_dir(&self.root)?;
+        replace(&self.dir.join(".gitignore"), b"*\n")?;
+        for (n, rel) in self.files.iter().enumerate() {
+            let at = |sub: &str| self.dir.join(sub).join(n.to_string());
+            replace(&at("orig"), orig[rel].as_bytes())?;
+            replace(&at("wrote"), now[rel].as_bytes())?;
+        }
+        self.save(false)
+    }
+
     /// Marks the run finished.
     ///
     /// # Errors
@@ -219,8 +256,10 @@ impl Journal {
     }
 }
 
+/// Removes the journal folder `dir` and flushes the removal to disk.
 fn remove(dir: &Path) -> Result<(), String> {
-    fs::remove_dir_all(dir).map_err(io(dir))
+    fs::remove_dir_all(dir).map_err(io(dir))?;
+    sync_dir(dir.parent().unwrap_or(Path::new(".")))
 }
 
 /// What `journal.json` lists.
@@ -325,7 +364,11 @@ fn put_back(path: &Path, orig: Option<&[u8]>) -> Result<(), String> {
             replace(path, o)?;
         }
         Some(_) => {}
-        None => absent_ok(fs::remove_file(path)).map_err(io(path))?,
+        // Flushed before the journal goes, so a crash never brings the file back without it.
+        None => {
+            absent_ok(fs::remove_file(path)).map_err(io(path))?;
+            sync_dir(path.parent().unwrap_or(Path::new(".")))?;
+        }
     }
     let _ = fs::remove_file(temp_of(path));
     Ok(())
@@ -371,5 +414,6 @@ fn absent_ok(r: std::io::Result<()>) -> std::io::Result<()> {
 /// The folder cannot be removed.
 pub fn clear(root: &Path) -> Result<(), String> {
     let dir = dir_of(root)?;
-    absent_ok(fs::remove_dir_all(&dir)).map_err(io(&dir))
+    absent_ok(fs::remove_dir_all(&dir)).map_err(io(&dir))?;
+    sync_dir(root)
 }
