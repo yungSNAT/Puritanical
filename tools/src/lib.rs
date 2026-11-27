@@ -123,14 +123,31 @@ fn has(rest: &[String], flag: &str) -> bool {
     rest.iter().any(|a| a == flag)
 }
 
-/// The generated-file commands.
+/// The generated-file commands. They write only into a Puritanical clone, so
+/// a release binary run outside one (its built-in root is the build
+/// machine's checkout) refuses instead of creating that path.
 fn generate(root: &Path, cmd: &str, rest: &[String]) -> Option<Out> {
-    let check = has(rest, "--check");
-    Some(match cmd {
-        "rules" => rules::run(root, check),
-        "readme-art" => readme_art::run(root, check),
+    let run: fn(&Path, bool) -> Out = match cmd {
+        "rules" => rules::run,
+        "readme-art" => readme_art::run,
         _ => return None,
-    })
+    };
+    if !is_clone(root) {
+        return Some(Out::fail(format!(
+            "{}: not a Puritanical clone; set PURITANICAL_ROOT to one",
+            root.display()
+        )));
+    }
+    Some(run(root, has(rest, "--check")))
+}
+
+/// A root whose `package.json` names this package. An unrelated npm project
+/// is not a clone.
+fn is_clone(root: &Path) -> bool {
+    std::fs::read(root.join("package.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+        .is_some_and(|v| v["name"] == "puritanical")
 }
 
 /// The benchmark analysis commands.
