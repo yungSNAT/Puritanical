@@ -70,55 +70,65 @@ fn tool_output_rows_give_bytes_before_and_after_the_hook() {
     write(&big, &log);
     write(&small, "0123456789");
     write(&empty, "");
-    let binary = dir.path().join("binary.bin");
-    fs::write(&binary, [0xff, 0xfe, b'x']).expect("write");
-    let after = compressed(&log).len();
-    assert!(after < log.len() / 2, "{after} of {}", log.len());
 
-    let paths = [&big, &small, &empty, &binary].map(|p| p.to_str().expect("utf-8").to_string());
+    let paths = [&big, &small, &empty].map(|p| p.to_str().expect("utf-8").to_string());
     let out = report(&paths.iter().map(String::as_str).collect::<Vec<_>>());
     let md = ok(&out);
     assert!(md.starts_with("# Puritanical report\n\n## Tool output\n"));
+    // The only mention of tokens is the label saying there are none.
+    assert_eq!(md.matches("token").count(), 1, "{md}");
     assert!(md.contains("Bytes, not tokens."));
-    let big_name = &paths[0];
-    let pct = format!(
-        "{:.1}%",
-        (log.len() - after) as f64 * 100.0 / log.len() as f64
-    );
-    let row = format!(
-        "| `{big_name}` | {} | {} | {pct} |",
-        sep(log.len()),
-        sep(after)
-    );
-    assert!(md.contains(&row), "{md}");
-    assert!(
-        md.contains(&format!("| `{}` | 10 | 10 | 0.0% |", paths[1])),
-        "{md}"
-    );
-    assert!(
-        md.contains(&format!("| `{}` | 0 | 0 | 0.0% |", paths[2])),
-        "{md}"
-    );
-    assert!(
-        md.contains(&format!(
-            "| All 4 | {} | {} |",
-            sep(log.len() + 13),
-            sep(after + 13)
-        )),
-        "{md}"
-    );
-    assert!(
-        md.contains(&format!("| `{}` | 3 | 3 | 0.0% |", paths[3])),
-        "{md}"
-    );
-    assert!(!md.contains('~'), "no estimates: {md}");
+    // The hook's `transform` takes this log from 15,190 to 5,044 units.
+    for row in [
+        format!("| `{}` | 15,190 | 5,044 | 66.7% |", paths[0]),
+        format!("| `{}` | 10 | 10 | 0.0% |", paths[1]),
+        format!("| `{}` | 0 | 0 | n/a |", paths[2]),
+        "| All 3 | 15,200 | 5,054 | 66.7% |".to_string(),
+    ] {
+        assert!(md.contains(&row), "{row} in {md}");
+    }
     assert!(!md.contains("## Audit"));
 }
 
+/// A line of 1,100 `x`, then `n` short lines with `spaces` trailing spaces,
+/// which scrub removes.
+fn padded(n: usize, spaces: usize) -> String {
+    let mut s = "x".repeat(1100) + "\n";
+    for i in 0..n {
+        writeln!(s, "y{i}{}", " ".repeat(spaces)).expect("write");
+    }
+    s
+}
+
+/// Sizes the hook's own `transform(text, THRESHOLDS)` gives for the same
+/// text; `tests/test_report_parity.js` pins the same figures on the hook side.
 #[test]
-fn a_small_win_leaves_the_output_unchanged() {
-    let text = "x".repeat(1500);
+fn sizes_match_the_hooks_transform() {
+    assert_eq!(compressed(&long_log()).len(), 5044);
+    // 63 units removed is under the hook's minimum win, so nothing changes.
+    let text = padded(21, 3);
     assert_eq!(compressed(&text), text);
+    assert_eq!(compressed(&padded(16, 4)).len(), 1155);
+    // 100 lines or fewer: the first and last 4,000 units are kept.
+    let mut wide = String::new();
+    for i in 0..50 {
+        writeln!(wide, "{i}:{}", "abcdefghij".repeat(30)).expect("write");
+    }
+    assert_eq!(compressed(&wide).len(), 8060);
+}
+
+#[test]
+fn a_file_that_is_not_utf8_is_refused() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let bin = dir.path().join("x.bin");
+    let bytes: Vec<u8> = (0x80..0xC0).cycle().take(9000).collect();
+    fs::write(&bin, bytes).expect("write");
+    let bin = bin.to_str().expect("utf-8");
+    for args in [vec![bin], vec!["--audit-after", bin]] {
+        let out = report(&args);
+        assert_eq!(out.code, 1);
+        assert_eq!(out.stderr, format!("{bin}: not UTF-8 text\n"));
+    }
 }
 
 #[test]
@@ -132,7 +142,9 @@ fn audit_findings_are_counted_before_and_after_with_a_card() {
         "src/a.rs:3  [code]  wrapper → inline it. (~4 lines)\n\
          README.md:9  [prose]  recap → cut. (~2 lines)\n\
          lib/b.js:1  [code]  dead branch → delete. (~3 lines)\n\
+         docs/my notes.md:4  [prose]  recap → cut.\n\
          nocolon  [code]  not a finding\n\
+         src/d.rs:x  [code]  not a line number\n\
          src/c.rs:2  [other]  not a kind\n\
          \n\
          3 findings: 2 code, 1 prose. Est. removable: ~7 lines code, ~2 lines prose.\n",
@@ -148,20 +160,20 @@ fn audit_findings_are_counted_before_and_after_with_a_card() {
     ]);
     let md = ok(&out);
     assert!(md.contains(
-        "| Kind | Before | After |\n|---|---:|---:|\n| code | 2 | 1 |\n| prose | 1 | 0 |\n| all | 3 | 1 |\n"
+        "| Kind | Before | After |\n|---|---:|---:|\n| code | 2 | 1 |\n| prose | 2 | 0 |\n| all | 4 | 1 |\n"
     ), "{md}");
     assert!(!md.contains("## Tool output"));
 
     let svg = fs::read_to_string(&card).expect("card written");
     assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
     assert!(svg.contains(">Audit findings</text>"));
-    assert!(svg.contains("Before: 3 lines") && svg.contains("After: 1 lines"));
+    assert!(svg.contains("Before: 4 findings") && svg.contains("After: 1 findings"));
     for colour in [
         "#000000", "#9B7735", "#E5E4E2", "#FFFFF0", "#66023C", "#990024",
     ] {
         assert!(svg.contains(colour), "{colour}");
     }
-    assert!(svg.contains("width=\"380\"") && svg.contains("width=\"127\""));
+    assert!(svg.contains("width=\"380\"") && svg.contains("width=\"95\""));
 }
 
 #[test]
@@ -185,6 +197,29 @@ fn one_audit_gives_one_column_and_no_card_bars() {
 }
 
 #[test]
+fn a_zero_count_draws_no_bar() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (before, after) = (dir.path().join("b.txt"), dir.path().join("a.txt"));
+    let card = dir.path().join("c.svg");
+    write(&before, "README.md:9  [prose]  recap → cut.\n");
+    write(&after, "");
+    let p = [&before, &after, &card].map(|p| p.to_str().expect("utf-8").to_string());
+    ok(&report(&[
+        "--audit-before",
+        &p[0],
+        "--audit-after",
+        &p[1],
+        "--svg",
+        &p[2],
+    ]));
+    let svg = fs::read_to_string(&card).expect("card written");
+    assert!(
+        svg.contains("After: 0 findings</text><rect x=\"196\" y=\"105\" width=\"0\""),
+        "{svg}"
+    );
+}
+
+#[test]
 fn the_ledger_line_reports_characters_and_the_card_shows_it() {
     let dir = tempfile::tempdir().expect("temp dir");
     let stats = dir.path().join("stats.json");
@@ -201,9 +236,11 @@ fn the_ledger_line_reports_characters_and_the_card_shows_it() {
         log.to_str().expect("utf-8"),
     ]);
     let md = ok(&out);
-    assert!(md.contains(&format!(
-        "`{stats}` records 1,234,567 characters (UTF-16 code units, as the hook counts them) removed from 42 tool outputs."
-    )));
+    // The file name only: a shared report carries no home directory.
+    assert!(
+        md.contains("`stats.json` records 1,234,567 characters (UTF-16 code units, as the hook counts them) removed from 42 tool outputs."),
+        "{md}"
+    );
     let svg = fs::read_to_string(&card).expect("card written");
     assert!(svg.contains("Tool output: "));
     assert!(svg.contains(&format!("Before: {} bytes", sep(long_log().len()))));

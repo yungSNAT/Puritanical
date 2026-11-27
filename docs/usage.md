@@ -83,11 +83,11 @@ puritanical-tools report build.log test.log \
   --stats ~/.claude/.puritanical-compress-stats.json --svg report.svg > report.md
 ```
 
-- Each saved tool output: its UTF-8 bytes before and after the compressor's generic tiers, run through the same core with the hook's default limits (no command filter).
+- Each saved tool output: its UTF-8 bytes before and after the compressor's generic tiers, run through the same core with the hook's default limits (no command filter). A file that is not UTF-8 text is refused.
 - Each saved `puritanical-audit` output: its finding lines, counted by kind.
 - The savings ledger: characters removed and outputs compressed, as the hook recorded them.
 
-Sizes are bytes or characters, never estimated tokens. Every input is optional, but give at least one.
+Sizes are bytes or characters, never estimated tokens. Every input is optional, but give at least one. Tool output and audit paths appear in the report as you give them, so pass relative paths if you will share it; the ledger appears by file name alone. Each file is read whole into memory.
 
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 
