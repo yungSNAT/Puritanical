@@ -29,7 +29,10 @@ fn outputs() -> Vec<String> {
 /// repository files.
 fn inputs() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().expect("temp dir");
-    write(&tmp.path().join("package.json"), "{}");
+    write(
+        &tmp.path().join("package.json"),
+        r#"{"name":"puritanical"}"#,
+    );
     tmp
 }
 

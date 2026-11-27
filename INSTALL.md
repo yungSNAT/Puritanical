@@ -171,7 +171,7 @@ gh release download --repo yungSNAT/Puritanical --pattern 'puritanical-tools-x86
 gh attestation verify puritanical-tools-x86_64-unknown-linux-musl --repo yungSNAT/Puritanical
 ```
 
-The other names are `puritanical-tools-aarch64-unknown-linux-musl`, `puritanical-tools-x86_64-pc-windows-msvc.exe` and `puritanical-tools-aarch64-apple-darwin`. Without `gh`, download from `https://github.com/yungSNAT/Puritanical/releases/latest/download/<name>` and compare its SHA-256 with `SHA256SUMS`. Commands that read or write this repository's files (`rules`, `readme-art`, `answers`, and the benchmark commands without `RAW_DIR`) need `PURITANICAL_ROOT` set to a clone; `rules` and `readme-art` refuse to run without one. On macOS a browser download is quarantined: clear it with `xattr -d com.apple.quarantine puritanical-tools-aarch64-apple-darwin`. The tool has its own version number, separate from the plugin's.
+The other names are `puritanical-tools-aarch64-unknown-linux-musl`, `puritanical-tools-x86_64-pc-windows-msvc.exe` and `puritanical-tools-aarch64-apple-darwin`. Without `gh`, download from `https://github.com/yungSNAT/Puritanical/releases/latest/download/<name>` and compare its SHA-256 with `SHA256SUMS`. Commands that read or write this repository's files (`rules`, `readme-art`, `answers`, and the benchmark commands without `RAW_DIR`) need `PURITANICAL_ROOT` set to a clone; `rules` and `readme-art` refuse a root whose `package.json` does not name `puritanical`. On macOS a browser download is quarantined: clear it with `xattr -d com.apple.quarantine puritanical-tools-aarch64-apple-darwin`. The tool has its own version number, separate from the plugin's.
 
 ## Upgrading
 

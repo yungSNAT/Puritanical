@@ -54,10 +54,12 @@ fn checks_run_against_the_crate_repository_or_puritanical_root() {
     // A root that is not a clone (as a release binary's built-in one is not
     // on the user's machine) is refused, and nothing is written into it.
     let empty = tempfile::tempdir().expect("temp dir");
-    for c in ["rules", "readme-art"] {
+    let other = tempfile::tempdir().expect("temp dir");
+    fs::write(other.path().join("package.json"), r#"{"name":"other"}"#).expect("write");
+    for (c, root) in [("rules", &empty), ("readme-art", &empty), ("rules", &other)] {
         let out = bin()
             .arg(c)
-            .env("PURITANICAL_ROOT", empty.path())
+            .env("PURITANICAL_ROOT", root.path())
             .output()
             .expect("run");
         assert_eq!(out.status.code(), Some(1), "{c}");
@@ -68,6 +70,7 @@ fn checks_run_against_the_crate_repository_or_puritanical_root() {
         );
     }
     assert_eq!(fs::read_dir(empty.path()).expect("read dir").count(), 0);
+    assert_eq!(fs::read_dir(other.path()).expect("read dir").count(), 1);
 
     let out = bin()
         .args(["readme-art", "--check"])
