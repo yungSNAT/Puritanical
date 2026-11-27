@@ -329,17 +329,22 @@ fn a_failing_baseline_shows_its_output_and_zero_counts_need_uncounted() {
             .stderr
             .contains("prints no test count above 0")
     );
-    // What a refused baseline changed is named, so the user can put it back.
+    // What a refused baseline changed is named and journalled for undo.
     assert_eq!(
         alias("rm src/lib.rs; exit 1").stderr,
-        "prune: the check fails before any cut; after the baseline check, the working tree is not clean: src/lib.rs\n"
+        "prune: the check fails before any cut; after the baseline check, the working tree is not clean: src/lib.rs; `prune undo` puts back the files the check changed\n"
     );
-    git(dir, &["checkout", "--", "src/lib.rs"]);
+    assert_eq!(prune(dir, &["undo"]).code, 0);
     assert_eq!(
         alias("echo z > new.txt; echo 'test result: ok. 0 passed;'").stderr,
-        "prune: after the baseline check, the working tree is not clean: new.txt\n"
+        "prune: after the baseline check, the working tree is not clean: new.txt; `prune undo` puts back the files the check changed\n"
     );
-    std::fs::remove_file(dir.join("new.txt")).expect("rm");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    // Damaging only the journal during baseline refuses and clears the journal.
+    assert_eq!(
+        alias("rm -r .puritanical-prune; echo 'test result: ok. 1 passed;'").stderr,
+        "prune: after the baseline check, the working tree is not clean: .puritanical-prune\n"
+    );
     clean(dir);
 }
 

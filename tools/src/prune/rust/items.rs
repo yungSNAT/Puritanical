@@ -21,7 +21,7 @@ fn range(s: proc_macro2::Span) -> Range {
 }
 
 /// Attributes that neither register an item nor generate code that uses it.
-fn plain_attr(a: &syn::Attribute) -> bool {
+pub(super) fn plain_attr(a: &syn::Attribute) -> bool {
     let p = a.path();
     let tool = p.segments.len() > 1
         && p.segments
@@ -44,6 +44,33 @@ fn plain_attr(a: &syn::Attribute) -> bool {
     .iter()
     .any(|w| p.is_ident(w))
         || std_derive(a)
+}
+
+/// Built-in compiler attributes that cannot expand to arbitrary code or cfgs.
+/// Includes `plain_attr` plus attributes like `#[repr(C)]` or `#[test]` that
+/// may make their own item risky without hiding uses elsewhere in the crate.
+pub(super) fn builtin_attr(a: &syn::Attribute) -> bool {
+    plain_attr(a)
+        || [
+            "repr",
+            "test",
+            "should_panic",
+            "ignore",
+            "bench",
+            "no_mangle",
+            "export_name",
+            "link_name",
+            "link_section",
+            "used",
+            "non_exhaustive",
+            "no_std",
+            "no_main",
+            "recursion_limit",
+            "macro_export",
+            "automatically_derived",
+        ]
+        .iter()
+        .any(|w| a.path().is_ident(w))
 }
 
 /// A derive of standard traits only: any other derive is a procedural macro

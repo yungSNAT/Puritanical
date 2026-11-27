@@ -7,7 +7,7 @@
 use super::{io, safe_path};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
@@ -25,9 +25,75 @@ pub struct Journal {
     deleted: Vec<usize>,
 }
 
-/// Writes `bytes` to a new file and flushes it to disk.
+/// Whether `path` is a plain folder (never following a symbolic link).
+fn is_plain_dir(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|m| m.is_dir())
+}
+
+/// Reads `path` only when it is a plain file (never following a symbolic link).
+fn read_plain(path: &Path) -> Option<Vec<u8>> {
+    fs::symlink_metadata(path)
+        .ok()
+        .filter(fs::Metadata::is_file)?;
+    fs::read(path).ok()
+}
+
+/// Refuses `path` when it exists and is not a plain folder (e.g. a symlink).
+fn plain_dir(path: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(m) if !m.is_dir() => Err(format!(
+            "{} is not a plain folder; prune will not use it",
+            path.display()
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Refuses `path` when it exists and is not a plain file (e.g. a symlink).
+fn plain_file(path: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(m) if !m.is_file() => Err(format!(
+            "{} is not a plain file; prune will not use it",
+            path.display()
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Unlinks a file or symbolic link entry without following it.
+fn remove_entry(path: &Path, m: &fs::Metadata) -> Result<(), String> {
+    #[cfg(windows)]
+    if m.file_type().is_symlink() && fs::remove_dir(path).is_ok() {
+        return Ok(());
+    }
+    let _ = m;
+    fs::remove_file(path).map_err(io(path))
+}
+
+/// Ensures `dir` is a plain folder; if a check replaced it with a symlink or
+/// file, unlinks that entry without following it and creates a plain folder.
+fn ensure_plain_dir(dir: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(dir) {
+        Ok(m) if m.is_dir() => Ok(()),
+        Ok(m) => {
+            remove_entry(dir, &m)?;
+            fs::create_dir(dir).map_err(io(dir))
+        }
+        Err(_) => fs::create_dir(dir).map_err(io(dir)),
+    }
+}
+
+/// Writes `bytes` to a brand-new plain file and flushes it to disk (unlinking
+/// any pre-existing file or symlink first so a planted symlink is never followed).
 fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut f = File::create(path).map_err(io(path))?;
+    if let Ok(m) = fs::symlink_metadata(path) {
+        remove_entry(path, &m)?;
+    }
+    let mut f = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(io(path))?;
     f.write_all(bytes)
         .and_then(|()| f.sync_all())
         .map_err(io(path))
@@ -37,7 +103,7 @@ fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[cfg_attr(not(unix), allow(clippy::unnecessary_wraps))]
 fn sync_dir(dir: &Path) -> Result<(), String> {
     #[cfg(unix)]
-    File::open(dir)
+    fs::File::open(dir)
         .and_then(|d| d.sync_all())
         .map_err(io(dir))?;
     let _ = dir;
@@ -54,27 +120,33 @@ fn temp_of(path: &Path) -> PathBuf {
 
 /// Replaces (or creates) `path` with `bytes` atomically, keeping its
 /// permissions: the file holds either the old or the new bytes at every moment.
+/// Never follows a symlink at `path` or its temp sibling.
 fn replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let perms = fs::metadata(path).ok().map(|m| m.permissions());
+    let meta = fs::symlink_metadata(path).ok();
+    let perms = meta
+        .as_ref()
+        .filter(|m| m.is_file())
+        .map(fs::Metadata::permissions);
     let tmp = temp_of(path);
     write_synced(&tmp, bytes)?;
     if let Some(p) = perms {
         fs::set_permissions(&tmp, p).map_err(io(&tmp))?;
     }
+    if let Some(m) = meta.filter(|m| m.file_type().is_symlink()) {
+        remove_entry(path, &m)?;
+    }
     fs::rename(&tmp, path).map_err(io(path))?;
     sync_dir(path.parent().unwrap_or(Path::new(".")))
 }
 
-/// The journal folder of `root`, refused when it is a symbolic link.
+/// The journal folder of `root`, refused when it or its subfolders are not plain folders.
 fn dir_of(root: &Path) -> Result<PathBuf, String> {
     let dir = root.join(DIR);
-    match fs::symlink_metadata(&dir) {
-        Ok(m) if !m.is_dir() => Err(format!(
-            "{} is not a plain folder; prune will not use it",
-            dir.display()
-        )),
-        _ => Ok(dir),
+    plain_dir(&dir)?;
+    for sub in ["orig", "wrote"] {
+        plain_dir(&dir.join(sub))?;
     }
+    Ok(dir)
 }
 
 /// Whether `root` holds a journal from an earlier run.
@@ -108,22 +180,37 @@ impl Journal {
         Ok(j)
     }
 
-    /// Whether the journal's files are still on disk (a check may remove them).
-    #[must_use]
-    pub fn intact(&self) -> bool {
-        ["journal.json", "orig", "wrote", ".gitignore"]
-            .iter()
-            .all(|p| self.dir.join(p).exists())
+    /// The exact JSON expected on disk for `journal.json`.
+    fn index_json(&self, complete: bool) -> String {
+        json!({
+            "complete": complete,
+            "files": self.files,
+            "created": self.created,
+            "deleted": self.deleted,
+        })
+        .to_string()
     }
 
-    /// Whether the journal's copies of `rel` still hold its bytes before the
-    /// run, `orig`, and what prune last wrote, `now` (true when it has no
-    /// entry for `rel`): a check may overwrite them.
+    /// Whether the journal's folders, `.gitignore` and `journal.json` are still
+    /// plain entries on disk holding the exact expected bytes.
+    #[must_use]
+    pub fn intact(&self) -> bool {
+        is_plain_dir(&self.dir)
+            && is_plain_dir(&self.dir.join("orig"))
+            && is_plain_dir(&self.dir.join("wrote"))
+            && read_plain(&self.dir.join(".gitignore")).as_deref() == Some(b"*\n")
+            && read_plain(&self.dir.join("journal.json")).as_deref()
+                == Some(self.index_json(false).as_bytes())
+    }
+
+    /// Whether the journal's copies of `rel` are plain files still holding its
+    /// bytes before the run, `orig`, and what prune last wrote, `now` (true
+    /// when it has no entry for `rel`): a check may overwrite or symlink them.
     #[must_use]
     pub fn keeps(&self, rel: &str, orig: &[u8], now: &[u8]) -> bool {
         self.files.iter().position(|f| f == rel).is_none_or(|n| {
             let holds = |sub: &str, want: &[u8]| {
-                fs::read(self.dir.join(sub).join(n.to_string())).is_ok_and(|b| b == want)
+                read_plain(&self.dir.join(sub).join(n.to_string())).as_deref() == Some(want)
             };
             holds("orig", orig) && holds("wrote", now)
         })
@@ -135,64 +222,66 @@ impl Journal {
         self.dir.join(name)
     }
 
-    /// Replaces `journal.json` atomically.
+    /// Replaces `journal.json` atomically without following a symlink.
     fn save(&self, complete: bool) -> Result<(), String> {
-        let text = json!({
-            "complete": complete,
-            "files": self.files,
-            "created": self.created,
-            "deleted": self.deleted,
-        })
-        .to_string();
-        let path = self.dir.join("journal.json");
-        let tmp = self.dir.join("journal.json.tmp");
-        write_synced(&tmp, text.as_bytes())?;
-        fs::rename(&tmp, &path).map_err(io(&path))?;
-        sync_dir(&self.dir)
+        replace(
+            &self.dir.join("journal.json"),
+            self.index_json(complete).as_bytes(),
+        )
     }
 
-    /// The entry of the repository file `rel`, added with its bytes before
-    /// the run (`None`: it did not exist) when the journal lacks one.
-    ///
-    /// # Errors
-    /// The journal cannot be written.
-    pub fn track(&mut self, rel: &str, orig: Option<&[u8]>) -> Result<usize, String> {
-        if let Some(n) = self.files.iter().position(|f| f == rel) {
-            return Ok(n);
-        }
-        let n = self.files.len();
-        if let Some(bytes) = orig {
-            let copy = self.dir.join("orig").join(n.to_string());
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&copy)
-                .and_then(|mut f| f.write_all(bytes).and_then(|()| f.sync_all()))
-                .map_err(io(&copy))?;
-            sync_dir(&self.dir.join("orig"))?;
-        } else {
-            self.created.push(n);
-        }
-        self.files.push(rel.to_string());
-        self.save(false)?;
-        Ok(n)
+    fn write_orig(&self, n: usize, bytes: &[u8]) -> Result<(), String> {
+        let copy = self.dir.join("orig").join(n.to_string());
+        write_synced(&copy, bytes)?;
+        sync_dir(&self.dir.join("orig"))
     }
 
-    /// Records what the check left in entry `n` (`None`: it removed the
-    /// file), so `undo` puts the original back over those bytes.
-    ///
-    /// # Errors
-    /// The journal cannot be written.
-    pub fn seen(&mut self, n: usize, now: Option<&[u8]>) -> Result<(), String> {
-        let Some(bytes) = now else {
-            self.deleted.push(n);
-            return self.save(false);
-        };
+    fn write_wrote(&self, n: usize, bytes: &[u8]) -> Result<(), String> {
         let wrote = self.dir.join("wrote");
         let next = wrote.join(format!("{n}.new"));
         write_synced(&next, bytes)?;
         fs::rename(&next, wrote.join(n.to_string())).map_err(io(&next))?;
         sync_dir(&wrote)
+    }
+
+    fn record_now(&mut self, n: usize, now: Option<&[u8]>) -> Result<(), String> {
+        if let Some(bytes) = now {
+            self.write_wrote(n, bytes)
+        } else {
+            self.deleted.push(n);
+            self.save(false)
+        }
+    }
+
+    /// Records a file a check changed: its bytes before the run (`orig`, `None`
+    /// if the check created it) and what the check left (`now`, `None` if
+    /// removed or replaced by a symlink). For a new entry, both copies hit disk
+    /// before `journal.json` publishes it.
+    ///
+    /// # Errors
+    /// The journal cannot be written.
+    pub fn record(
+        &mut self,
+        rel: &str,
+        orig: Option<&[u8]>,
+        now: Option<&[u8]>,
+    ) -> Result<(), String> {
+        if let Some(n) = self.files.iter().position(|f| f == rel) {
+            return self.record_now(n, now);
+        }
+        let n = self.files.len();
+        if let Some(bytes) = orig {
+            self.write_orig(n, bytes)?;
+        } else {
+            self.created.push(n);
+        }
+        if let Some(bytes) = now {
+            self.write_wrote(n, bytes)?;
+        } else {
+            self.deleted.push(n);
+        }
+        self.files.push(rel.to_string());
+        self.save(false)
     }
 
     /// Writes `bytes` to the repository file `rel`, journalling its original
@@ -206,7 +295,11 @@ impl Journal {
             n
         } else {
             let orig = fs::read(&path).map_err(io(&path))?;
-            self.track(rel, Some(&orig))?
+            let n = self.files.len();
+            self.write_orig(n, &orig)?;
+            self.files.push(rel.to_string());
+            self.save(false)?;
+            n
         };
         let wrote = self.dir.join("wrote");
         let next = wrote.join(format!("{n}.new"));
@@ -216,10 +309,11 @@ impl Journal {
         sync_dir(&wrote)
     }
 
-    /// Writes again, in place, every part of the journal a check removed or
-    /// overwrote: its folders, `.gitignore`, each entry's bytes before the
-    /// run (from `orig`) and what prune wrote (from `now`), then the index.
-    /// Nothing is removed first, so a crash part way loses no copy.
+    /// Writes again, in place, every part of the journal a check removed,
+    /// overwrote or replaced with a symlink: its folders, `.gitignore`, each
+    /// entry's bytes before the run (from `orig`) and what prune wrote (from
+    /// `now`), then the index. Never follows a symlink and removes no plain
+    /// folder first, so a crash part way loses no intact copy.
     ///
     /// # Errors
     /// The journal cannot be written.
@@ -228,11 +322,11 @@ impl Journal {
         orig: &BTreeMap<String, String>,
         now: &BTreeMap<String, String>,
     ) -> Result<(), String> {
-        dir_of(&self.root)?;
+        ensure_plain_dir(&self.dir)?;
         for sub in ["orig", "wrote"] {
-            let d = self.dir.join(sub);
-            fs::create_dir_all(&d).map_err(io(&d))?;
+            ensure_plain_dir(&self.dir.join(sub))?;
         }
+        sync_dir(&self.dir)?;
         sync_dir(&self.root)?;
         replace(&self.dir.join(".gitignore"), b"*\n")?;
         for (n, rel) in self.files.iter().enumerate() {
@@ -279,6 +373,7 @@ struct Entries {
 /// no original copied yet (a crash as the run began) lists nothing.
 fn listed(dir: &Path) -> Result<Entries, String> {
     let path = dir.join("journal.json");
+    plain_file(&path)?;
     let none_copied = || fs::read_dir(dir.join("orig")).map_or(true, |mut d| d.next().is_none());
     let text = match fs::read_to_string(&path) {
         Err(e) if e.kind() == ErrorKind::NotFound && none_copied() => return Ok(Entries::default()),
@@ -313,6 +408,7 @@ fn original(dir: &Path, e: &Entries, n: usize) -> Result<Option<Vec<u8>>, String
         return Ok(None);
     }
     let path = dir.join("orig").join(n.to_string());
+    plain_file(&path)?;
     fs::read(&path).map(Some).map_err(io(&path))
 }
 
@@ -381,7 +477,7 @@ fn put_back(path: &Path, orig: Option<&[u8]>) -> Result<(), String> {
 /// Whether `path` holds its original bytes, bytes prune wrote to it, or what
 /// the stopped check left there (absence included).
 fn ours(dir: &Path, e: &Entries, n: usize, orig: Option<&[u8]>, path: &Path) -> bool {
-    let wrote = |name: String| fs::read(dir.join("wrote").join(name)).ok();
+    let wrote = |name: String| read_plain(&dir.join("wrote").join(name));
     match fs::read(path) {
         Ok(b) => {
             Some(&b[..]) == orig

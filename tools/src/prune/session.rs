@@ -6,7 +6,7 @@
 use super::check::{self, Counts};
 use super::edit::{self, Range};
 use super::journal::{self, Journal};
-use super::{Cut, Opts, clean, git, git_bytes, io, safe_path, status};
+use super::{Cut, Opts, git, git_bytes, io, safe_path, status};
 use crate::Out;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -87,7 +87,12 @@ impl Session<'_> {
             .map(|p| (p, false))
             .collect();
         for (path, text) in &self.disk {
-            if std::fs::read(safe_path(self.root, path)?).ok().as_deref() != Some(text.as_bytes()) {
+            let same = safe_path(self.root, path)
+                .ok()
+                .and_then(|p| std::fs::read(p).ok())
+                .as_deref()
+                == Some(text.as_bytes());
+            if !same {
                 changed.push((path.clone(), true));
             }
         }
@@ -105,11 +110,7 @@ impl Session<'_> {
             "the check changed files itself, so the run stopped: {}",
             names.join(", ")
         );
-        let failed = self.stop(lost, &changed).err();
-        Err(match failed {
-            Some(e) => format!("{why}; recording them failed: {e}"),
-            None => why,
-        })
+        Err(with_record_err(why, self.stop(lost, &changed)))
     }
 
     /// Records in the journal, for each file the check changed, what the
@@ -118,30 +119,13 @@ impl Session<'_> {
     fn stop(&mut self, lost: bool, changed: &[(String, bool)]) -> Result<(), String> {
         // Listed first, so a failure below never lets the journal go.
         self.stopped.extend(changed.iter().map(|(p, _)| p.clone()));
-        if lost {
-            self.journal.repair(&self.orig, &self.disk)?;
-        }
-        for (path, ours) in changed {
-            let now = std::fs::read(safe_path(self.root, path)?).ok();
-            // A file prune never cut: its bytes before the run are Git's
-            // checkout of it from the tree the run began with (the index can
-            // hold the check's own staging), or none if that tree lacks it.
-            let spec = format!("{}:{path}", self.tree);
-            let orig = if *ours {
-                Some(self.orig[path].clone().into_bytes())
-            } else if git(self.root, self.env, &["cat-file", "-e", &spec]).is_ok() {
-                Some(git_bytes(
-                    self.root,
-                    self.env,
-                    &["cat-file", "--filters", &spec],
-                )?)
-            } else {
-                None
-            };
-            let n = self.journal.track(path, orig.as_deref())?;
-            self.journal.seen(n, now.as_deref())?;
-        }
-        Ok(())
+        record_stopped(
+            (self.root, self.env, &self.tree),
+            &mut self.journal,
+            (&self.orig, &self.disk),
+            lost,
+            changed,
+        )
     }
 
     /// After a failed run: puts back every file that still holds what prune
@@ -215,35 +199,138 @@ fn search(
     }
 }
 
-/// Runs the check before any cut; refuses when it fails, prints no count
-/// above 0 without `--uncounted`, or changes the tree.
+/// Original bytes of `path` before the run: prune's copy when `ours`, else
+/// Git's checkout from `tree` (the index can hold the check's own staging),
+/// or none if that tree lacks it.
+fn orig_before(
+    (root, env, tree): (&Path, &HashMap<String, String>, &str),
+    orig: &BTreeMap<String, String>,
+    path: &str,
+    ours: bool,
+) -> Result<Option<Vec<u8>>, String> {
+    if ours {
+        return Ok(Some(orig[path].clone().into_bytes()));
+    }
+    let spec = format!("{tree}:{path}");
+    if git(root, env, &["cat-file", "-e", &spec]).is_ok() {
+        git_bytes(root, env, &["cat-file", "--filters", &spec]).map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
+/// Records in `journal`, for each file the check changed, its bytes before
+/// the run and what the check left, repairing a damaged journal first. When
+/// a path passes through a symlink, its original (if tracked) is recorded as
+/// absent so `undo` restores it once the link is removed.
+fn record_stopped(
+    repo: (&Path, &HashMap<String, String>, &str),
+    journal: &mut Journal,
+    maps: (&BTreeMap<String, String>, &BTreeMap<String, String>),
+    lost: bool,
+    changed: &[(String, bool)],
+) -> Result<(), String> {
+    if lost {
+        journal.repair(maps.0, maps.1)?;
+    }
+    let mut first_err: Option<String> = None;
+    for (path, ours) in changed {
+        let orig = orig_before(repo, maps.0, path, *ours)?;
+        match safe_path(repo.0, path) {
+            Ok(full) => {
+                let now = std::fs::read(&full).ok();
+                journal.record(path, orig.as_deref(), now.as_deref())?;
+            }
+            Err(e) => {
+                if let Some(bytes) = orig.as_deref() {
+                    journal.record(path, Some(bytes), None)?;
+                }
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    first_err.map_or(Ok(()), Err)
+}
+
+fn with_record_err(msg: String, rec: Result<(), String>) -> String {
+    match rec {
+        Ok(()) => msg,
+        Err(e) => format!("{msg}; recording them failed: {e}"),
+    }
+}
+
+/// Records any files the baseline check changed into `journal`, returning
+/// `(reason, keep_journal)` when the tree or journal was modified.
+fn baseline_dirty(
+    repo: (&Path, &HashMap<String, String>, &str),
+    journal: &mut Journal,
+) -> Result<Option<(String, bool)>, String> {
+    let inside = format!("{}/", journal::DIR);
+    let changed: Vec<(String, bool)> = status(repo.0, repo.1)?
+        .into_iter()
+        .filter(|p| !p.starts_with(&inside))
+        .map(|p| (p, false))
+        .collect();
+    let lost = !journal.intact();
+    let mut names: Vec<&str> = changed.iter().map(|(p, _)| p.as_str()).collect();
+    names.extend(lost.then_some(journal::DIR));
+    if names.is_empty() {
+        return Ok(None);
+    }
+    let msg = format!(
+        "after the baseline check, the working tree is not clean: {}",
+        names.join(", ")
+    );
+    if changed.is_empty() {
+        return Ok(Some((msg, false)));
+    }
+    let empty = BTreeMap::new();
+    let rec = record_stopped(repo, journal, (&empty, &empty), lost, &changed);
+    let msg = format!("{msg}; `prune undo` puts back the files the check changed");
+    Ok(Some((with_record_err(msg, rec), true)))
+}
+
+/// Runs the check before any cut; refuses when it fails, changes the tree, or
+/// prints no count above 0 without `--uncounted`. Returns `(err, keep_journal)`.
 fn baseline(
-    root: &Path,
-    env: &HashMap<String, String>,
+    repo: (&Path, &HashMap<String, String>, &str),
     o: &Opts,
-    journal: &Journal,
-) -> Result<check::Run, String> {
-    let base = check::run(
-        root,
+    journal: &mut Journal,
+) -> Result<check::Run, (String, bool)> {
+    let run = check::run(
+        repo.0,
         &o.check,
-        env,
+        repo.1,
         &journal.log("baseline.log"),
         Duration::MAX,
-    )?;
-    // Read before any refusal, so what the check changed is always named.
-    let dirty = clean(root, env, "after the baseline check");
+    );
+    // Read before any refusal, so what the check changed is named and journalled
+    // even when the check removed the journal (and `baseline.log` with it).
+    let dirty = baseline_dirty(repo, journal).map_err(|e| (e, false))?;
+    let base = match run {
+        Ok(b) => b,
+        Err(e) => return Err(dirty.unwrap_or((e, false))),
+    };
     if !base.ok {
-        let changed = dirty.err().map_or_default(|e| format!("; {e}"));
+        let (changed, keep) = dirty.map_or((String::new(), false), |(d, k)| (format!("; {d}"), k));
         let tail = if base.tail.is_empty() {
             String::new()
         } else {
             format!("; its output ends:\n{}", base.tail)
         };
-        return Err(format!("the check fails before any cut{changed}{tail}"));
+        return Err((
+            format!("the check fails before any cut{changed}{tail}"),
+            keep,
+        ));
     }
-    dirty?;
+    if let Some(d) = dirty {
+        return Err(d);
+    }
     if base.counts.values().all(|&n| n == 0) && !o.uncounted {
-        return Err("the check prints no test count above 0 that prune can read; pass --uncounted to rely on its exit status alone".into());
+        return Err((
+            "the check prints no test count above 0 that prune can read; pass --uncounted to rely on its exit status alone".into(),
+            false,
+        ));
     }
     Ok(base)
 }
@@ -267,6 +354,21 @@ fn originals(
     Ok(orig)
 }
 
+fn finish_apply(
+    s: &mut Session<'_>,
+    out: &mut Out,
+    kept: &[usize],
+    rejected: &[usize],
+) -> Result<(), String> {
+    s.set(kept)?;
+    report(out, s.cuts, kept, rejected, s.runs);
+    if kept.is_empty() {
+        s.journal.discard()
+    } else {
+        s.journal.finish()
+    }
+}
+
 pub(super) fn apply(
     root: &Path,
     env: &HashMap<String, String>,
@@ -274,22 +376,25 @@ pub(super) fn apply(
     (cuts, texts): (&[Cut], &BTreeMap<String, String>),
     mut out: Out,
 ) -> Result<Out, String> {
-    let journal = Journal::create(root)?;
-    let ready = baseline(root, env, o, &journal).and_then(|base| {
-        let tree = git(root, env, &["rev-parse", "HEAD^{tree}"])?;
-        Ok((base, originals(root, cuts, texts)?, tree.trim().to_string()))
+    let tree = git(root, env, &["rev-parse", "HEAD^{tree}"])?
+        .trim()
+        .to_string();
+    let mut journal = Journal::create(root)?;
+    let ready = baseline((root, env, &tree), o, &mut journal).and_then(|base| {
+        originals(root, cuts, texts)
+            .map(|orig| (base, orig))
+            .map_err(|e| (e, false))
     });
-    // A baseline check may have removed the journal itself.
-    let (base, orig, tree) = match ready {
+    // Keep the journal when baseline mutations were recorded; clear it otherwise.
+    let (base, orig) = match ready {
         Ok(r) => r,
-        Err(e) => return journal::clear(root).and(Err(e)),
+        Err((e, true)) => return Err(e),
+        Err((e, false)) => return journal::clear(root).and(Err(e)),
     };
     out.say(format!(
         "baseline: check passes ({})",
         check::describe(&base.counts)
     ));
-    let limit = base.took * 3 + Duration::from_secs(60);
-    let disk = orig.clone();
     let mut s = Session {
         root,
         env,
@@ -297,25 +402,18 @@ pub(super) fn apply(
         cuts,
         journal,
         base: base.counts,
-        limit,
+        limit: base.took * 3 + Duration::from_secs(60),
+        disk: orig.clone(),
         orig,
-        disk,
         runs: 0,
         stopped: Vec::new(),
         tree,
     };
-    let found = search(cuts.len(), &mut |a| s.pass(a));
-    let (kept, rejected) = match found {
+    let (kept, rejected) = match search(cuts.len(), &mut |a| s.pass(a)) {
         Ok(r) => r,
         Err(e) => return Err(format!("{e}{}", s.abandon())),
     };
-    s.set(&kept)?;
-    report(&mut out, cuts, &kept, &rejected, s.runs);
-    if kept.is_empty() {
-        s.journal.discard()?;
-    } else {
-        s.journal.finish()?;
-    }
+    finish_apply(&mut s, &mut out, &kept, &rejected)?;
     Ok(out)
 }
 

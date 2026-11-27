@@ -61,9 +61,10 @@ fn a_check_that_edits_a_cut_file_stops_the_run_and_undo_puts_back_every_byte() {
     );
     assert_eq!(
         made.stderr,
-        "prune: after the baseline check, the working tree is not clean: new.txt\n"
+        "prune: after the baseline check, the working tree is not clean: new.txt; `prune undo` puts back the files the check changed\n"
     );
-    fs::remove_file(dir.join("new.txt")).expect("rm");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
 
     let out = once_cut(dir, "echo y >> src/lib.rs");
     assert_eq!(out.stderr, stopped("src/lib.rs", FOR_UNDO));
@@ -344,6 +345,30 @@ fn journal_repair_never_follows_symlinked_subfolders_or_files() {
         stopped(".puritanical-prune", "prune's edits were undone")
     );
     assert_eq!(fs::read_to_string(&sentinel).expect("sentinel"), "SENTINEL");
+    clean(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn undo_refuses_a_symlinked_journal_file() {
+    let d = repo_d();
+    let dir = d.path();
+    let ext = tempfile::tempdir().expect("ext dir");
+    let sentinel = ext.path().join("0");
+    write(&sentinel, "SENTINEL");
+    let mut j = Journal::create(dir).expect("create");
+    j.write("other.txt", b"y\n").expect("write");
+    fs::remove_file(dir.join(".puritanical-prune/journal.json")).expect("rm index");
+    std::os::unix::fs::symlink(&sentinel, dir.join(".puritanical-prune/journal.json"))
+        .expect("symlink");
+    assert!(prune(dir, &["undo"]).stderr.contains("is not a plain file"));
+    fs::remove_file(dir.join(".puritanical-prune/journal.json")).expect("rm link");
+    j.repair(
+        &std::collections::BTreeMap::from([("other.txt".into(), "x\n".into())]),
+        &std::collections::BTreeMap::from([("other.txt".into(), "y\n".into())]),
+    )
+    .expect("repair");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
     clean(dir);
 }
 

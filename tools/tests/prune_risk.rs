@@ -83,7 +83,7 @@ fn path_modules_and_include_make_their_package_risky() {
         ),
         ("src/other.rs", "pub fn y() {}\n\npub fn z() {}\n"),
     ]);
-    let why = "(risky: package has a #[path] module or a macro call among its items; cut only with --risky)";
+    let why = "(risky: package has a #[path] module, attribute macro or macro call; cut only with --risky)";
     assert_eq!(
         prune(hidden.path(), &[]).stdout,
         format!(
@@ -246,14 +246,7 @@ fn needs_the_top_of_a_git_work_tree() {
     );
 }
 
-/// A repository (`repo/`) depending on a sibling proc-macro crate `pm/`.
-fn proc_macro_repo(lib: &str, extra: &[(&str, &str)]) -> tempfile::TempDir {
-    let tmp = tempfile::tempdir().expect("temp dir");
-    write(
-        &tmp.path().join("pm/Cargo.toml"),
-        "[package]\nname = \"pm\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\nproc-macro = true\n",
-    );
-    let pm = r##"use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
+const PM_LIB: &str = r##"use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 
 #[proc_macro_attribute]
 pub fn keep_on_freebsd(_: TokenStream, item: TokenStream) -> TokenStream {
@@ -281,12 +274,24 @@ pub fn freebsd_use(_: TokenStream) -> TokenStream {
         .expect("tokens")
 }
 "##;
-    write(&tmp.path().join("pm/src/lib.rs"), pm);
+
+/// A repository (`repo/`) depending on a sibling proc-macro crate `pm/`.
+fn proc_macro_repo(lib: &str, extra: &[(&str, &str)]) -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    write(
+        &tmp.path().join("pm/Cargo.toml"),
+        "[package]\nname = \"pm\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\nproc-macro = true\n",
+    );
+    write(&tmp.path().join("pm/src/lib.rs"), PM_LIB);
     let dir = tmp.path().join("repo");
     let manifest = "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\npm = { path = \"../pm\" }\n";
-    for (p, t) in [("Cargo.toml", manifest), (".gitignore", IGNORE), ("src/lib.rs", lib)]
-        .into_iter()
-        .chain(extra.iter().copied())
+    for (p, t) in [
+        ("Cargo.toml", manifest),
+        (".gitignore", IGNORE),
+        ("src/lib.rs", lib),
+    ]
+    .into_iter()
+    .chain(extra.iter().copied())
     {
         write(&dir.join(p), t);
     }
@@ -305,7 +310,8 @@ fn an_attributed_external_module_makes_its_package_risky() {
     let dry = prune(&tmp.path().join("repo"), &[]);
     assert_eq!(dry.code, 0, "{}", dry.stderr);
     assert!(
-        dry.stdout.contains("src/ext.rs:1 function `dead_in_ext` (risky:")
+        dry.stdout
+            .contains("src/ext.rs:1 function `dead_in_ext` (risky:")
             && dry.stdout.contains("1 candidate(s), 1 risky."),
         "{}",
         dry.stdout
@@ -322,7 +328,8 @@ fn a_function_body_proc_macro_makes_its_package_risky() {
         let dry = prune(&tmp.path().join("repo"), &[]);
         assert_eq!(dry.code, 0, "{}", dry.stderr);
         assert!(
-            dry.stdout.contains("src/lib.rs:5 function `dead_in_fn` (risky:")
+            dry.stdout
+                .contains("src/lib.rs:5 function `dead_in_fn` (risky:")
                 && dry.stdout.contains("1 candidate(s), 1 risky."),
             "{lib}\n{}",
             dry.stdout

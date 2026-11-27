@@ -4,6 +4,7 @@
 //! item's full extent taken from a parsed syntax tree.
 
 mod items;
+mod scan;
 
 use super::edit::Range;
 use super::{Cut, safe_path};
@@ -12,7 +13,6 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use syn::ext::IdentExt;
 
 /// A `dead_code` primary span: file as rustc names it, byte range.
 type Span = (String, usize, usize);
@@ -200,73 +200,16 @@ fn package_has_platform_cfg(dir: &Path) -> bool {
             let name = e.file_name().to_string_lossy().into_owned();
             let kind = e.file_type().ok();
             if kind.is_some_and(|t| t.is_dir()) {
-                // Cargo tags every build folder; a module folder may be named `target`.
-                return !p.join("CACHEDIR.TAG").is_file()
-                    && !name.starts_with('.')
-                    && package_has_platform_cfg(&p);
+                // Skip Cargo's build folders (tagged, or an untagged `target/`
+                // beside `Cargo.toml`); a module folder like `src/target` is read.
+                let build_dir = p.join("CACHEDIR.TAG").is_file()
+                    || (name == "target" && dir.join("Cargo.toml").is_file());
+                return !build_dir && !name.starts_with('.') && package_has_platform_cfg(&p);
             }
             kind.is_some_and(|t| t.is_file())
                 && name.ends_with(".rs")
                 && std::fs::read_to_string(&p).is_ok_and(|s| uncovered_cfg(&s))
         })
-}
-
-/// Queues the files the `mod` declarations in `items` load (a module whose
-/// child files live in `dir`). `None` when a `#[path]` module or a macro
-/// call among the items hides where code comes from.
-fn mods(items: &[syn::Item], dir: &Path, todo: &mut Vec<(PathBuf, PathBuf)>) -> Option<()> {
-    for it in items {
-        match it {
-            syn::Item::Mod(m) => {
-                let path_attr = |a: &syn::Attribute| {
-                    a.path().is_ident("path")
-                        || a.meta
-                            .require_list()
-                            .is_ok_and(|l| l.tokens.to_string().contains("path"))
-                };
-                if m.attrs.iter().any(path_attr) {
-                    return None;
-                }
-                let sub = dir.join(m.ident.unraw().to_string());
-                if let Some((_, inner)) = &m.content {
-                    mods(inner, &sub, todo)?;
-                } else {
-                    let flat = sub.with_extension("rs");
-                    let file = if flat.is_file() {
-                        flat
-                    } else {
-                        sub.join("mod.rs")
-                    };
-                    todo.push((file, sub));
-                }
-            }
-            // A macro call (`include!` among them) can expand to `mod x;`; a
-            // `macro_rules!` definition has a name and loads nothing.
-            syn::Item::Macro(m) if m.ident.is_none() => return None,
-            _ => {}
-        }
-    }
-    Some(())
-}
-
-/// The files the module tree of the crate rooted at `file` reaches, or
-/// `None` when prune cannot follow it.
-fn tree(file: &Path) -> Option<BTreeSet<PathBuf>> {
-    let mut seen = BTreeSet::new();
-    let mut todo = vec![(file.to_path_buf(), file.parent()?.to_path_buf())];
-    while let Some((f, dir)) = todo.pop() {
-        // A module file that is not there (behind a cfg for another
-        // platform, say) leaves the tree unknown.
-        let f = f.canonicalize().ok()?;
-        if seen.insert(f.clone()) {
-            let text = std::fs::read_to_string(&f).ok()?;
-            let items = syn::parse_file(&blank_prelude(&text)).ok()?.items;
-            let queued = mods(&items, &dir, &mut todo);
-            proc_macro2::extra::invalidate_current_thread_spans();
-            queued?;
-        }
-    }
-    Some(seen)
 }
 
 /// For each source file, the lib and bin targets whose module trees reach
@@ -291,7 +234,7 @@ fn owners(root: &Path, env: &HashMap<String, String>) -> Result<Owners, String> 
                 continue;
             }
             let src = canon(t["src_path"].as_str().unwrap_or_default());
-            let Some(files) = tree(&src) else {
+            let Some(files) = scan::tree(&src) else {
                 o.unknown.insert(dir.clone());
                 continue;
             };
@@ -387,7 +330,7 @@ pub fn find(root: &Path, env: &HashMap<String, String>) -> Result<Found, String>
         });
         let why = (!all_features)
             .then_some("features not checked")
-            .or(unknown.then_some("package has a #[path] module or a macro call among its items"))
+            .or(unknown.then_some("package has a #[path] module, attribute macro or macro call"))
             .or(gated.then_some("package has a cfg its builds do not cover"));
         let (cuts, text) = file_cuts(root, &rel, &names, why)?;
         found.cuts.extend(cuts);
@@ -466,11 +409,11 @@ mod tests {
         let lib = d.path().join("lib.rs");
         // A macro call can expand to `mod util;`; a macro definition loads nothing.
         std::fs::write(&lib, "macro_rules! m { () => { mod util; } }\n").expect("lib");
-        assert!(tree(&lib).is_some());
+        assert!(scan::tree(&lib).is_some());
         std::fs::write(&lib, "macro_rules! m { () => { mod util; } }\nm!();\n").expect("lib");
-        assert!(tree(&lib).is_none());
+        assert!(scan::tree(&lib).is_none());
         std::fs::write(&lib, "mod inner { thread_local! {} }\n").expect("lib");
-        assert!(tree(&lib).is_none());
+        assert!(scan::tree(&lib).is_none());
     }
 
     #[cfg(unix)]
@@ -484,7 +427,7 @@ mod tests {
         std::os::unix::fs::symlink("a.rs", at("b.rs")).expect("symlink");
         std::fs::create_dir(at("inner")).expect("dir");
         std::fs::write(at("inner/c.rs"), "").expect("c");
-        let files = tree(&at("lib.rs")).expect("tree");
+        let files = scan::tree(&at("lib.rs")).expect("tree");
         let names: Vec<_> = files
             .iter()
             .map(|f| f.file_name().expect("name").to_string_lossy().into_owned())
