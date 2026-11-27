@@ -156,6 +156,23 @@ Covers `~/.cursor/mcp.json`, `~/.codeium/windsurf/mcp_config.json`,
   original stays in `config.toml.puritanical-bak`.
 - `npx github:yungSNAT/Puritanical --uninstall` unwraps everything and removes the proxy.
 
+## `puritanical-tools` binary
+
+`puritanical-tools` is the Rust command-line tool in `tools/`. With Rust 1.100 or later, one command builds and installs it from this repository:
+
+```bash
+cargo install --locked --git https://github.com/yungSNAT/Puritanical puritanical-tools
+```
+
+Releases from 4.0.0 also attach prebuilt binaries for Linux (x86_64 and arm64), Windows (x86_64) and macOS (Apple silicon), a `SHA256SUMS` file and a signed build provenance attestation for each binary. Download one and check where it was built:
+
+```bash
+gh release download --repo yungSNAT/Puritanical --pattern 'puritanical-tools-x86_64-unknown-linux-gnu'
+gh attestation verify puritanical-tools-x86_64-unknown-linux-gnu --repo yungSNAT/Puritanical
+```
+
+The other names are `puritanical-tools-aarch64-unknown-linux-gnu`, `puritanical-tools-x86_64-pc-windows-msvc.exe` and `puritanical-tools-aarch64-apple-darwin`. Without `gh`, download from `https://github.com/yungSNAT/Puritanical/releases/latest/download/<name>` and compare its SHA-256 with `SHA256SUMS`. Commands that write this repository's generated files (`rules`, `readme-art`) need `PURITANICAL_ROOT` set to a clone.
+
 ## Upgrading
 
 One command covers every agent that already has Puritanical:

@@ -1,15 +1,26 @@
 name: GitHub release
 
-# Puritanical ships from its own tagged source on GitHub.
+# Puritanical ships from its own tagged source on GitHub, with prebuilt
+# puritanical-tools binaries. A pull request that changes this workflow or the
+# crate's build inputs, or a manual run, builds the binaries without releasing.
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - .github/workflows/publish.yml
+      - tools/Cargo.toml
+      - tools/Cargo.lock
+      - tools/rust-toolchain.toml
+      - core/Cargo.toml
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -28,14 +39,72 @@ jobs:
           rustup toolchain install
           for c in rules readme-art; do cargo run --quiet --locked -- "$c" --check; done
 
-  release:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: write # Create the release for an existing tag.
+  binaries:
+    name: binary (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: tools
+    env:
+      TARGET: ${{ matrix.target }}
     steps:
-      - name: Publish the verified source tag
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        run: rustup toolchain install && rustup target add "$TARGET"
+      - name: Build, smoke-test and name the binary
+        run: |
+          cargo build --release --locked --target "$TARGET"
+          exe=""
+          if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          bin="target/$TARGET/release/puritanical-tools$exe"
+          "$bin" --version
+          mkdir -p ../dist
+          cp "$bin" "../dist/puritanical-tools-$TARGET$exe"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [test, binaries]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # Create the release for an existing tag and attach its binaries.
+      id-token: write # Sign the build provenance attestation.
+      attestations: write # Store the attestation.
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
+      - name: Write the checksums
+        working-directory: dist
+        run: sha256sum puritanical-tools-* > SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/puritanical-tools-*
+      - name: Publish the verified source tag with its binaries
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -44,8 +113,9 @@ jobs:
             echo "::error::The tag has moved since its tests ran."
             exit 1
           fi
-          if [[ "$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" == false ]]; then
-            echo "The verified tag already has a published release."
-          else
-            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
-          fi
+          draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || echo none)
+          case "$draft" in
+            false) echo "The verified tag already has a published release." ;;
+            true) gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber ;;
+            *) gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes ;;
+          esac

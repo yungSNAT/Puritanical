@@ -19,6 +19,10 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - MCP tools whose names mark them as file or source readers (`read_file`, `get_file_contents`, `search_code`, and LSP-style hover, definition, reference and symbol tools) are no longer compressed by the Claude Code and Pi hooks. The check is by name, so a tool named otherwise is not covered. One name guard now covers those hooks, the MCP proxy, and tools named in `CHISLE_COMPRESS_TOOLS` for Copilot CLI and OpenCode, which can no longer re-enable them.
 - Output containing a credential (PEM private key, JWT, AWS, GCP or Azure key, GitHub token, Authorization header) is no longer written to the spill folder; it is still elided, without the recovery path.
 
+### Added
+
+- Releases attach prebuilt `puritanical-tools` binaries for Linux (x86_64, arm64), Windows (x86_64) and macOS (Apple silicon), with `SHA256SUMS` and a build provenance attestation for each binary. A pull request that changes the release workflow or the crate's build inputs builds them without releasing. INSTALL.md gives the download and `cargo install --git` commands.
+
 ### Changed
 
 - Prose rules: Laconic's plain prose rules replace Chisle's terse ones. The skill's prose section is now `## Prose: Laconic`: plain, complete, answer-first sentences in Australian English, with no preamble or recap, and with facts, caveats and exact literals kept. The rule copies, `AGENTS.md`, `GEMINI.md`, the fallback rulesets and the per-turn reminder follow, and none asks for fragments or dropped articles. If you copied `AGENTS.md` into a project before this change, copy it again: the pi extension still treats the old prose heading as the rules being present, so that project keeps the old rules until you do. `sections.prose: false` still drops the section and the reminder's prose clause. The audit skill judges prose by Laconic's rules. The package description no longer claims fewer tokens than comparable tools, and the benchmark pages note that their runs measured the old prose rules.
