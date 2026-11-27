@@ -278,3 +278,105 @@ fn the_journal_restores_original_bytes_after_a_crash_at_any_step() {
             .contains("not a prune journal")
     );
 }
+
+#[test]
+fn a_corrupted_journal_index_is_detected_and_repaired() {
+    let d = repo_d();
+    let dir = d.path();
+    let empty = r#"printf '{"complete":false,"files":[]}' > .puritanical-prune/journal.json"#;
+    let lost = once_cut(dir, empty);
+    assert_eq!(
+        lost.stderr,
+        stopped(".puritanical-prune", "prune's edits were undone")
+    );
+    clean(dir);
+
+    let forged = r#"printf '{"complete":false,"files":["src/lib.rs"],"created":[0]}' > .puritanical-prune/journal.json; echo y >> other.txt"#;
+    let both = once_cut(dir, forged);
+    assert_eq!(
+        both.stderr,
+        stopped("other.txt, .puritanical-prune", FOR_UNDO)
+    );
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    assert_eq!(read(dir, "src/lib.rs"), LIB_D);
+    assert_eq!(read(dir, "other.txt"), "x\n");
+    clean(dir);
+
+    let bad_ignore = "printf '' > .puritanical-prune/.gitignore";
+    let lost = once_cut(dir, bad_ignore);
+    assert_eq!(
+        lost.stderr,
+        stopped(".puritanical-prune", "prune's edits were undone")
+    );
+    clean(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn journal_repair_never_follows_symlinked_subfolders_or_files() {
+    let d = repo_d();
+    let dir = d.path();
+    let ext = tempfile::tempdir().expect("ext dir");
+    let sentinel = ext.path().join("0");
+    write(&sentinel, "SENTINEL");
+
+    let script = format!(
+        "rm -rf .puritanical-prune/orig && ln -s '{}' .puritanical-prune/orig && echo y >> other.txt",
+        ext.path().display()
+    );
+    let out = once_cut(dir, &script);
+    assert_eq!(
+        out.stderr,
+        stopped("other.txt, .puritanical-prune", FOR_UNDO)
+    );
+    assert_eq!(fs::read_to_string(&sentinel).expect("sentinel"), "SENTINEL");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    assert_eq!(read(dir, "other.txt"), "x\n");
+    clean(dir);
+
+    let script = format!(
+        "rm .puritanical-prune/orig/0 && ln -s '{}' .puritanical-prune/orig/0",
+        sentinel.display()
+    );
+    let out = once_cut(dir, &script);
+    assert_eq!(
+        out.stderr,
+        stopped(".puritanical-prune", "prune's edits were undone")
+    );
+    assert_eq!(fs::read_to_string(&sentinel).expect("sentinel"), "SENTINEL");
+    clean(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn replacing_an_existing_file_with_a_symlink_still_restores_it_after_removal() {
+    let d = repo_d();
+    let dir = d.path();
+    for (script, target, expect) in [
+        (
+            "rm other.txt && ln -s src/lib.rs other.txt",
+            "other.txt",
+            "x\n",
+        ),
+        (
+            "rm src/lib.rs && ln -s other.txt src/lib.rs",
+            "src/lib.rs",
+            LIB_D,
+        ),
+    ] {
+        let out = once_cut(dir, script);
+        assert!(
+            out.stderr.contains(&format!(
+                "; recording them failed: {target}: passes through a symbolic link"
+            )),
+            "{script}: {}",
+            out.stderr
+        );
+        // Refuses whilst the link is still there.
+        assert_eq!(prune(dir, &["undo"]).code, 1, "{script}");
+        fs::remove_file(dir.join(target)).expect("rm link");
+        assert_eq!(prune(dir, &["undo"]).code, 0, "{script}");
+        assert_eq!(read(dir, target), expect, "{script}");
+        clean(dir);
+    }
+}

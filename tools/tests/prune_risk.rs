@@ -245,3 +245,87 @@ fn needs_the_top_of_a_git_work_tree() {
             .contains("is not a plain folder")
     );
 }
+
+/// A repository (`repo/`) depending on a sibling proc-macro crate `pm/`.
+fn proc_macro_repo(lib: &str, extra: &[(&str, &str)]) -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().expect("temp dir");
+    write(
+        &tmp.path().join("pm/Cargo.toml"),
+        "[package]\nname = \"pm\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\nproc-macro = true\n",
+    );
+    let pm = r##"use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
+
+#[proc_macro_attribute]
+pub fn keep_on_freebsd(_: TokenStream, item: TokenStream) -> TokenStream {
+    let extra: TokenStream = "#[cfg(target_os = \"freebsd\")] fn _u() { dead_in_ext(); }"
+        .parse()
+        .expect("tokens");
+    item.into_iter()
+        .map(|tt| match tt {
+            TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
+                let mut body = g.stream();
+                body.extend(extra.clone());
+                let mut out = Group::new(Delimiter::Brace, body);
+                out.set_span(g.span());
+                TokenTree::Group(out)
+            }
+            other => other,
+        })
+        .collect()
+}
+
+#[proc_macro]
+pub fn freebsd_use(_: TokenStream) -> TokenStream {
+    "{ #[cfg(target_os = \"freebsd\")] { dead_in_fn(); } }"
+        .parse()
+        .expect("tokens")
+}
+"##;
+    write(&tmp.path().join("pm/src/lib.rs"), pm);
+    let dir = tmp.path().join("repo");
+    let manifest = "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\npm = { path = \"../pm\" }\n";
+    for (p, t) in [("Cargo.toml", manifest), (".gitignore", IGNORE), ("src/lib.rs", lib)]
+        .into_iter()
+        .chain(extra.iter().copied())
+    {
+        write(&dir.join(p), t);
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "core.autocrlf", "false"]);
+    commit(&dir);
+    tmp
+}
+
+#[test]
+fn an_attributed_external_module_makes_its_package_risky() {
+    let tmp = proc_macro_repo(
+        "#[pm::keep_on_freebsd]\nmod ext;\n",
+        &[("src/ext.rs", "fn dead_in_ext() {}\n")],
+    );
+    let dry = prune(&tmp.path().join("repo"), &[]);
+    assert_eq!(dry.code, 0, "{}", dry.stderr);
+    assert!(
+        dry.stdout.contains("src/ext.rs:1 function `dead_in_ext` (risky:")
+            && dry.stdout.contains("1 candidate(s), 1 risky."),
+        "{}",
+        dry.stdout
+    );
+}
+
+#[test]
+fn a_function_body_proc_macro_makes_its_package_risky() {
+    for lib in [
+        "pub fn api() {\n    pm::freebsd_use!();\n}\n\nfn dead_in_fn() {}\n",
+        "pub fn api() {\n    assert!({ pm::freebsd_use!(); true });\n}\n\nfn dead_in_fn() {}\n",
+    ] {
+        let tmp = proc_macro_repo(lib, &[]);
+        let dry = prune(&tmp.path().join("repo"), &[]);
+        assert_eq!(dry.code, 0, "{}", dry.stderr);
+        assert!(
+            dry.stdout.contains("src/lib.rs:5 function `dead_in_fn` (risky:")
+                && dry.stdout.contains("1 candidate(s), 1 risky."),
+            "{lib}\n{}",
+            dry.stdout
+        );
+    }
+}

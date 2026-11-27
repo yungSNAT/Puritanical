@@ -417,3 +417,41 @@ fn a_path_through_a_symbolic_link_is_refused() {
             .contains("symbolic link")
     );
 }
+
+#[test]
+fn a_baseline_that_changes_files_is_recorded_for_undo() {
+    let d = repo(&[
+        ("Cargo.toml", MANIFEST),
+        (".gitignore", IGNORE),
+        ("src/lib.rs", LIB_C),
+    ]);
+    let dir = d.path();
+    let alias = |script: &str| {
+        let alias = format!("alias.chk=!{script}");
+        prune(dir, &["--apply", "--", "git", "-c", &alias, "chk"])
+    };
+    for script in [
+        "rm src/lib.rs; exit 1",
+        "rm -r .puritanical-prune; rm src/lib.rs; exit 1",
+    ] {
+        let out = alias(script);
+        assert!(
+            out.stderr.contains("src/lib.rs") && out.stderr.contains("prune undo"),
+            "{script}: {}",
+            out.stderr
+        );
+        assert!(prune(dir, &["keep"]).stderr.contains("did not finish"));
+        assert_eq!(prune(dir, &["undo"]).code, 0, "{script}");
+        assert_eq!(read(dir, "src/lib.rs"), LIB_C);
+        clean(dir);
+    }
+    let out = alias("echo z > new.txt; echo 'test result: ok. 1 passed;'");
+    assert!(
+        out.stderr.contains("new.txt") && out.stderr.contains("prune undo"),
+        "{}",
+        out.stderr
+    );
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    assert!(!dir.join("new.txt").exists());
+    clean(dir);
+}

@@ -536,6 +536,10 @@ mod tests {
         .expect("tag");
         std::fs::write(at("target/debug/out.rs"), "#[cfg(windows)] fn f() {}\n").expect("out");
         assert!(!package_has_platform_cfg(d.path()));
+        // A pre-existing untagged `target/` beside `Cargo.toml` is a build folder too.
+        std::fs::remove_file(at("target/CACHEDIR.TAG")).expect("rm tag");
+        std::fs::write(at("Cargo.toml"), "[package]\n").expect("manifest");
+        assert!(!package_has_platform_cfg(d.path()));
         // `mod target;` is ordinary Rust: its cfgs count.
         std::fs::create_dir_all(at("src/target")).expect("module dir");
         std::fs::write(at("src/target/mod.rs"), "#[cfg(windows)] fn f() {}\n").expect("module");
