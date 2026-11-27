@@ -520,4 +520,19 @@ mod tests {
             (Path::new("/w/p"), 1)
         );
     }
+
+    #[test]
+    fn a_module_folder_named_target_is_read_and_a_build_folder_is_not() {
+        let d = tempfile::tempdir().expect("temp dir");
+        let at = |p: &str| d.path().join(p);
+        std::fs::create_dir_all(at("target/debug")).expect("build dir");
+        std::fs::write(at("target/CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55\n")
+            .expect("tag");
+        std::fs::write(at("target/debug/out.rs"), "#[cfg(windows)] fn f() {}\n").expect("out");
+        assert!(!package_has_platform_cfg(d.path()));
+        // `mod target;` is ordinary Rust: its cfgs count.
+        std::fs::create_dir_all(at("src/target")).expect("module dir");
+        std::fs::write(at("src/target/mod.rs"), "#[cfg(windows)] fn f() {}\n").expect("module");
+        assert!(package_has_platform_cfg(d.path()));
+    }
 }
