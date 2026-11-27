@@ -239,9 +239,7 @@ fn safety_no_path_outside_the_working_root() {
     // Absolute paths and `..` are refused before any lookup: a missing one
     // gives the same refusal as an existing one, so nothing outside the root
     // is revealed, not even whether a file exists.
-    let missing = std::env::temp_dir()
-        .join("puritanical-mcp-missing")
-        .join("a.txt");
+    let missing = outer.path().join("missing").join("a.txt");
     for path in [
         "../secret.txt",
         "../missing.txt",
