@@ -20,17 +20,17 @@ const USAGE: &str = "usage: puritanical-tools report [--audit-before <file>] [--
 
 /// What the report reads.
 #[derive(Default)]
-struct Args<'a> {
-    audit_before: Option<&'a str>,
-    audit_after: Option<&'a str>,
-    stats: Option<&'a str>,
-    svg: Option<&'a str>,
-    outputs: Vec<&'a str>,
+pub(crate) struct Args<'a> {
+    pub(crate) audit_before: Option<&'a str>,
+    pub(crate) audit_after: Option<&'a str>,
+    pub(crate) stats: Option<&'a str>,
+    pub(crate) svg: Option<&'a str>,
+    pub(crate) outputs: Vec<&'a str>,
 }
 
 /// The measured figures.
 #[derive(Default)]
-struct Report {
+pub(crate) struct Report {
     /// File name, bytes before, bytes after.
     outputs: Vec<(String, usize, usize)>,
     /// Code and prose finding lines, before and after.
@@ -48,7 +48,7 @@ pub fn run(rest: &[String]) -> Out {
             ..Out::default()
         };
     };
-    match measure(&args) {
+    match measure(&args, &read) {
         Ok(report) => {
             let card = args
                 .svg
@@ -90,15 +90,19 @@ fn read(path: &str) -> Result<Vec<u8>, String> {
     std::fs::read(path).map_err(|e| format!("{path}: {e}"))
 }
 
+/// Reads a named file's bytes, or says why it cannot.
+pub(crate) type Reader<'a> = &'a dyn Fn(&str) -> Result<Vec<u8>, String>;
+
 /// The hook only ever sees text, so a file that is not UTF-8 has no figure.
-fn read_text(path: &str) -> Result<String, String> {
+fn read_text(read: Reader, path: &str) -> Result<String, String> {
     String::from_utf8(read(path)?).map_err(|_| format!("{path}: not UTF-8 text"))
 }
 
-fn measure(args: &Args) -> Result<Report, String> {
+/// Measures what `args` names, reading each file with `read`.
+pub(crate) fn measure(args: &Args, read: Reader) -> Result<Report, String> {
     let mut report = Report::default();
     for path in &args.outputs {
-        let text = read_text(path)?;
+        let text = read_text(read, path)?;
         let after = compressed(&text).len();
         report
             .outputs
@@ -110,7 +114,7 @@ fn measure(args: &Args) -> Result<Report, String> {
         .zip([args.audit_before, args.audit_after])
     {
         if let Some(path) = path {
-            *slot = Some(findings(&read_text(path)?));
+            *slot = Some(findings(&read_text(read, path)?));
         }
     }
     if let Some(path) = args.stats {
@@ -141,7 +145,7 @@ pub fn compressed(text: &str) -> String {
 
 /// Finding lines (`path:line  [code|prose] ...`) in a `puritanical-audit`
 /// output. Fields are separated by 2 spaces, so a path may hold single ones.
-fn findings(text: &str) -> [usize; 2] {
+pub(crate) fn findings(text: &str) -> [usize; 2] {
     let mut n = [0, 0];
     for k in text.lines().filter_map(kind) {
         n[k] += 1;
@@ -214,7 +218,7 @@ fn code(s: &str) -> String {
     format!("{fence}{pad}{s}{pad}{fence}")
 }
 
-fn markdown(r: &Report) -> String {
+pub(crate) fn markdown(r: &Report) -> String {
     let mut md = String::from("# Puritanical report\n");
     if !r.outputs.is_empty() {
         md += "\n## Tool output\n\nUTF-8 bytes of each file before and after the PostToolUse compressor's generic tiers, run through `puritanical-core` with the hook's defaults: scrub above 1,024 UTF-16 code units; above 8,000, keep the first 60 and last 40 lines and error-like lines, or the first and last 4,000 units of an output of 100 lines or fewer; keep the original unless at least 64 units go. No command filter or spill-file note is applied. Paths appear as given. Bytes, not tokens.\n\n| File | Bytes before | Bytes after | Saved |\n|---|---:|---:|---:|\n";

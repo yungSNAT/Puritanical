@@ -7,6 +7,7 @@
 pub mod aggregate;
 pub mod answers;
 pub mod js;
+pub mod mcp;
 pub mod normalize_pi;
 pub mod pooled;
 pub mod readme_art;
@@ -26,7 +27,8 @@ pub const USAGE: &str = "usage: puritanical-tools <command>
   answers <run-dir> [arm ...]  write <run-dir>/ANSWERS.md
   normalize-pi <events.jsonl>  Pi's event stream as one benchmark cell
   agentic-score [--json]   agentic suite table (RAW_DIR, ARMS)
-  report [options] [file...]  measured before-and-after report (Markdown; --svg card)";
+  report [options] [file...]  measured before-and-after report (Markdown; --svg card)
+  mcp                      stdio MCP server with read-only tools, rooted at the current directory";
 
 /// What a command prints and its exit status.
 #[derive(Debug, Default, PartialEq, Eq)]
