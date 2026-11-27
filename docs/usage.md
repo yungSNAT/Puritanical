@@ -73,6 +73,22 @@ In Claude Code the statusline badge carries the same number live: `[PURITANICAL]
 
 This is the **input axis only**, and deliberately so. Chars elided have a real baseline, since the hook knows exactly what it cut. The output axis has none: there is no way to know what the model would have written without the ruleset, so no counter can measure it. Benchmark arms measured it for Chisle's earlier prose rules; the current prose rules have not been measured. A number that blended the two would be inventing the interesting half.
 
+### Before-and-after report
+
+`puritanical-tools report` (the Rust tool in `tools/`) writes a Markdown report, and with `--svg <file>` a card, from figures it measures itself:
+
+```bash
+puritanical-tools report build.log test.log \
+  --audit-before audit-before.txt --audit-after audit-after.txt \
+  --stats ~/.claude/.puritanical-compress-stats.json --svg report.svg > report.md
+```
+
+- Each saved tool output: its UTF-8 bytes before and after the compressor's generic tiers, run through the same core with the hook's default limits (no command filter).
+- Each saved `puritanical-audit` output: its finding lines, counted by kind.
+- The savings ledger: characters removed and outputs compressed, as the hook recorded them.
+
+Sizes are bytes or characters, never estimated tokens. Every input is optional, but give at least one.
+
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 
 Every request carries the schema of every loaded tool and a description of every skill, whether or not the model ever uses them. `npx github:yungSNAT/Puritanical tools` reads your own transcripts and shows each heavy tool's schema size next to how often you called it in the last 30 days:

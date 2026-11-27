@@ -10,6 +10,7 @@ pub mod js;
 pub mod normalize_pi;
 pub mod pooled;
 pub mod readme_art;
+pub mod report;
 pub mod rules;
 pub mod score;
 pub mod stats;
@@ -24,7 +25,8 @@ pub const USAGE: &str = "usage: puritanical-tools <command>
   pooled <dir>...          pooled ratios with a bootstrap interval (ARMS)
   answers <run-dir> [arm ...]  write <run-dir>/ANSWERS.md
   normalize-pi <events.jsonl>  Pi's event stream as one benchmark cell
-  agentic-score [--json]   agentic suite table (RAW_DIR, ARMS)";
+  agentic-score [--json]   agentic suite table (RAW_DIR, ARMS)
+  report [options] [file...]  measured before-and-after report (Markdown; --svg card)";
 
 /// What a command prints and its exit status.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -135,6 +137,7 @@ fn analyse(ctx: &Ctx, cmd: &str, rest: &[String]) -> Option<Out> {
         "answers" => answers::run(&ctx.root, rest),
         "normalize-pi" => normalize_pi::run(rest),
         "agentic-score" => score::run(ctx, has(rest, "--json")),
+        "report" => report::run(rest),
         _ => return None,
     })
 }

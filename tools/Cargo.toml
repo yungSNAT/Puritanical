@@ -9,6 +9,7 @@ repository = "https://github.com/yungSNAT/Puritanical"
 publish = false
 
 [dependencies]
+puritanical-core = { path = "../core" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
 [dev-dependencies]
