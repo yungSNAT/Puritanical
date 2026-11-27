@@ -115,8 +115,8 @@ fn sizes_match_the_hooks_transform() {
         writeln!(wide, "{i}:{}", "abcdefghij".repeat(30)).expect("write");
     }
     assert_eq!(compressed(&wide).len(), 8060);
-    // Non-ASCII: units are UTF-16 (each emoji is 2) and the cut may split a
-    // surrogate pair, which both sides write as U+FFFD; sizes are UTF-8 bytes.
+    // Non-ASCII: units are UTF-16 (each emoji is 2) and the cut keeps pairs
+    // whole; sizes are UTF-8 bytes.
     let mut wide = String::new();
     for i in 0..50 {
         writeln!(wide, "{i}:{}", "é😀".repeat(60)).expect("write");

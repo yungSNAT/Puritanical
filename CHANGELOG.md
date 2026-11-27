@@ -23,6 +23,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - Releases attach prebuilt `puritanical-tools` binaries for Linux (x86_64, arm64; static musl builds), Windows (x86_64) and macOS (Apple silicon), with `SHA256SUMS` and a build provenance attestation for each binary. A pull request that changes the release workflow or the crate's build inputs builds them without releasing. INSTALL.md gives the download and `cargo install --git` commands.
 - `puritanical-tools report`: a Markdown report, and an SVG card with `--svg`, of measured figures only: each saved tool output's bytes before and after the compressor's generic tiers (run through `puritanical-core` with the hook's defaults), finding lines counted in `puritanical-audit` outputs before and after, and the savings ledger's characters and outputs. No token estimates. [Usage](docs/usage.md#before-and-after-report).
+- `puritanical-tools mcp`: a stdio MCP server with read-only tools (`report`, `compress`, `audit_findings`, `audit_instructions`) for hosts without Puritanical's skills or hooks. Paths stay inside the directory it starts in. [Usage](docs/usage.md#mcp-server).
 
 ### Changed
 
