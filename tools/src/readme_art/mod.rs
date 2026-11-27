@@ -135,7 +135,7 @@ fn fit(s: &str, fs: f64, maxw: f64) -> String {
     n(fit_as(s, fs, maxw, false))
 }
 
-fn esc(s: &str) -> String {
+pub(crate) fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
