@@ -7,6 +7,7 @@
 pub mod aggregate;
 pub mod answers;
 pub mod js;
+pub mod mcp;
 pub mod normalize_pi;
 pub mod pooled;
 pub mod prune;
@@ -28,6 +29,7 @@ pub const USAGE: &str = "usage: puritanical-tools <command>
   normalize-pi <events.jsonl>  Pi's event stream as one benchmark cell
   agentic-score [--json]   agentic suite table (RAW_DIR, ARMS)
   report [options] [file...]  measured before-and-after report (Markdown; --svg card)
+  mcp                      stdio MCP server with read-only tools, rooted at the current directory
   prune [--apply -- <check>]  cut the dead Rust code the compiler finds, keeping each cut only if <check> passes
   prune undo | prune keep  restore the last run's files, or accept its cuts";
 

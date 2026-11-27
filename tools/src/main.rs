@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use puritanical_tools::{Ctx, js, run};
+use puritanical_tools::{Ctx, js, mcp, run};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -19,6 +19,15 @@ fn main() -> ExitCode {
         .skip(1)
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
+    if args.first().is_some_and(|a| a == "mcp") {
+        let (stdin, stdout) = (std::io::stdin(), std::io::stdout());
+        return ExitCode::from(mcp::main(
+            std::env::current_dir(),
+            stdin.lock(),
+            stdout.lock(),
+            std::io::stderr(),
+        ));
+    }
     let ctx = Ctx {
         root: root(),
         env: std::env::vars_os()
