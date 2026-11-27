@@ -9,6 +9,7 @@ repository = "https://github.com/yungSNAT/Puritanical"
 publish = false
 
 [dependencies]
+puritanical-core = { path = "../core" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # prune: a Rust parser for each dead item's full extent, with byte offsets.
 syn = { version = "3.0.10", default-features = false, features = ["full", "parsing", "printing"] }

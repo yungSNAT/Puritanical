@@ -11,6 +11,7 @@ pub mod normalize_pi;
 pub mod pooled;
 pub mod prune;
 pub mod readme_art;
+pub mod report;
 pub mod rules;
 pub mod score;
 pub mod stats;
@@ -26,6 +27,7 @@ pub const USAGE: &str = "usage: puritanical-tools <command>
   answers <run-dir> [arm ...]  write <run-dir>/ANSWERS.md
   normalize-pi <events.jsonl>  Pi's event stream as one benchmark cell
   agentic-score [--json]   agentic suite table (RAW_DIR, ARMS)
+  report [options] [file...]  measured before-and-after report (Markdown; --svg card)
   prune [--apply -- <check>]  cut the dead Rust code the compiler finds, keeping each cut only if <check> passes
   prune undo | prune keep  restore the last run's files, or accept its cuts";
 
@@ -139,6 +141,7 @@ fn analyse(ctx: &Ctx, cmd: &str, rest: &[String]) -> Option<Out> {
         "answers" => answers::run(&ctx.root, rest),
         "normalize-pi" => normalize_pi::run(rest),
         "agentic-score" => score::run(ctx, has(rest, "--json")),
+        "report" => report::run(rest),
         _ => return None,
     })
 }

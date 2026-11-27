@@ -109,10 +109,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "puritanical-core"
+version = "4.0.0"
+
+[[package]]
 name = "puritanical-tools"
 version = "1.0.0"
 dependencies = [
  "proc-macro2",
+ "puritanical-core",
  "serde_json",
  "syn",
  "tempfile",
