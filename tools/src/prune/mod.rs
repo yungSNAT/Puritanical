@@ -205,9 +205,9 @@ fn root(o: &Opts, env: &HashMap<String, String>) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Paths `git status` lists, untracked files included, each with whether it
-/// is untracked.
-fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<(String, bool)>, String> {
+/// Paths `git status` lists, untracked files included; both paths of a
+/// rename or copy.
+fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<String>, String> {
     let out = git(
         root,
         env,
@@ -216,16 +216,16 @@ fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<(String, boo
     let mut paths = Vec::new();
     let mut entries = out.split('\0').filter(|e| e.len() > 3);
     while let Some(e) = entries.next() {
+        paths.push(e[3..].to_string());
         if e.starts_with(['R', 'C']) {
-            entries.next();
+            paths.extend(entries.next().map(str::to_string));
         }
-        paths.push((e[3..].to_string(), e.starts_with("??")));
     }
     Ok(paths)
 }
 
 fn clean(root: &Path, env: &HashMap<String, String>, when: &str) -> Result<(), String> {
-    let changed: Vec<String> = status(root, env)?.into_iter().map(|(p, _)| p).collect();
+    let changed = status(root, env)?;
     if changed.is_empty() {
         return Ok(());
     }
@@ -317,6 +317,8 @@ struct Session<'a> {
     runs: usize,
     /// Files the check changed, recorded in the journal for `undo`.
     stopped: Vec<String>,
+    /// `HEAD`'s tree when the run began, which the clean tree matched.
+    tree: String,
 }
 
 impl Session<'_> {
@@ -367,15 +369,16 @@ impl Session<'_> {
     /// Stops the run when the check changed a file (one prune did not write,
     /// or one prune wrote whose bytes now differ) or removed the journal.
     fn untouched(&mut self) -> Result<(), String> {
-        // `None`: a file prune wrote; otherwise whether Git does not track it.
-        let mut changed: Vec<(String, Option<bool>)> = status(self.root, self.env)?
+        // `true`: a file prune wrote. The journal's own files are judged by `intact`.
+        let inside = format!("{}/", journal::DIR);
+        let mut changed: Vec<(String, bool)> = status(self.root, self.env)?
             .into_iter()
-            .filter(|(p, _)| !self.disk.contains_key(p))
-            .map(|(p, untracked)| (p, Some(untracked)))
+            .filter(|p| !self.disk.contains_key(p) && !p.starts_with(&inside))
+            .map(|p| (p, false))
             .collect();
         for (path, text) in &self.disk {
             if std::fs::read(safe_path(self.root, path)?).ok().as_deref() != Some(text.as_bytes()) {
-                changed.push((path.clone(), None));
+                changed.push((path.clone(), true));
             }
         }
         let lost = !self.journal.intact();
@@ -388,14 +391,19 @@ impl Session<'_> {
             "the check changed files itself, so the run stopped: {}",
             names.join(", ")
         );
-        self.stop(lost, &changed)?;
-        Err(why)
+        let failed = self.stop(lost, &changed).err();
+        Err(match failed {
+            Some(e) => format!("{why}; recording them failed: {e}"),
+            None => why,
+        })
     }
 
     /// Records in the journal, for each file the check changed, what the
     /// check left and the file's bytes before the run, so `undo` restores
     /// it. A journal the check damaged is rebuilt from memory first.
-    fn stop(&mut self, lost: bool, changed: &[(String, Option<bool>)]) -> Result<(), String> {
+    fn stop(&mut self, lost: bool, changed: &[(String, bool)]) -> Result<(), String> {
+        // Listed first, so a failure below never lets the journal go.
+        self.stopped.extend(changed.iter().map(|(p, _)| p.clone()));
         if lost {
             journal::clear(self.root)?;
             self.journal = Journal::create(self.root)?;
@@ -404,20 +412,25 @@ impl Session<'_> {
                 self.journal.seen(n, Some(text.as_bytes()))?;
             }
         }
-        for (path, untracked) in changed {
-            let orig = match untracked {
-                None => Some(self.orig[path].clone().into_bytes()),
-                Some(true) => None,
-                Some(false) => Some(git_bytes(
+        for (path, ours) in changed {
+            let now = std::fs::read(safe_path(self.root, path)?).ok();
+            // A file prune never cut: its bytes before the run are Git's
+            // checkout of it from the tree the run began with (the index can
+            // hold the check's own staging), or none if that tree lacks it.
+            let spec = format!("{}:{path}", self.tree);
+            let orig = if *ours {
+                Some(self.orig[path].clone().into_bytes())
+            } else if git(self.root, self.env, &["cat-file", "-e", &spec]).is_ok() {
+                Some(git_bytes(
                     self.root,
                     self.env,
-                    &["cat-file", "--filters", &format!(":{path}")],
-                )?),
+                    &["cat-file", "--filters", &spec],
+                )?)
+            } else {
+                None
             };
             let n = self.journal.track(path, orig.as_deref())?;
-            let now = std::fs::read(safe_path(self.root, path)?).ok();
             self.journal.seen(n, now.as_deref())?;
-            self.stopped.push(path.clone());
         }
         Ok(())
     }
@@ -550,11 +563,14 @@ fn apply(
     mut out: Out,
 ) -> Result<Out, String> {
     let journal = Journal::create(root)?;
-    let ready = baseline(root, env, o, &journal)
-        .and_then(|base| originals(root, cuts, texts).map(|orig| (base, orig)));
-    let (base, orig) = match ready {
+    let ready = baseline(root, env, o, &journal).and_then(|base| {
+        let tree = git(root, env, &["rev-parse", "HEAD^{tree}"])?;
+        Ok((base, originals(root, cuts, texts)?, tree.trim().to_string()))
+    });
+    // A baseline check may have removed the journal itself.
+    let (base, orig, tree) = match ready {
         Ok(r) => r,
-        Err(e) => return journal.discard().and(Err(e)),
+        Err(e) => return journal::clear(root).and(Err(e)),
     };
     out.say(format!(
         "baseline: check passes ({})",
@@ -574,6 +590,7 @@ fn apply(
         disk,
         runs: 0,
         stopped: Vec::new(),
+        tree,
     };
     let found = search(cuts.len(), &mut |a| s.pass(a));
     let (kept, rejected) = match found {
@@ -754,6 +771,7 @@ mod tests {
             orig,
             runs: 0,
             stopped: Vec::new(),
+            tree: String::new(),
         };
         assert_eq!((s.pass(&[0]), s.runs), (Ok(false), 0));
         assert_eq!(

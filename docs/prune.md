@@ -55,7 +55,7 @@ If you cut risky items, put the other platforms' and profiles' builds in your ch
 
 Before a file's first edit, its original bytes go to `.puritanical-prune/` in the repository (a folder that ignores itself, so `git status` stays clean). Every write replaces the file atomically. After a finished, failed, stopped or crashed run, `undo` restores every original byte and removes the journal; it refuses, changing nothing, when a file holds bytes neither prune nor its stopped check left, so a later edit is never overwritten. `keep` refuses a journal whose run did not finish.
 
-A file the check changed that prune never cut has no copy from before the run, as prune cannot know in advance which files a check will touch. Since the tree was clean, `undo` restores Git's checkout of it (`git cat-file --filters`), which matches the earlier bytes unless a Git filter or line-ending setting writes the file differently from how it was on disk; a file the check created is removed.
+A file the check changed that prune never cut has no copy from before the run, as prune cannot know in advance which files a check will touch. Since the tree was clean, `undo` restores Git's checkout of it from the `HEAD` tree the run began with (`git cat-file --filters`; not the index, which the check may have staged into), which matches the earlier bytes unless a Git filter or line-ending setting writes the file differently from how it was on disk; a file the check created is removed.
 
 Assumptions: nothing else edits the files whilst prune or undo runs; on Windows, renames rely on the file system's own journal, as the standard library cannot flush a folder there.
 

@@ -399,7 +399,16 @@ fn mods(items: &[syn::Item], dir: &Path, todo: &mut Vec<(PathBuf, PathBuf)>) -> 
                     todo.push((file, sub));
                 }
             }
-            syn::Item::Macro(m) if m.mac.path.is_ident("include") => return None,
+            // `include!`, `std::include!` or `core::include!`.
+            syn::Item::Macro(m)
+                if m.mac
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|s| s.ident == "include") =>
+            {
+                return None;
+            }
             _ => {}
         }
     }

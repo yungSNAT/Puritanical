@@ -110,7 +110,7 @@ impl Journal {
     /// Whether the journal's files are still on disk (a check may remove them).
     #[must_use]
     pub fn intact(&self) -> bool {
-        ["journal.json", "orig", "wrote"]
+        ["journal.json", "orig", "wrote", ".gitignore"]
             .iter()
             .all(|p| self.dir.join(p).exists())
     }

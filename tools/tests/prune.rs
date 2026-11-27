@@ -464,7 +464,7 @@ fn refuses_dirty_trees_failing_checks_and_checks_that_edit_files() {
         "{dirty}"
     );
     assert!(
-        dirty.contains("moved.txt") && dirty.contains("junk.txt") && !dirty.contains("other.txt"),
+        dirty.contains("moved.txt") && dirty.contains("junk.txt") && dirty.contains("other.txt"),
         "{dirty}"
     );
     git(dir, &["mv", "moved.txt", "other.txt"]);
@@ -591,6 +591,7 @@ fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
     // from memory.
     for script in [
         "rm .puritanical-prune/journal.json",
+        "rm .puritanical-prune/.gitignore",
         "rm -r .puritanical-prune",
     ] {
         let lost = once_cut(dir, script);
@@ -598,6 +599,47 @@ fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
         assert_eq!(lost.stderr, want);
         clean(dir);
     }
+}
+
+#[test]
+fn undo_restores_what_the_run_began_with_whatever_the_check_staged() {
+    let d = repo_d();
+    let dir = d.path();
+    for script in [
+        "echo y >> other.txt; git add other.txt",
+        "git rm -q other.txt",
+        "git mv other.txt moved.txt",
+    ] {
+        let out = once_cut(dir, script);
+        assert!(
+            out.stderr.ends_with(&format!("{FOR_UNDO}\n")),
+            "{script}: {}",
+            out.stderr
+        );
+        assert_eq!(prune(dir, &["undo"]).code, 0, "{script}");
+        // Undo puts back the files; the check's staging is the user's to drop.
+        git(dir, &["reset", "-q"]);
+        assert_eq!(read(dir, "other.txt"), "x\n", "{script}");
+        clean(dir);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_file_prune_cannot_record_is_named_and_the_journal_kept() {
+    let d = repo_d();
+    let dir = d.path();
+    let out = once_cut(dir, "ln -s other.txt link.txt");
+    assert!(
+        out.stderr
+            .contains("; recording them failed: link.txt: passes through a symbolic link"),
+        "{}",
+        out.stderr
+    );
+    assert!(dir.join(journal::DIR).exists());
+    fs::remove_file(dir.join("link.txt")).expect("rm");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
 }
 
 #[cfg(unix)]
