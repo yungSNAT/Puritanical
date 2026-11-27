@@ -182,7 +182,9 @@ fn uncovered_cfg(text: &str) -> bool {
                     .strip_prefix('(')
                     .is_some_and(|b| group(b, false).contains("feature"))
             });
-            other || negated
+            // A comment can hide `not` from this scan.
+            let comment = pred.contains('/');
+            other || negated || comment
         })
     })
 }
@@ -208,8 +210,8 @@ fn package_has_platform_cfg(dir: &Path) -> bool {
 }
 
 /// Queues the files the `mod` declarations in `items` load (a module whose
-/// child files live in `dir`). `None` when a `#[path]` module or an
-/// `include!` item hides where code comes from.
+/// child files live in `dir`). `None` when a `#[path]` module or a macro
+/// call among the items hides where code comes from.
 fn mods(items: &[syn::Item], dir: &Path, todo: &mut Vec<(PathBuf, PathBuf)>) -> Option<()> {
     for it in items {
         match it {
@@ -236,16 +238,9 @@ fn mods(items: &[syn::Item], dir: &Path, todo: &mut Vec<(PathBuf, PathBuf)>) -> 
                     todo.push((file, sub));
                 }
             }
-            // `include!`, `std::include!` or `core::include!`.
-            syn::Item::Macro(m)
-                if m.mac
-                    .path
-                    .segments
-                    .last()
-                    .is_some_and(|s| s.ident == "include") =>
-            {
-                return None;
-            }
+            // A macro call (`include!` among them) can expand to `mod x;`; a
+            // `macro_rules!` definition has a name and loads nothing.
+            syn::Item::Macro(m) if m.ident.is_none() => return None,
             _ => {}
         }
     }
@@ -332,6 +327,29 @@ fn relative(root: &Path, ws: &Path, file: &str) -> Option<String> {
     )
 }
 
+/// Each file's dead name spans. Liveness is per crate: a file 2 crates
+/// compile is cut only where every crate whose module tree reaches it
+/// reports the item dead.
+fn dead_by_file<'a>(
+    reports: &'a BTreeSet<Report>,
+    ws: &Path,
+    owners: &Owners,
+) -> BTreeMap<&'a str, Vec<Range>> {
+    let mut reporters: BTreeMap<&Span, BTreeSet<&PathBuf>> = BTreeMap::new();
+    for (target, span) in reports {
+        reporters.entry(span).or_default().insert(target);
+    }
+    let mut by_file: BTreeMap<&str, Vec<Range>> = BTreeMap::new();
+    for ((file, a, b), who) in reporters {
+        let need = ws.join(file).canonicalize().ok();
+        let need = need.and_then(|f| owners.by_file.get(&f));
+        if need.is_none_or(|n| n.iter().all(|t| who.contains(t))) {
+            by_file.entry(file).or_default().push((*a, *b));
+        }
+    }
+    by_file
+}
+
 /// Finds the dead items in the Cargo workspace at `root`.
 ///
 /// # Errors
@@ -344,22 +362,8 @@ pub fn find(root: &Path, env: &HashMap<String, String>) -> Result<Found, String>
     if !all_features {
         found.notes.push("the --all-features build fails, so code behind features was not seen: every candidate is risky".into());
     }
-    let mut reporters: BTreeMap<&Span, BTreeSet<&PathBuf>> = BTreeMap::new();
-    for (target, span) in &reports {
-        reporters.entry(span).or_default().insert(target);
-    }
-    let mut by_file: BTreeMap<&str, Vec<Range>> = BTreeMap::new();
-    for ((file, a, b), who) in reporters {
-        // Liveness is per crate: a file 2 crates compile is cut only where
-        // every crate whose module tree reaches it reports the item dead.
-        let need = ws.join(file).canonicalize().ok();
-        let need = need.and_then(|f| owners.by_file.get(&f));
-        if need.is_none_or(|n| n.iter().all(|t| who.contains(t))) {
-            by_file.entry(file).or_default().push((*a, *b));
-        }
-    }
     let mut platform: BTreeMap<PathBuf, bool> = BTreeMap::new();
-    for (file, names) in by_file {
+    for (file, names) in dead_by_file(&reports, &ws, &owners) {
         let Some(rel) = relative(root, &ws, file) else {
             found
                 .notes
@@ -381,7 +385,7 @@ pub fn find(root: &Path, env: &HashMap<String, String>) -> Result<Found, String>
         });
         let why = (!all_features)
             .then_some("features not checked")
-            .or(unknown.then_some("package has a #[path] module or an include! item"))
+            .or(unknown.then_some("package has a #[path] module or a macro call among its items"))
             .or(gated.then_some("package has a cfg its builds do not cover"));
         let (cuts, text) = file_cuts(root, &rel, &names, why)?;
         found.cuts.extend(cuts);
@@ -440,6 +444,24 @@ mod tests {
         assert!(uncovered_cfg("#[cfg(not(feature = \"std\"))]"));
         assert!(uncovered_cfg("#[cfg_attr(not(feature = \"a\"), no_std)]"));
         assert!(uncovered_cfg("cfg!(not (any(test, feature = \"y\")))"));
+    }
+
+    #[test]
+    fn a_comment_in_a_cfg_or_a_macro_call_among_items_is_not_followed() {
+        // A comment can hide `not` from the scan: prune does not read through one.
+        assert!(uncovered_cfg("#[cfg(not/**/(feature = \"std\"))]"));
+        assert!(uncovered_cfg(
+            "#[cfg(all(test, // test\n feature = \"a\"))]"
+        ));
+        let d = tempfile::tempdir().expect("temp dir");
+        let lib = d.path().join("lib.rs");
+        // A macro call can expand to `mod util;`; a macro definition loads nothing.
+        std::fs::write(&lib, "macro_rules! m { () => { mod util; } }\n").expect("lib");
+        assert!(tree(&lib).is_some());
+        std::fs::write(&lib, "macro_rules! m { () => { mod util; } }\nm!();\n").expect("lib");
+        assert!(tree(&lib).is_none());
+        std::fs::write(&lib, "mod inner { thread_local! {} }\n").expect("lib");
+        assert!(tree(&lib).is_none());
     }
 
     #[cfg(unix)]

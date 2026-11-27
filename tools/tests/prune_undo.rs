@@ -6,7 +6,7 @@
 mod prune_support;
 mod support;
 
-use prune_support::{IGNORE, MANIFEST, clean, git, prune, read, repo};
+use prune_support::{IGNORE, MANIFEST, clean, commit, git, prune, read, repo};
 use puritanical_tools::Out;
 use puritanical_tools::prune::journal::{self, Journal};
 use std::fs;
@@ -132,10 +132,15 @@ fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
 fn undo_restores_what_the_run_began_with_whatever_the_check_staged() {
     let d = repo_d();
     let dir = d.path();
+    // With `-z`, a rename's original path has no status prefix: a short one
+    // must not be taken for padding.
+    write(&dir.join("ab"), "s\n");
+    commit(dir);
     for script in [
         "echo y >> other.txt; git add other.txt",
         "git rm -q other.txt",
         "git mv other.txt moved.txt",
+        "git mv ab ba; echo y >> other.txt",
     ] {
         let out = once_cut(dir, script);
         assert!(
@@ -147,6 +152,7 @@ fn undo_restores_what_the_run_began_with_whatever_the_check_staged() {
         // Undo puts back the files; the check's staging is the user's to drop.
         git(dir, &["reset", "-q"]);
         assert_eq!(read(dir, "other.txt"), "x\n", "{script}");
+        assert_eq!(read(dir, "ab"), "s\n", "{script}");
         clean(dir);
     }
 }

@@ -32,10 +32,11 @@ Unused imports, macros, enum variants and struct fields; dead files and modules;
 
 These are listed but cut only with `--risky`:
 
-- an item behind an attribute other than `doc`, lint levels, `inline`, `cold`, `must_use`, `deprecated`, `derive`, `track_caller`, `cfg`, `rustfmt::*` or `clippy::*` (for example `#[repr(C)]` or an attribute macro);
+- an item behind an attribute other than `doc`, lint levels, `inline`, `cold`, `must_use`, `deprecated`, a `derive` of standard traits only (`Debug`, `Clone`, `Copy`, `PartialEq`, `Eq`, `PartialOrd`, `Ord`, `Hash`, `Default`), `track_caller`, `cfg`, `rustfmt::*` or `clippy::*` (for example `#[repr(C)]`, a custom derive or an attribute macro), or inside a module or impl block behind such an attribute;
 - every item of a package whose sources hold a `cfg` naming anything but `test` and features (such as `unix`, `target_os` or `debug_assertions`), because code compiled only on another platform or profile may use an item this build calls dead;
 - every item of a package with `not` around a feature in a `cfg` (such as `#[cfg(not(feature = "std"))]` for `no_std` code), because a build without that feature compiles code the 4 builds never see;
-- every item of a package with a `#[path]` module or an `include!` item, because prune cannot tell which crates compile which files;
+- every item of a package with a `#[path]` module or a macro call among its items (`include!` or any other, which can expand to `mod x;`), because prune cannot tell which crates compile which files;
+- every item of a package with a comment inside a `cfg`, which the scan above does not read through;
 - every item in a file Git does not track (an ignored, generated file), because Git holds no copy of it;
 - every item when the `--all-features` build fails, because code behind features was not seen.
 
@@ -55,8 +56,8 @@ If you cut risky items, put the other platforms' and profiles' builds in your ch
 
 Before a file's first edit, its original bytes go to `.puritanical-prune/` in the repository (a folder that ignores itself, so `git status` stays clean). Every write replaces the file atomically. After a finished, failed, stopped or crashed run, `undo` restores every original byte and removes the journal; it refuses, changing nothing, when a file holds bytes neither prune nor its stopped check left, so a later edit is never overwritten. `keep` refuses a journal whose run did not finish.
 
-A file the check changed that prune never cut has no copy from before the run, as prune cannot know in advance which files a check will touch. Since the tree was clean, `undo` restores Git's checkout of it from the `HEAD` tree the run began with (`git cat-file --filters`; not the index, which the check may have staged into), which matches the earlier bytes unless a Git filter or line-ending setting writes the file differently from how it was on disk; a file the check created is removed.
+A file the check changed that prune never cut has no copy from before the run, as prune cannot know in advance which files a check will touch. Since the tree was clean, `undo` restores Git's checkout of it from the `HEAD` tree the run began with (`git cat-file --filters`; not the index, which the check may have staged into: `undo` leaves the check's staging, and `git reset` drops it), which matches the earlier bytes unless a Git filter or line-ending setting writes the file differently from how it was on disk; a file the check created is removed.
 
-Assumptions: nothing else edits the files whilst prune or undo runs; on Windows, renames rely on the file system's own journal, as the standard library cannot flush a folder there.
+Assumptions: nothing else edits the files whilst prune or undo runs; the check does not commit (a commit leaves `git status` clean, so prune would not see what it changed); on Windows, renames rely on the file system's own journal, as the standard library cannot flush a folder there.
 
 Prune cuts only the candidate files and writes their temporary siblings and its journal folder; after a stopped run, `undo` also puts back the files the check changed. The finder's `cargo check` builds write `target/` and, when it is missing, `Cargo.lock`, as any build does. A path that leaves the repository, names `.git` or passes through a symbolic link is refused.

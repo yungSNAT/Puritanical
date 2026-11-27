@@ -212,7 +212,9 @@ fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<String>, Str
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )?;
     let mut paths = Vec::new();
-    let mut entries = out.split('\0').filter(|e| e.len() > 3);
+    // Only the trailing field is empty; a rename's original path, which
+    // follows its entry bare, can be 1 byte.
+    let mut entries = out.split('\0').filter(|e| !e.is_empty());
     while let Some(e) = entries.next() {
         paths.push(e[3..].to_string());
         if e.starts_with(['R', 'C']) {

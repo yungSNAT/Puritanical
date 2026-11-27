@@ -8,7 +8,6 @@ mod support;
 
 use prune_support::{IGNORE, MANIFEST, commit, env, git, prune, repo};
 use puritanical_tools::prune::journal;
-use std::fs;
 use std::process::Command;
 use support::write;
 
@@ -84,7 +83,7 @@ fn path_modules_and_include_make_their_package_risky() {
         ),
         ("src/other.rs", "pub fn y() {}\n\npub fn z() {}\n"),
     ]);
-    let why = "(risky: package has a #[path] module or an include! item; cut only with --risky)";
+    let why = "(risky: package has a #[path] module or a macro call among its items; cut only with --risky)";
     assert_eq!(
         prune(hidden.path(), &[]).stdout,
         format!(
@@ -94,8 +93,9 @@ fn path_modules_and_include_make_their_package_risky() {
     );
 }
 
-#[test]
-fn platform_cfgs_failing_feature_sets_and_outside_paths_make_candidates_risky() {
+/// A repository (`repo/` in the returned folder) whose package has a
+/// platform cfg and a path dependency outside it, with no ignored `Cargo.lock`.
+fn platform_repo() -> tempfile::TempDir {
     let tmp = tempfile::tempdir().expect("temp dir");
     write(
         &tmp.path().join("dep/Cargo.toml"),
@@ -118,8 +118,13 @@ fn platform_cfgs_failing_feature_sets_and_outside_paths_make_candidates_risky() 
     }
     git(&dir, &["init", "-q"]);
     commit(&dir);
+    tmp
+}
 
-    let dry = prune(&dir, &[]);
+#[test]
+fn platform_cfgs_and_outside_paths_make_candidates_risky() {
+    let tmp = platform_repo();
+    let dry = prune(&tmp.path().join("repo"), &[]);
     let lines: Vec<&str> = dry.stdout.lines().collect();
     assert_eq!(lines.len(), 3, "{}{}", dry.stdout, dry.stderr);
     let note = lines[0].replace('\\', "/");
@@ -136,11 +141,16 @@ fn platform_cfgs_failing_feature_sets_and_outside_paths_make_candidates_risky() 
         lines[2],
         "1 candidate(s), 1 risky. Dry run: nothing changed. To cut: puritanical-tools prune --apply -- <check command>"
     );
+}
+
+#[test]
+fn a_build_that_dirties_the_tree_stops_the_run() {
+    let tmp = platform_repo();
+    let dir = tmp.path().join("repo");
     // Cargo.lock is not ignored here, so the finder's build dirties the tree.
     let apply = ["--apply", "--uncounted", "--", "git", "status"];
     let mut risky = apply.to_vec();
     risky.insert(1, "--risky");
-    fs::remove_file(dir.join("Cargo.lock")).expect("rm");
     assert_eq!(
         prune(&dir, &risky).stderr,
         "prune: after the finder's build, the working tree is not clean: Cargo.lock\n"

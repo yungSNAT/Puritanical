@@ -8,7 +8,6 @@ mod support;
 
 use prune_support::{IGNORE, MANIFEST, clean, commit, git, prune, read, repo};
 use puritanical_tools::prune::journal;
-use std::fs;
 use std::path::Path;
 use support::write;
 
@@ -334,12 +333,33 @@ fn a_failing_baseline_shows_its_output_and_zero_counts_need_uncounted() {
 }
 
 #[test]
-fn refuses_dirty_trees_failing_checks_and_checks_that_edit_files() {
+fn refuses_a_dirty_tree() {
     let d = repo(&[
         ("Cargo.toml", MANIFEST),
         (".gitignore", IGNORE),
         ("src/lib.rs", LIB_C),
         ("other.txt", "x\n"),
+    ]);
+    let dir = d.path();
+    git(dir, &["mv", "other.txt", "moved.txt"]);
+    write(&dir.join("junk.txt"), "j");
+    let dirty = prune(dir, &["--apply", "--uncounted", "--", "git", "status"]).stderr;
+    assert!(
+        dirty.starts_with("prune: before the run, the working tree is not clean: "),
+        "{dirty}"
+    );
+    assert!(
+        dirty.contains("moved.txt") && dirty.contains("junk.txt") && dirty.contains("other.txt"),
+        "{dirty}"
+    );
+}
+
+#[test]
+fn refuses_failing_checks_and_keeps_nothing_when_every_cut_fails() {
+    let d = repo(&[
+        ("Cargo.toml", MANIFEST),
+        (".gitignore", IGNORE),
+        ("src/lib.rs", LIB_C),
     ]);
     let dir = d.path();
     let grep = |word: &str| {
@@ -358,21 +378,6 @@ fn refuses_dirty_trees_failing_checks_and_checks_that_edit_files() {
         .map(str::to_string)
     };
     let p = |args: &[String]| prune(dir, &args.iter().map(String::as_str).collect::<Vec<_>>());
-
-    git(dir, &["mv", "other.txt", "moved.txt"]);
-    write(&dir.join("junk.txt"), "j");
-    let dirty = p(&grep("live")).stderr;
-    assert!(
-        dirty.starts_with("prune: before the run, the working tree is not clean: "),
-        "{dirty}"
-    );
-    assert!(
-        dirty.contains("moved.txt") && dirty.contains("junk.txt") && dirty.contains("other.txt"),
-        "{dirty}"
-    );
-    git(dir, &["mv", "moved.txt", "other.txt"]);
-    fs::remove_file(dir.join("junk.txt")).expect("rm");
-
     assert_eq!(
         p(&grep("no_such_word")).stderr,
         "prune: the check fails before any cut\n"

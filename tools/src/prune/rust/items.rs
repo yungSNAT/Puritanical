@@ -38,12 +38,43 @@ fn plain_attr(a: &syn::Attribute) -> bool {
         "cold",
         "must_use",
         "deprecated",
-        "derive",
         "track_caller",
         "cfg",
     ]
     .iter()
     .any(|w| p.is_ident(w))
+        || std_derive(a)
+}
+
+/// A derive of standard traits only: any other derive is a procedural macro
+/// whose output, built for this platform alone, prune cannot see.
+fn std_derive(a: &syn::Attribute) -> bool {
+    let std = [
+        "Debug",
+        "Clone",
+        "Copy",
+        "PartialEq",
+        "Eq",
+        "PartialOrd",
+        "Ord",
+        "Hash",
+        "Default",
+    ];
+    a.path().is_ident("derive")
+        && a.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+        )
+        .is_ok_and(|ps| ps.iter().all(|p| std.iter().any(|d| p.is_ident(d))))
+}
+
+/// Makes risky each item in `items` that is not already, when the module or
+/// impl block holding them carries an attribute macro.
+fn inherit(items: &mut [Item], attrs: &[syn::Attribute]) {
+    if let Some(why) = risky(attrs) {
+        for i in items {
+            i.risky.get_or_insert_with(|| why.clone());
+        }
+    }
 }
 
 fn risky(attrs: &[syn::Attribute]) -> Option<String> {
@@ -112,10 +143,13 @@ pub(super) fn collect(items: &[syn::Item], out: &mut Vec<Item>) {
             syn::Item::Type(t) => item(&t.ident, "type alias", whole, &t.attrs),
             syn::Item::Trait(t) => item(&t.ident, "trait", whole, &t.attrs),
             syn::Item::Mod(m) if !is_test_mod(&m.attrs) => {
+                let from = out.len();
                 collect(m.content.as_ref().map_or(&[][..], |c| &c.1[..]), out);
+                inherit(&mut out[from..], &m.attrs);
                 continue;
             }
             syn::Item::Impl(i) if i.trait_.is_none() => {
+                let from = out.len();
                 for ii in &i.items {
                     let found = match ii {
                         syn::ImplItem::Fn(f) => {
@@ -131,6 +165,7 @@ pub(super) fn collect(items: &[syn::Item], out: &mut Vec<Item>) {
                     };
                     out.extend(found);
                 }
+                inherit(&mut out[from..], &i.attrs);
                 continue;
             }
             _ => continue,
@@ -214,6 +249,35 @@ mod tests {
                 ("static", "X", 1, None),
                 ("constant", "K", 1, None),
                 ("function", "deep", 1, None),
+            ]
+        );
+    }
+
+    #[test]
+    fn custom_derives_and_attribute_macros_on_an_enclosing_module_or_impl_are_risky() {
+        let src = "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)] struct D; \
+                   #[derive(Debug, serde::Serialize)] struct Ser; #[derive(Gen)] enum G {} \
+                   #[gen] mod m { fn inner() {} #[repr(C)] struct Own; } \
+                   #[gen] impl D { fn h() {} } #[inline] impl G { fn k() {} }";
+        let mut out = Vec::new();
+        collect(
+            &syn::parse_str::<syn::File>(src).expect("parse").items,
+            &mut out,
+        );
+        let got: Vec<_> = out
+            .iter()
+            .map(|i| (i.name.as_str(), i.risky.as_deref()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("D", None),
+                ("Ser", Some("behind attribute #[derive]")),
+                ("G", Some("behind attribute #[derive]")),
+                ("inner", Some("behind attribute #[gen]")),
+                ("Own", Some("behind attribute #[repr]")),
+                ("h", Some("behind attribute #[gen]")),
+                ("k", None),
             ]
         );
     }
