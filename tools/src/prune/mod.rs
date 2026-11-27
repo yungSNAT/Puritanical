@@ -108,18 +108,18 @@ struct Opts {
     check: Vec<String>,
 }
 
-fn parse(rest: &[String]) -> Option<(&str, Opts)> {
-    let (sub, mut rest) = match rest.first().map(String::as_str) {
-        Some(s @ ("undo" | "keep")) => (s, &rest[1..]),
-        _ => ("", rest),
-    };
+/// The subcommand (`undo`, `keep` or empty) and options; `undo` and `keep`
+/// may come before or after `--repo <dir>`.
+fn parse(mut rest: &[String]) -> Option<(&str, Opts)> {
+    let mut sub = "";
     let mut o = Opts::default();
     while let Some((a, tail)) = rest.split_first() {
         match a.as_str() {
             "--repo" => o.repo = Some(PathBuf::from(tail.first()?)),
-            "--apply" if sub.is_empty() => o.apply = true,
-            "--risky" if sub.is_empty() => o.risky = true,
-            "--uncounted" if sub.is_empty() => o.uncounted = true,
+            s @ ("undo" | "keep") if sub.is_empty() => sub = s,
+            "--apply" => o.apply = true,
+            "--risky" => o.risky = true,
+            "--uncounted" => o.uncounted = true,
             "--" if sub.is_empty() => {
                 o.check = tail.to_vec();
                 break;
@@ -128,7 +128,12 @@ fn parse(rest: &[String]) -> Option<(&str, Opts)> {
         }
         rest = if a == "--repo" { &tail[1..] } else { tail };
     }
-    (o.check.is_empty() != o.apply).then_some((sub, o))
+    let ok = if sub.is_empty() {
+        o.check.is_empty() != o.apply
+    } else {
+        !(o.apply || o.risky || o.uncounted)
+    };
+    ok.then_some((sub, o))
 }
 
 /// Runs `prune` with the arguments after the command name.
@@ -160,6 +165,10 @@ fn say(line: impl AsRef<str>) -> Out {
 }
 
 fn git(root: &Path, env: &HashMap<String, String>, args: &[&str]) -> Result<String, String> {
+    git_bytes(root, env, args).map(|b| String::from_utf8_lossy(&b).into_owned())
+}
+
+fn git_bytes(root: &Path, env: &HashMap<String, String>, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = Command::new("git")
         .args(args)
         .current_dir(root)
@@ -174,7 +183,7 @@ fn git(root: &Path, env: &HashMap<String, String>, args: &[&str]) -> Result<Stri
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    Ok(out.stdout)
 }
 
 /// The repository root: `--repo` or the current folder, which must be the
@@ -196,8 +205,9 @@ fn root(o: &Opts, env: &HashMap<String, String>) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// Paths `git status` lists, untracked files included.
-fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<String>, String> {
+/// Paths `git status` lists, untracked files included, each with whether it
+/// is untracked.
+fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<(String, bool)>, String> {
     let out = git(
         root,
         env,
@@ -209,13 +219,13 @@ fn status(root: &Path, env: &HashMap<String, String>) -> Result<Vec<String>, Str
         if e.starts_with(['R', 'C']) {
             entries.next();
         }
-        paths.push(e[3..].to_string());
+        paths.push((e[3..].to_string(), e.starts_with("??")));
     }
     Ok(paths)
 }
 
 fn clean(root: &Path, env: &HashMap<String, String>, when: &str) -> Result<(), String> {
-    let changed = status(root, env)?;
+    let changed: Vec<String> = status(root, env)?.into_iter().map(|(p, _)| p).collect();
     if changed.is_empty() {
         return Ok(());
     }
@@ -240,7 +250,8 @@ fn prune(root: &Path, env: &HashMap<String, String>, o: &Opts) -> Result<Out, St
             "no finder for this repository: prune finds dead Rust code in a Cargo workspace",
         ));
     }
-    let found = rust::find(root, env)?;
+    let mut found = rust::find(root, env)?;
+    untracked_risky(root, env, &mut found.cuts)?;
     let mut out = Out::default();
     for n in &found.notes {
         out.say(format!("note: {n}"));
@@ -272,7 +283,24 @@ fn prune(root: &Path, env: &HashMap<String, String>, o: &Opts) -> Result<Out, St
         return Ok(out);
     }
     clean(root, env, "after the finder's build")?;
-    apply(root, env, o, &cuts, out)
+    apply(root, env, o, (&cuts, &found.texts), out)
+}
+
+/// Makes risky each cut in a file Git does not track: Git holds no copy of
+/// it and `git diff` does not show its cuts.
+fn untracked_risky(
+    root: &Path,
+    env: &HashMap<String, String>,
+    cuts: &mut [Cut],
+) -> Result<(), String> {
+    let tracked = git(root, env, &["ls-files", "-z"])?;
+    let tracked: Vec<&str> = tracked.split('\0').collect();
+    for c in cuts {
+        if !tracked.contains(&c.path.as_str()) {
+            c.risky.get_or_insert_with(|| "not tracked by Git".into());
+        }
+    }
+    Ok(())
 }
 
 /// The check, the baseline it must hold to, and the files being cut.
@@ -287,6 +315,8 @@ struct Session<'a> {
     orig: BTreeMap<String, String>,
     disk: BTreeMap<String, String>,
     runs: usize,
+    /// Files the check changed, recorded in the journal for `undo`.
+    stopped: Vec<String>,
 }
 
 impl Session<'_> {
@@ -302,7 +332,14 @@ impl Session<'_> {
                 .collect();
             want.insert(path.clone(), edit::apply(text, &ranges));
         }
-        if want.values().any(|t| syn::parse_file(t).is_err()) {
+        // Only changed files are parsed, and the parser's span table is freed
+        // after, so memory does not grow with every trial.
+        let parses = want
+            .iter()
+            .filter(|(p, t)| self.disk[*p] != **t)
+            .all(|(_, t)| syn::parse_file(t).is_ok());
+        proc_macro2::extra::invalidate_current_thread_spans();
+        if !parses {
             return Ok(false);
         }
         for (path, text) in want {
@@ -320,31 +357,98 @@ impl Session<'_> {
             return Ok(false);
         }
         self.runs += 1;
-        let log = journal::log_dir(self.root).join("check.log");
-        let run = check::run(self.root, self.check, self.env, &log, self.limit)?;
+        let log = self.journal.log("check.log");
+        let run = check::run(self.root, self.check, self.env, &log, self.limit);
         self.untouched()?;
+        let run = run?;
         Ok(run.ok && check::holds(&self.base, &run.counts))
     }
 
-    /// Refuses when the check changed a file: one prune did not write, or one
-    /// prune wrote whose bytes now differ.
-    fn untouched(&self) -> Result<(), String> {
-        let mut changed: Vec<String> = status(self.root, self.env)?
+    /// Stops the run when the check changed a file (one prune did not write,
+    /// or one prune wrote whose bytes now differ) or removed the journal.
+    fn untouched(&mut self) -> Result<(), String> {
+        // `None`: a file prune wrote; otherwise whether Git does not track it.
+        let mut changed: Vec<(String, Option<bool>)> = status(self.root, self.env)?
             .into_iter()
-            .filter(|p| !self.disk.contains_key(p))
+            .filter(|(p, _)| !self.disk.contains_key(p))
+            .map(|(p, untracked)| (p, Some(untracked)))
             .collect();
         for (path, text) in &self.disk {
             if std::fs::read(safe_path(self.root, path)?).ok().as_deref() != Some(text.as_bytes()) {
-                changed.push(path.clone());
+                changed.push((path.clone(), None));
             }
         }
-        if changed.is_empty() {
+        let lost = !self.journal.intact();
+        if changed.is_empty() && !lost {
             return Ok(());
         }
-        Err(format!(
+        let mut names: Vec<&str> = changed.iter().map(|(p, _)| p.as_str()).collect();
+        names.extend(lost.then_some(journal::DIR));
+        let why = format!(
             "the check changed files itself, so the run stopped: {}",
-            changed.join(", ")
-        ))
+            names.join(", ")
+        );
+        self.stop(lost, &changed)?;
+        Err(why)
+    }
+
+    /// Records in the journal, for each file the check changed, what the
+    /// check left and the file's bytes before the run, so `undo` restores
+    /// it. A journal the check damaged is rebuilt from memory first.
+    fn stop(&mut self, lost: bool, changed: &[(String, Option<bool>)]) -> Result<(), String> {
+        if lost {
+            journal::clear(self.root)?;
+            self.journal = Journal::create(self.root)?;
+            for (path, text) in &self.disk {
+                let n = self.journal.track(path, Some(self.orig[path].as_bytes()))?;
+                self.journal.seen(n, Some(text.as_bytes()))?;
+            }
+        }
+        for (path, untracked) in changed {
+            let orig = match untracked {
+                None => Some(self.orig[path].clone().into_bytes()),
+                Some(true) => None,
+                Some(false) => Some(git_bytes(
+                    self.root,
+                    self.env,
+                    &["cat-file", "--filters", &format!(":{path}")],
+                )?),
+            };
+            let n = self.journal.track(path, orig.as_deref())?;
+            let now = std::fs::read(safe_path(self.root, path)?).ok();
+            self.journal.seen(n, now.as_deref())?;
+            self.stopped.push(path.clone());
+        }
+        Ok(())
+    }
+
+    /// After a failed run: puts back every file that still holds what prune
+    /// wrote, and removes the journal when nothing else is left in it.
+    fn abandon(&mut self) -> String {
+        let back: Vec<(String, String)> = self
+            .orig
+            .iter()
+            .filter(|(p, t)| !self.stopped.contains(p) && self.disk[*p] != **t)
+            .map(|(p, t)| (p.clone(), t.clone()))
+            .collect();
+        let done = back
+            .iter()
+            .try_for_each(|(p, t)| self.journal.write(p, t.as_bytes()))
+            .and_then(|()| {
+                if self.stopped.is_empty() {
+                    self.journal.discard()
+                } else {
+                    Ok(())
+                }
+            });
+        match done {
+            Err(e) => format!("; putting the files back failed: {e}; run `prune undo`"),
+            Ok(()) if self.stopped.is_empty() => "; prune's edits were undone".into(),
+            Ok(()) => {
+                "; prune undid its own edits; `prune undo` puts back the files the check changed"
+                    .into()
+            }
+        }
     }
 }
 
@@ -389,52 +493,73 @@ fn search(
     }
 }
 
-/// Runs the check before any cut; refuses (removing the new journal) when it
-/// fails, prints no count without `--uncounted`, or changes the tree.
+/// Runs the check before any cut; refuses when it fails, prints no count
+/// above 0 without `--uncounted`, or changes the tree.
 fn baseline(
     root: &Path,
     env: &HashMap<String, String>,
     o: &Opts,
-    journal: Journal,
-) -> Result<(check::Run, Journal), String> {
+    journal: &Journal,
+) -> Result<check::Run, String> {
     let base = check::run(
         root,
         &o.check,
         env,
-        &journal::log_dir(root).join("baseline.log"),
+        &journal.log("baseline.log"),
         Duration::MAX,
     )?;
-    let refuse = if !base.ok {
-        Some("the check fails before any cut".to_string())
-    } else if base.counts.is_empty() && !o.uncounted {
-        Some("the check prints no test count prune can read; pass --uncounted to rely on its exit status alone".into())
-    } else {
-        clean(root, env, "after the baseline check").err()
-    };
-    match refuse {
-        Some(why) => journal.discard().and(Err(why)),
-        None => Ok((base, journal)),
+    if !base.ok {
+        let tail = if base.tail.is_empty() {
+            String::new()
+        } else {
+            format!("; its output ends:\n{}", base.tail)
+        };
+        return Err(format!("the check fails before any cut{tail}"));
     }
+    if base.counts.values().all(|&n| n == 0) && !o.uncounted {
+        return Err("the check prints no test count above 0 that prune can read; pass --uncounted to rely on its exit status alone".into());
+    }
+    clean(root, env, "after the baseline check")?;
+    Ok(base)
+}
+
+/// Each cut file's text, refused when it differs from the text the finder
+/// parsed (the baseline check regenerated it).
+fn originals(
+    root: &Path,
+    cuts: &[Cut],
+    texts: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, String> {
+    let mut orig = BTreeMap::new();
+    for c in cuts {
+        let path = safe_path(root, &c.path)?;
+        let text = std::fs::read_to_string(&path).map_err(io(&path))?;
+        if texts.get(&c.path) != Some(&text) {
+            return Err(format!("{}: changed after the finder read it", c.path));
+        }
+        orig.insert(c.path.clone(), text);
+    }
+    Ok(orig)
 }
 
 fn apply(
     root: &Path,
     env: &HashMap<String, String>,
     o: &Opts,
-    cuts: &[Cut],
+    (cuts, texts): (&[Cut], &BTreeMap<String, String>),
     mut out: Out,
 ) -> Result<Out, String> {
-    let (base, journal) = baseline(root, env, o, Journal::create(root)?)?;
+    let journal = Journal::create(root)?;
+    let ready = baseline(root, env, o, &journal)
+        .and_then(|base| originals(root, cuts, texts).map(|orig| (base, orig)));
+    let (base, orig) = match ready {
+        Ok(r) => r,
+        Err(e) => return journal.discard().and(Err(e)),
+    };
     out.say(format!(
         "baseline: check passes ({})",
         check::describe(&base.counts)
     ));
-    let mut orig = BTreeMap::new();
-    for c in cuts {
-        let path = safe_path(root, &c.path)?;
-        let text = std::fs::read_to_string(&path).map_err(io(&path))?;
-        orig.insert(c.path.clone(), text);
-    }
     let limit = base.took * 3 + Duration::from_secs(60);
     let disk = orig.clone();
     let mut s = Session {
@@ -448,16 +573,12 @@ fn apply(
         orig,
         disk,
         runs: 0,
+        stopped: Vec::new(),
     };
-    let (kept, rejected) = match search(cuts.len(), &mut |a| s.pass(a)) {
+    let found = search(cuts.len(), &mut |a| s.pass(a));
+    let (kept, rejected) = match found {
         Ok(r) => r,
-        Err(e) => {
-            let undone = journal::undo(root).map_or_else(
-                |u| format!("; undo failed: {u}"),
-                |_| "; prune's edits were undone".into(),
-            );
-            return Err(format!("{e}{undone}"));
-        }
+        Err(e) => return Err(format!("{e}{}", s.abandon())),
     };
     s.set(&kept)?;
     report(&mut out, cuts, &kept, &rejected, s.runs);
@@ -523,6 +644,10 @@ mod tests {
             parse(&args(&["undo", "--repo", "r"])).expect("ok").0,
             "undo"
         );
+        // The order the docs give: the subcommand after `--repo <dir>`.
+        let keep = args(&["--repo", "r", "keep"]);
+        let (sub, o) = parse(&keep).expect("ok");
+        assert_eq!((sub, o.repo), ("keep", Some(PathBuf::from("r"))));
         assert_eq!(parse(&args(&[])).expect("ok").0, "");
         for bad in [
             &["--apply"][..],
@@ -531,6 +656,9 @@ mod tests {
             &["--repo"],
             &["--frob"],
             &["keep", "--", "x"],
+            &["--repo", "r", "undo", "--risky"],
+            &["undo", "--uncounted"],
+            &["undo", "keep"],
         ] {
             assert!(parse(&args(bad)).is_none(), "{bad:?}");
         }
@@ -625,6 +753,7 @@ mod tests {
             disk: orig.clone(),
             orig,
             runs: 0,
+            stopped: Vec::new(),
         };
         assert_eq!((s.pass(&[0]), s.runs), (Ok(false), 0));
         assert_eq!(

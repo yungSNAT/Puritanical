@@ -67,22 +67,20 @@ fn repo(files: &[(&str, &str)]) -> TempDir {
         write(&d.path().join(p), t);
     }
     git(d.path(), &["init", "-q"]);
+    // Bytes as written on every system: no line-ending conversion.
+    git(d.path(), &["config", "core.autocrlf", "false"]);
     commit(d.path());
     d
 }
 
+/// `prune --repo <dir> <args>`: `undo` and `keep` after `--repo`, as the docs give them.
 fn prune(dir: &Path, args: &[&str]) -> Out {
     let mut all = vec![
         "prune".to_string(),
         "--repo".into(),
         dir.display().to_string(),
     ];
-    if let Some((sub @ &("undo" | "keep"), rest)) = args.split_first() {
-        all.insert(1, (*sub).to_string());
-        all.extend(rest.iter().map(|a| (*a).to_string()));
-    } else {
-        all.extend(args.iter().map(|a| (*a).to_string()));
-    }
+    all.extend(args.iter().map(|a| (*a).to_string()));
     run(
         &Ctx {
             root: dir.to_path_buf(),
@@ -224,12 +222,9 @@ fn cuts_exactly_the_dead_items_the_tests_allow_and_undo_restores_every_byte() {
         out.stdout
     );
     assert!(out.stdout.ends_with("4 of 5 cut after 6 check run(s); review with `git diff`; `prune undo` restores, `prune keep` accepts\n"));
-    let dead_fn = "/// Dead, with a doc comment.\nfn dead() -> u32 {\n    2\n}\n\n";
-    let gone = &LIB_A
-        [LIB_A.find("struct Gone;").expect("Gone")..LIB_A.find("fn test_helper").expect("helper")];
     assert_eq!(
         read(dir, "src/lib.rs"),
-        LIB_A.replace(dead_fn, "").replace(gone, "")
+        LIB_A.replace(dead_fn(), "").replace(gone(), "")
     );
     assert_eq!(
         read(dir, "src/util.rs"),
@@ -241,6 +236,14 @@ fn cuts_exactly_the_dead_items_the_tests_allow_and_undo_restores_every_byte() {
     );
 
     undo_refuses_an_edited_file_then_restores_every_byte(dir);
+}
+
+fn dead_fn() -> &'static str {
+    "/// Dead, with a doc comment.\nfn dead() -> u32 {\n    2\n}\n\n"
+}
+
+fn gone() -> &'static str {
+    &LIB_A[LIB_A.find("struct Gone;").expect("Gone")..LIB_A.find("fn test_helper").expect("helper")]
 }
 
 /// Continues from the run above, with its journal in place.
@@ -263,7 +266,12 @@ fn undo_refuses_an_edited_file_then_restores_every_byte(dir: &Path) {
         ),
         (1, true)
     );
+    // Nothing changed: the other file still holds prune's cut.
     assert_eq!(read(dir, "src/util.rs"), "// edited\n");
+    assert_eq!(
+        read(dir, "src/lib.rs"),
+        LIB_A.replace(dead_fn(), "").replace(gone(), "")
+    );
     write(&dir.join("src/util.rs"), &cut);
 
     let undo = prune(dir, &["undo"]);
@@ -398,6 +406,31 @@ const COUNTS: [&str; 10] = [
 const LIB_C: &str = "pub fn live() {}\n\nfn plain() {}\n";
 
 #[test]
+fn a_failing_baseline_shows_its_output_and_zero_counts_need_uncounted() {
+    let d = repo(&[
+        ("Cargo.toml", MANIFEST),
+        (".gitignore", IGNORE),
+        ("src/lib.rs", LIB_C),
+    ]);
+    let dir = d.path();
+    let alias = |script: &str| {
+        let alias = format!("alias.chk=!{script}");
+        prune(dir, &["--apply", "--", "git", "-c", &alias, "chk"])
+    };
+    assert_eq!(
+        alias("echo one; echo broken; exit 1").stderr,
+        "prune: the check fails before any cut; its output ends:\none\nbroken\n"
+    );
+    // A crate with no tests prints only zero counts: no test guards a cut.
+    assert!(
+        alias("echo 'test result: ok. 0 passed;'")
+            .stderr
+            .contains("prints no test count above 0")
+    );
+    clean(dir);
+}
+
+#[test]
 fn refuses_dirty_trees_failing_checks_and_checks_that_edit_files() {
     let d = repo(&[
         ("Cargo.toml", MANIFEST),
@@ -454,53 +487,221 @@ fn refuses_dirty_trees_failing_checks_and_checks_that_edit_files() {
     clean(dir);
 }
 
-#[test]
-fn checks_that_edit_files_are_refused_or_stop_the_run() {
-    let d = repo(&[
+const LIB_D: &str = "mod util;\n\npub fn live() -> u32 {\n    util::used()\n}\n\nfn plain() {}\n";
+const UTIL_D: &str = "pub fn used() -> u32 {\n    1\n}\n\npub fn dead() {}\n";
+
+/// 2 files with a dead item each, and a file prune never cuts.
+fn repo_d() -> TempDir {
+    repo(&[
         ("Cargo.toml", MANIFEST),
         (".gitignore", IGNORE),
-        ("src/lib.rs", LIB_C),
+        ("src/lib.rs", LIB_D),
+        ("src/util.rs", UTIL_D),
         ("other.txt", "x\n"),
-    ]);
+    ])
+}
+
+/// `prune --apply` with a check (a Git alias, so it runs on every system)
+/// that runs `script` once `plain` is cut, then prints a libtest count.
+fn once_cut(dir: &Path, script: &str) -> Out {
+    let alias = format!(
+        "alias.chk=!grep -q 'fn plain' src/lib.rs || {{ {script}; }}; echo 'test result: ok. 1 passed;'"
+    );
+    prune(dir, &["--apply", "--", "git", "-c", &alias, "chk"])
+}
+
+fn stopped(paths: &str, tail: &str) -> String {
+    format!("prune: the check changed files itself, so the run stopped: {paths}; {tail}\n")
+}
+
+const FOR_UNDO: &str =
+    "prune undid its own edits; `prune undo` puts back the files the check changed";
+
+#[test]
+fn a_check_that_edits_a_cut_file_stops_the_run_and_undo_puts_back_every_byte() {
+    let d = repo_d();
     let dir = d.path();
-    let p = |args: &[String]| prune(dir, &args.iter().map(String::as_str).collect::<Vec<_>>());
-    let alias = |script: &str| {
-        [
+    let made = prune(
+        dir,
+        &[
             "--apply",
             "--",
             "git",
             "-c",
-            &format!("alias.chk=!{script}; echo 'test result: ok. 1 passed;'"),
+            "alias.chk=!echo z > new.txt; echo 'test result: ok. 1 passed;'",
             "chk",
-        ]
-        .map(str::to_string)
-    };
-    let made = p(&alias("echo z > new.txt"));
+        ],
+    );
     assert_eq!(
         made.stderr,
         "prune: after the baseline check, the working tree is not clean: new.txt\n"
     );
     fs::remove_file(dir.join("new.txt")).expect("rm");
 
-    // Only once plain is cut does the check write a file prune did not.
-    let other = p(&alias(
-        "grep -q 'fn plain' src/lib.rs || echo y >> other.txt",
-    ));
-    assert_eq!(
-        other.stderr,
-        "prune: the check changed files itself, so the run stopped: other.txt; prune's edits were undone\n"
-    );
-    assert_eq!(
-        (read(dir, "src/lib.rs"), read(dir, "other.txt")),
-        (LIB_C.to_string(), "x\ny\n".to_string())
-    );
-    git(dir, &["checkout", "--", "other.txt"]);
+    let out = once_cut(dir, "echo y >> src/lib.rs");
+    assert_eq!(out.stderr, stopped("src/lib.rs", FOR_UNDO));
+    // The other file prune cut is back; the one the check edited waits for undo.
+    assert_eq!(read(dir, "src/util.rs"), UTIL_D);
+    let left = LIB_D.replace("\nfn plain() {}\n", "") + "y\n";
+    assert_eq!(read(dir, "src/lib.rs"), left);
+    assert!(prune(dir, &["keep"]).stderr.contains("did not finish"));
 
-    let own = p(&alias(
-        "grep -q 'fn plain' src/lib.rs || echo y >> src/lib.rs",
-    ));
-    assert!(own.stderr.starts_with("prune: the check changed files itself, so the run stopped: src/lib.rs; undo failed: undo refused"), "{}", own.stderr);
-    assert!(dir.join(journal::DIR).exists());
+    // An edit made after the stop is never overwritten.
+    write(&dir.join("src/lib.rs"), "// mine\n");
+    let refused = prune(dir, &["undo"]);
+    assert!(
+        refused
+            .stderr
+            .contains("edited since prune wrote them: src/lib.rs"),
+        "{}",
+        refused.stderr
+    );
+    assert_eq!(
+        (read(dir, "src/lib.rs"), read(dir, "src/util.rs")),
+        ("// mine\n".into(), UTIL_D.into())
+    );
+    write(&dir.join("src/lib.rs"), &left);
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
+}
+
+#[test]
+fn a_check_that_deletes_or_makes_files_or_harms_the_journal_is_undone_too() {
+    let d = repo_d();
+    let dir = d.path();
+    let gone = once_cut(dir, "rm other.txt");
+    assert_eq!(gone.stderr, stopped("other.txt", FOR_UNDO));
+    assert_eq!(
+        (read(dir, "src/lib.rs"), read(dir, "src/util.rs")),
+        (LIB_D.into(), UTIL_D.into())
+    );
+    assert!(!dir.join("other.txt").exists());
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
+    assert_eq!(read(dir, "other.txt"), "x\n");
+
+    let made = once_cut(dir, "echo z > made.txt");
+    assert_eq!(made.stderr, stopped("made.txt", FOR_UNDO));
+    // A file the check made and the user then removed: undo removes it anyway.
+    fs::remove_file(dir.join("made.txt")).expect("rm");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
+
+    // The check removes the journal's index, or all of it: prune rebuilds it
+    // from memory.
+    for script in [
+        "rm .puritanical-prune/journal.json",
+        "rm -r .puritanical-prune",
+    ] {
+        let lost = once_cut(dir, script);
+        let want = stopped(".puritanical-prune", "prune's edits were undone");
+        assert_eq!(lost.stderr, want);
+        clean(dir);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn when_prune_cannot_put_its_files_back_undo_can() {
+    let d = repo_d();
+    let dir = d.path();
+    // The first trial fails and locks the journal, so the next write fails.
+    let out = once_cut(dir, "chmod a-w .puritanical-prune/wrote; exit 1");
+    assert!(
+        out.stderr.contains("; putting the files back failed: ")
+            && out.stderr.ends_with("; run `prune undo`\n"),
+        "{}",
+        out.stderr
+    );
+    Command::new("chmod")
+        .args(["u+w", ".puritanical-prune/wrote"])
+        .current_dir(dir)
+        .status()
+        .expect("chmod");
+    assert_eq!(prune(dir, &["undo"]).code, 0);
+    clean(dir);
+}
+
+#[test]
+fn a_cfg_with_not_around_a_feature_makes_its_package_risky() {
+    // `helper` is dead with the default features and with all of them, yet a
+    // build without `std` uses it.
+    let manifest = "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[features]\ndefault = [\"std\"]\nstd = []\n";
+    let lib = "#[cfg(not(feature = \"std\"))]\npub fn alloc_free() {\n    helper();\n}\n\nfn helper() {}\n";
+    let d = repo(&[
+        ("Cargo.toml", manifest),
+        (".gitignore", IGNORE),
+        ("src/lib.rs", lib),
+    ]);
+    assert_eq!(
+        prune(d.path(), &[]).stdout,
+        "src/lib.rs:6 function `helper` (risky: package has a cfg its builds do not cover; cut only with --risky)\n\
+         1 candidate(s), 1 risky. Dry run: nothing changed. To cut: puritanical-tools prune --apply -- <check command>\n"
+    );
+}
+
+#[test]
+fn a_file_2_crates_compile_is_cut_only_where_both_call_it_dead() {
+    let d = repo(&[
+        ("Cargo.toml", MANIFEST),
+        (".gitignore", "/target\nCargo.lock\nsrc/made.rs\n"),
+        (
+            "src/lib.rs",
+            "mod made;\nmod util;\n\npub fn api() -> u32 {\n    util::f()\n}\n",
+        ),
+        ("src/main.rs", "mod util;\n\nfn main() {}\n"),
+        (
+            "src/util.rs",
+            "pub fn f() -> u32 {\n    1\n}\n\npub fn g() {}\n",
+        ),
+        ("src/made.rs", "fn made_dead() {}\n"),
+        ("tests/it.rs", "#[test]\nfn it() {}\n"),
+    ]);
+    let dir = d.path();
+    // `f` is dead in the bin but used by the lib; `src/made.rs` is ignored by Git.
+    assert_eq!(
+        prune(dir, &[]).stdout,
+        "src/made.rs:1 function `made_dead` (risky: not tracked by Git; cut only with --risky)\n\
+         src/util.rs:5 function `g`\n\
+         2 candidate(s), 1 risky. Dry run: nothing changed. To cut: puritanical-tools prune --apply -- <check command>\n"
+    );
+    // A baseline check that rewrites a file after the finder read it.
+    let alias = "alias.chk=!echo >> src/made.rs; echo 'test result: ok. 1 passed;'";
+    let out = prune(
+        dir,
+        &["--apply", "--risky", "--", "git", "-c", alias, "chk"],
+    );
+    assert_eq!(
+        out.stderr,
+        "prune: src/made.rs: changed after the finder read it\n"
+    );
+    assert!(!dir.join(journal::DIR).exists());
+}
+
+#[test]
+fn path_modules_and_include_make_their_package_risky() {
+    let hidden = repo(&[
+        ("Cargo.toml", MANIFEST),
+        (".gitignore", IGNORE),
+        (
+            "src/lib.rs",
+            "include!(\"inc.rs\");\n\npub fn api() {}\n\nfn dead() {}\n",
+        ),
+        ("src/inc.rs", "pub fn from_inc() {}\n"),
+        (
+            "src/main.rs",
+            "#[path = \"other.rs\"]\nmod x;\n\nfn main() {\n    x::y();\n}\n",
+        ),
+        ("src/other.rs", "pub fn y() {}\n\npub fn z() {}\n"),
+    ]);
+    let why = "(risky: package has a #[path] module or an include! item; cut only with --risky)";
+    assert_eq!(
+        prune(hidden.path(), &[]).stdout,
+        format!(
+            "src/lib.rs:5 function `dead` {why}\nsrc/other.rs:3 function `z` {why}\n\
+                 2 candidate(s), 2 risky. Dry run: nothing changed. To cut: puritanical-tools prune --apply -- <check command>\n"
+        )
+    );
 }
 
 #[test]
@@ -531,15 +732,15 @@ fn platform_cfgs_failing_feature_sets_and_outside_paths_make_candidates_risky() 
     let dry = prune(&dir, &[]);
     let lines: Vec<&str> = dry.stdout.lines().collect();
     assert_eq!(lines.len(), 3, "{}{}", dry.stdout, dry.stderr);
+    let note = lines[0].replace('\\', "/");
+    let outside = "dep/src/lib.rs: outside the repository";
     assert!(
-        lines[0].starts_with("note: skipped ")
-            && lines[0].ends_with("dep/src/lib.rs: outside the repository"),
-        "{}",
-        lines[0]
+        note.starts_with("note: skipped ") && note.ends_with(outside),
+        "{note}"
     );
     assert_eq!(
         lines[1],
-        "src/lib.rs:4 function `plain` (risky: package has a platform cfg; cut only with --risky)"
+        "src/lib.rs:4 function `plain` (risky: package has a cfg its builds do not cover; cut only with --risky)"
     );
     assert_eq!(
         lines[2],
@@ -683,6 +884,11 @@ fn the_journal_restores_original_bytes_after_a_crash_at_any_step() {
     write(&root.join("a.rs"), "v1");
     assert_eq!(journal::keep(root), Ok(()));
     assert_eq!(fs::read_to_string(root.join("a.rs")).expect("a"), "v1");
+
+    // A crash as the run began: a journal folder with no index and no copy.
+    fs::create_dir_all(j_dir.join("orig")).expect("dir");
+    assert_eq!(journal::undo(root), Ok(0));
+    assert!(!j_dir.exists());
 
     let j = Journal::create(root).expect("create");
     j.discard().expect("discard");

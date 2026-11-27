@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Runs the user's check and reads its passed-test counts.
+//! Runs the user's check and reads its libtest passed-test counts.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
@@ -8,7 +8,8 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// Passed tests per runner format. Formats are never summed together.
+/// Passed tests per runner format (libtest, `cargo test`'s, is the only one
+/// read whilst Rust is the only finder).
 pub type Counts = BTreeMap<&'static str, u64>;
 
 /// One run of the check.
@@ -17,6 +18,8 @@ pub struct Run {
     pub ok: bool,
     pub counts: Counts,
     pub took: Duration,
+    /// The last 20 lines of its output.
+    pub tail: String,
 }
 
 /// The digits that end `text` before `word`, as in `12 passed`.
@@ -26,29 +29,10 @@ fn number_before(text: &str, word: &str) -> Option<u64> {
     head[head.len() - digits..].parse().ok()
 }
 
-/// The runner format and passed count one output line reports, if any.
+/// The passed count a libtest summary line reports, if any.
 fn count_line(line: &str) -> Option<(&'static str, u64)> {
-    let t = line.trim();
-    if let Some(rest) = t.strip_prefix("test result: ") {
-        return Some(("libtest", number_before(rest, " passed")?));
-    }
-    if let Some(rest) = t
-        .strip_prefix("# pass ")
-        .or_else(|| t.strip_prefix("\u{2139} pass "))
-    {
-        return Some(("node", rest.trim().parse().ok()?));
-    }
-    if let Some(rest) = t.strip_prefix("Tests:") {
-        return Some(("jest", number_before(rest, " passed")?));
-    }
-    if let Some(rest) = t.strip_prefix("Tests ") {
-        return Some(("vitest", number_before(rest, " passed")?));
-    }
-    let core = t.trim_matches(|c| c == '=' || c == ' ');
-    (core.contains(" in ") && core.ends_with('s'))
-        .then(|| number_before(core, " passed"))
-        .flatten()
-        .map(|n| ("pytest", n))
+    let rest = line.trim().strip_prefix("test result: ")?;
+    Some(("libtest", number_before(rest, " passed")?))
 }
 
 /// Passed-test totals per format in a check's output.
@@ -81,8 +65,22 @@ pub fn describe(c: &Counts) -> String {
         .join(", ")
 }
 
+/// Kills process `pid` and every process it started: on Unix its process
+/// group (the check leads its own), on Windows its process tree.
+fn kill_tree(pid: u32) {
+    #[cfg(unix)]
+    let _ = Command::new("kill")
+        .args(["-s", "KILL", "--", &format!("-{pid}")])
+        .output();
+    #[cfg(windows)]
+    let _ = Command::new("taskkill")
+        .args(["/T", "/F", "/PID", &pid.to_string()])
+        .output();
+}
+
 /// Runs `argv` in `root` with exactly `env`, output to `log`. A run still
-/// going after `limit` is killed and counts as failed.
+/// going after `limit` is killed, with every process it started, and counts
+/// as failed.
 ///
 /// # Errors
 /// The command cannot start or its output cannot be read.
@@ -97,18 +95,20 @@ pub fn run(
     let out = File::create(log).map_err(super::io(log))?;
     let err = out.try_clone().map_err(super::io(log))?;
     let start = Instant::now();
-    let mut child = Command::new(program)
-        .args(rest)
+    let mut cmd = Command::new(program);
+    cmd.args(rest)
         .current_dir(root)
         .env_clear()
         .envs(env)
         .stdin(Stdio::null())
         .stdout(out)
-        .stderr(err)
-        .spawn()
-        .map_err(super::cannot(program))?;
+        .stderr(err);
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    let mut child = cmd.spawn().map_err(super::cannot(program))?;
     let (status, timed_out) = loop {
         if start.elapsed() >= limit {
+            kill_tree(child.id());
             let _ = child.kill();
             break (child.wait().map_err(|e| e.to_string())?, true);
         }
@@ -118,10 +118,13 @@ pub fn run(
         std::thread::sleep(Duration::from_millis(20));
     };
     let text = std::fs::read(log).map_err(super::io(log))?;
+    let text = String::from_utf8_lossy(&text);
+    let lines: Vec<&str> = text.lines().collect();
     Ok(Run {
         ok: status.success() && !timed_out,
-        counts: counts(&String::from_utf8_lossy(&text)),
+        counts: counts(&text),
         took: start.elapsed(),
+        tail: lines[lines.len().saturating_sub(20)..].join("\n"),
     })
 }
 
@@ -130,41 +133,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_each_runner_format_apart() {
+    fn sums_libtest_summaries_and_reads_nothing_else() {
         let out = "test result: ok. 3 passed; 0 failed; finished in 0.01s\n\
-                   test result: ok. 2 passed; 0 failed\n\
-                   # pass 4\n\u{2139} pass 1\n\
-                   Tests:       7 passed, 7 total\n\
-                   \x20     Tests  6 passed (6)\n\
-                   ===== 1 failed, 5 passed in 0.12s =====\n\
-                   8 passed in 0.3s\n\
-                   12 passed but no timing\n\
+                   \x20  test result: ok. 2 passed; 0 failed\n\
+                   # pass 4\n\
+                   ===== 5 passed in 0.12s =====\n\
                    test result: FAILED. no count\n";
-        let c = counts(out);
-        assert_eq!(
-            describe(&c),
-            "jest 7, libtest 5, node 5, pytest 13, vitest 6"
-        );
+        assert_eq!(describe(&counts(out)), "libtest 5");
         assert_eq!(describe(&Counts::new()), "no test count");
     }
 
     #[test]
-    fn a_fall_in_one_format_is_not_hidden_by_another() {
-        let base = counts("test result: ok. 3 passed;\n# pass 2\n");
-        assert!(holds(
-            &base,
-            &counts("test result: ok. 3 passed;\n# pass 2\n")
-        ));
-        assert!(holds(
-            &base,
-            &counts("test result: ok. 4 passed;\n# pass 2\n")
-        ));
-        assert!(!holds(
-            &base,
-            &counts("test result: ok. 2 passed;\n# pass 9\n")
-        ));
-        assert!(!holds(&base, &counts("test result: ok. 9 passed;\n")));
+    fn a_count_may_not_fall_or_go_missing() {
+        let base = counts("test result: ok. 3 passed;\n");
+        assert!(holds(&base, &counts("test result: ok. 3 passed;\n")));
+        assert!(holds(&base, &counts("test result: ok. 4 passed;\n")));
+        assert!(!holds(&base, &counts("test result: ok. 2 passed;\n")));
+        assert!(!holds(&base, &counts("no summary\n")));
         assert_eq!(number_before("x passed", " passed"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_killed_check_takes_the_processes_it_started_with_it() {
+        let d = tempfile::tempdir().expect("temp dir");
+        let env: HashMap<String, String> = std::env::vars().collect();
+        let script = "(sleep 2; touch late) & sleep 30";
+        let sh = ["sh", "-c", script].map(str::to_string);
+        let limit = Duration::from_millis(500);
+        let r = run(d.path(), &sh, &env, &d.path().join("log"), limit).expect("run");
+        assert!(!r.ok && r.took < Duration::from_secs(2));
+        std::thread::sleep(Duration::from_secs(3));
+        assert!(!d.path().join("late").exists());
     }
 
     #[test]
