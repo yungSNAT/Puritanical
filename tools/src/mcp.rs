@@ -2,7 +2,7 @@
 
 //! `mcp`: a stdio MCP server with read-only tools. Newline-delimited JSON-RPC
 //! for clients of the stateless 2026-07-28 revision (`server/discover`, the
-//! version in each request's `_meta`) and of the 2025 revisions that open
+//! version in each request's `_meta`) and of the 2025-06-18 and 2025-11-25 revisions that open
 //! with `initialize`.
 //!
 //! Hostile input: a message over `MAX_MESSAGE` bytes is refused unread, every
@@ -12,14 +12,15 @@
 use crate::report::{self, Args};
 use serde_json::{Value, json};
 use std::io::{BufRead, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 /// The largest message accepted, newline included.
 pub const MAX_MESSAGE: usize = 1 << 20;
 /// The largest file a tool reads.
 pub const MAX_FILE: u64 = 16 << 20;
 const MODERN: &str = "2026-07-28";
-const LEGACY: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
+// Not 2025-03-26: it requires JSON-RPC batches, which this server refuses.
+const LEGACY: [&str; 2] = ["2025-11-25", "2025-06-18"];
 const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
 const AUDIT: &str = include_str!("../../skills/puritanical-audit/SKILL.md");
 
@@ -110,6 +111,11 @@ fn handle(root: &Path, line: &[u8]) -> Option<String> {
             Err((-32700, "parse error".into(), None)),
         ));
     };
+    // A response from the client is never answered (this server sends no
+    // requests, so it has nothing to match it with).
+    if msg.get("method").is_none() && (msg.get("result").is_some() || msg.get("error").is_some()) {
+        return None;
+    }
     let id = msg.get("id").cloned();
     let Some(method) = msg.get("method").and_then(Value::as_str) else {
         let id = id.unwrap_or(Value::Null);
@@ -211,17 +217,16 @@ fn call(root: &Path, params: &Value) -> Result<Value, Fail> {
     let out = match name {
         "report" => tool_report(&args, &read),
         "compress" => text_arg(&args, "path").and_then(|p| {
-            let bytes = read(p)?;
-            let text = String::from_utf8_lossy(&bytes);
+            let text = report::read_text(&read, p)?;
             let out = report::compressed(&text);
-            let after = if out == text { bytes.len() } else { out.len() };
             Ok(format!(
-                "{p}: {} bytes before, {after} bytes after the compressor's generic tiers (hook defaults).\n\n{out}",
-                bytes.len()
+                "{p}: {} bytes before, {} bytes after the compressor's generic tiers (hook defaults).\n\n{out}",
+                text.len(),
+                out.len()
             ))
         }),
         "audit_findings" => text_arg(&args, "path").and_then(|p| {
-            let [code, prose] = report::findings(&String::from_utf8_lossy(&read(p)?));
+            let [code, prose] = report::findings(&report::read_text(&read, p)?);
             Ok(format!("{p}: {code} code and {prose} prose finding lines."))
         }),
         "audit_instructions" => Ok(AUDIT.to_string()),
@@ -248,7 +253,13 @@ fn tool_report(
     args: &Value,
     read: &dyn Fn(&str) -> Result<Vec<u8>, String>,
 ) -> Result<String, String> {
-    let opt = |key| args.get(key).map(|_| text_arg(args, key)).transpose();
+    // A null optional argument counts as absent.
+    let opt = |key| {
+        args.get(key)
+            .filter(|v| !v.is_null())
+            .map(|_| text_arg(args, key))
+            .transpose()
+    };
     let outputs = match args.get("outputs") {
         None => Vec::new(),
         Some(v) => v
@@ -272,6 +283,12 @@ fn tool_report(
 /// Reads `rel` if it resolves inside `root` (symbolic links followed) and is
 /// at most `MAX_FILE` bytes.
 fn file(root: &Path, rel: &str) -> Result<Vec<u8>, String> {
+    // Refused before any filesystem call: on Windows, resolving a drive or
+    // UNC path opens it, which can reach a host the client names.
+    let rooted = |c| matches!(c, Component::Prefix(_) | Component::RootDir);
+    if Path::new(rel).components().any(rooted) {
+        return Err(format!("{rel}: outside the working root"));
+    }
     let path = root
         .join(rel)
         .canonicalize()

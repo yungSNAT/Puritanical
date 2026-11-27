@@ -50,13 +50,24 @@ fn legacy_clients_initialise_and_list_the_tools() {
     let dir = root();
     let mut input = request(1, "initialize", &json!({"protocolVersion": "2025-06-18"}));
     input += &request(2, "initialize", &json!({"protocolVersion": "1999-01-01"}));
+    // 2025-03-26 needs batches, which are refused, so it is not offered.
+    input += &request(5, "initialize", &json!({"protocolVersion": "2025-03-26"}));
+    // A response from the client gets no reply.
+    input += "{\"jsonrpc\":\"2.0\",\"id\":6,\"result\":{}}\n";
     input += "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n\n";
     input += &request(3, "tools/list", &Value::Null);
     input += &request(4, "ping", &json!({}));
     let r = session(dir.path(), input.as_bytes());
-    assert_eq!(r.len(), 4, "a notification and a blank line get no reply");
+    assert_eq!(
+        r.len(),
+        5,
+        "a response, a notification and a blank line get no reply"
+    );
     assert_eq!(r[0]["result"]["protocolVersion"], "2025-06-18");
     assert_eq!(r[1]["result"]["protocolVersion"], "2025-11-25");
+    assert_eq!(r[2]["id"], 5);
+    assert_eq!(r[2]["result"]["protocolVersion"], "2025-11-25");
+    let r = [r[0].clone(), r[1].clone(), r[3].clone(), r[4].clone()];
     assert_eq!(r[0]["result"]["serverInfo"]["name"], "puritanical-tools");
     let names: Vec<&str> = r[2]["result"]["tools"]
         .as_array()
@@ -149,6 +160,22 @@ fn the_read_only_tools_measure_files_in_the_root() {
         "{text}"
     );
     assert!(!dir.path().join("report.svg").exists());
+    // A null optional argument is absent, not a wrong type.
+    let args = json!({"outputs": ["build.log"], "stats": null});
+    let (text, err) = call(dir.path(), "report", &args);
+    assert!(!err && text.contains("## Tool output"), "{text}");
+
+    // Like `report`, the single-file tools refuse a file that is not UTF-8.
+    std::fs::write(
+        dir.path().join("bad.bin"),
+        b"src/a.rs:1  [code]  x\n\xff\xfe\n",
+    )
+    .expect("write");
+    for tool in ["compress", "audit_findings"] {
+        let (text, err) = call(dir.path(), tool, &json!({"path": "bad.bin"}));
+        assert!(err);
+        assert_eq!(text, "bad.bin: not UTF-8 text");
+    }
 
     let (text, err) = call(dir.path(), "audit_instructions", &json!({}));
     assert!(!err && text.contains("name: puritanical-audit"));
@@ -201,12 +228,31 @@ fn safety_no_path_outside_the_working_root() {
     std::fs::create_dir(&inner).expect("dir");
     let secret = outer.path().join("secret.txt");
     std::fs::write(&secret, "src/a.rs:1  [code]  x\n").expect("write");
-    for path in ["../secret.txt", secret.to_str().expect("utf-8")] {
+    // Absolute paths are refused before any lookup: a missing one gives the
+    // same refusal as an existing one, not an OS error.
+    let missing = std::env::temp_dir()
+        .join("puritanical-mcp-missing")
+        .join("a.txt");
+    for path in [
+        "../secret.txt",
+        secret.to_str().expect("utf-8"),
+        missing.to_str().expect("utf-8"),
+        "/puritanical-mcp-missing/a.txt",
+    ] {
         let (text, err) = call(&inner, "audit_findings", &json!({"path": path}));
         assert!(err);
         assert_eq!(text, format!("{path}: outside the working root"));
         let (text, err) = call(&inner, "report", &json!({"stats": path}));
         assert!(err && text.ends_with("outside the working root"), "{text}");
+    }
+    // On Windows a UNC path is not even resolved, so no host is contacted
+    // (resolving it would give os error 53 or 67 after a network wait).
+    #[cfg(windows)]
+    {
+        let unc = r"\\127.0.0.1\puritanical-mcp-missing\a.txt";
+        let (text, err) = call(&inner, "audit_findings", &json!({"path": unc}));
+        assert!(err);
+        assert_eq!(text, format!("{unc}: outside the working root"));
     }
     #[cfg(unix)]
     {
@@ -258,15 +304,15 @@ fn safety_oversized_messages_are_refused_and_serving_continues() {
     assert_eq!(r[4]["error"]["message"], "message too large");
 }
 
-/// A writer that refuses every write.
+/// A writer that takes writes but fails to flush them.
 struct Closed;
 
 impl Write for Closed {
-    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-        Err(std::io::ErrorKind::BrokenPipe.into())
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        Ok(b.len())
     }
     fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
+        Err(std::io::ErrorKind::BrokenPipe.into())
     }
 }
 
@@ -289,7 +335,6 @@ fn main_reports_a_missing_root_or_a_closed_output() {
         0
     );
     assert_eq!(out, b"");
-    Closed.flush().expect("flush");
 }
 
 #[test]

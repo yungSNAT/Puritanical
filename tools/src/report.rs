@@ -94,7 +94,7 @@ fn read(path: &str) -> Result<Vec<u8>, String> {
 pub(crate) type Reader<'a> = &'a dyn Fn(&str) -> Result<Vec<u8>, String>;
 
 /// The hook only ever sees text, so a file that is not UTF-8 has no figure.
-fn read_text(read: Reader, path: &str) -> Result<String, String> {
+pub(crate) fn read_text(read: Reader, path: &str) -> Result<String, String> {
     String::from_utf8(read(path)?).map_err(|_| format!("{path}: not UTF-8 text"))
 }
 

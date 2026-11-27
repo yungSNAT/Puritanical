@@ -91,7 +91,7 @@ Sizes are bytes or characters, never estimated tokens. Every input is optional, 
 
 ### MCP server
 
-`puritanical-tools mcp` serves the report and the audit over stdio MCP, so a host without Puritanical's skills or hooks can use them. It speaks both the stateless 2026-07-28 revision and the 2025 revisions that start with `initialize`. Its tools are read-only:
+`puritanical-tools mcp` serves the report and the audit over stdio MCP, so a host without Puritanical's skills or hooks can use them. It speaks both the stateless 2026-07-28 revision and the 2025-06-18 and 2025-11-25 revisions, which start with `initialize`. Its tools are read-only:
 
 - `report`: the before-and-after report above, as Markdown (no SVG file is written).
 - `compress`: one file's text after the compressor's generic tiers, with its bytes before and after.
@@ -102,7 +102,7 @@ Sizes are bytes or characters, never estimated tokens. Every input is optional, 
 { "mcpServers": { "puritanical": { "command": "puritanical-tools", "args": ["mcp"] } } }
 ```
 
-Paths are relative to the directory the server starts in; a path that resolves outside it, through `..`, an absolute path or a symlink, is refused. A message over 1 MiB and a file over 16 MiB are refused. No tool writes a file or starts a process.
+Paths are relative to the directory the server starts in: an absolute path is refused before any lookup, and a path that resolves outside the directory, through `..` or a symlink, is refused. A file that is not UTF-8 text is refused. A message over 1 MiB and a file over 16 MiB are refused. No tool writes a file or starts a process.
 
 ## Trim unused tool schemas and skill descriptions (Claude Code)
 
