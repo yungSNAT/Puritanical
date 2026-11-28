@@ -415,3 +415,74 @@ fn shadowed_std_glob_or_reexported_glob_makes_package_risky() {
         "#![no_std]\npub use pm as p;\nmod sub {\n    use crate::p::*;\n    pub fn f() {\n        println!();\n    }\n}\npub fn api() {\n    sub::f();\n}\n\nfn dead_in_fn() {}\n",
     ]);
 }
+
+#[test]
+fn shadowed_tool_attrs_make_package_risky() {
+    assert_dead_in_fn_risky(&[
+        "mod rustfmt {\n    pub use pm::freebsd_attr as skip;\n}\n#[rustfmt::skip]\npub fn api() {}\n\nfn dead_in_fn() {}\n",
+        "#[rustfmt::skip]\npub fn api() {}\nmod rustfmt {\n    pub use pm::freebsd_attr as skip;\n}\n\nfn dead_in_fn() {}\n",
+        "mod clippy {\n    pub use pm::freebsd_attr as x;\n}\n#[clippy::x]\npub fn api() {}\n\nfn dead_in_fn() {}\n",
+    ]);
+    let mod_lib = "mod rustfmt {\n    pub use pm::keep_on_freebsd as skip;\n}\n#[rustfmt::skip]\nmod m {\n    fn dead_in_ext() {}\n}\n";
+    let tmp = proc_macro_repo(mod_lib, &[]);
+    let dry = prune(&tmp.path().join("repo"), &[]);
+    assert_eq!(dry.code, 0, "{}", dry.stderr);
+    assert!(
+        dry.stdout.contains("function `dead_in_ext` (risky:")
+            && dry.stdout.contains("1 candidate(s), 1 risky."),
+        "{}",
+        dry.stdout
+    );
+}
+
+#[test]
+fn self_import_shadowing_std_root_makes_package_risky() {
+    let tmp = proc_macro_repo(
+        "use dep::core::{self};\npub fn api() {\n    core::println!();\n}\n\nfn dead_in_fn() {}\n",
+        &[],
+    );
+    write(
+        &tmp.path().join("dep/Cargo.toml"),
+        "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\npm = { path = \"../pm\" }\n",
+    );
+    write(
+        &tmp.path().join("dep/src/lib.rs"),
+        "pub mod core {\n    pub use pm::println;\n}\n",
+    );
+    let dir = tmp.path().join("repo");
+    write(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ndep = { path = \"../dep\" }\n",
+    );
+    commit(&dir);
+    let dry = prune(&dir, &[]);
+    assert_eq!(dry.code, 0, "{}", dry.stderr);
+    assert!(
+        dry.stdout.contains("function `dead_in_fn` (risky:")
+            && dry.stdout.contains("1 candidate(s), 1 risky."),
+        "{}",
+        dry.stdout
+    );
+}
+
+#[test]
+fn renamed_dependency_shadowing_std_root_makes_package_risky() {
+    let tmp = proc_macro_repo(
+        "#![no_std]\npub fn api() {\n    alloc::println!();\n}\n\nfn dead_in_fn() {}\n",
+        &[],
+    );
+    let dir = tmp.path().join("repo");
+    write(
+        &dir.join("Cargo.toml"),
+        "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nalloc = { package = \"pm\", path = \"../pm\" }\n",
+    );
+    commit(&dir);
+    let dry = prune(&dir, &[]);
+    assert_eq!(dry.code, 0, "{}", dry.stderr);
+    assert!(
+        dry.stdout.contains("function `dead_in_fn` (risky:")
+            && dry.stdout.contains("1 candidate(s), 1 risky."),
+        "{}",
+        dry.stdout
+    );
+}
