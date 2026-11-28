@@ -10,6 +10,7 @@ pub mod js;
 pub mod mcp;
 pub mod normalize_pi;
 pub mod pooled;
+pub mod prune;
 pub mod readme_art;
 pub mod report;
 pub mod rules;
@@ -28,7 +29,9 @@ pub const USAGE: &str = "usage: puritanical-tools <command>
   normalize-pi <events.jsonl>  Pi's event stream as one benchmark cell
   agentic-score [--json]   agentic suite table (RAW_DIR, ARMS)
   report [options] [file...]  measured before-and-after report (Markdown; --svg card)
-  mcp                      stdio MCP server with read-only tools, rooted at the current directory";
+  mcp                      stdio MCP server with read-only tools, rooted at the current directory
+  prune [--apply -- <check>]  cut the dead Rust code the compiler finds, keeping each cut only if <check> passes
+  prune undo | prune keep  restore the last run's files, or accept its cuts";
 
 /// What a command prints and its exit status.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -114,6 +117,7 @@ pub fn run(ctx: &Ctx, args: &[String]) -> Out {
         .map_or(("", &[][..]), |(c, rest)| (c.as_str(), rest));
     generate(&ctx.root, cmd, rest)
         .or_else(|| analyse(ctx, cmd, rest))
+        .or_else(|| (cmd == "prune").then(|| prune::run(ctx, rest)))
         .unwrap_or_else(|| about(cmd))
 }
 
