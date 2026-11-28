@@ -395,7 +395,7 @@ fn macro_args_with_attrs_imports_or_raw_ident_calls_make_package_risky() {
 fn local_macro_invoking_metavar_macro_makes_package_risky() {
     assert_dead_in_fn_risky(&[
         "use pm::freebsd_use;\nmacro_rules! call_mac { ($m:ident, $arg:tt) => { $m!$arg }; }\npub fn api() {\n    call_mac!(freebsd_use, ());\n}\n\nfn dead_in_fn() {}\n",
-        "macro_rules! sneaky_use { () => { use pm::freebsd_use as println; }; }\npub fn api() {\n    sneaky_use!();\n    println!();\n}\n\nfn dead_in_fn() {}\n",
+        "use pm::freebsd_use;\nmacro_rules! sneaky { ($m:ident, $b:tt, $a:tt) => { $m $b $a }; }\npub fn api() {\n    sneaky!(freebsd_use, !, ());\n}\n\nfn dead_in_fn() {}\n",
     ]);
 }
 

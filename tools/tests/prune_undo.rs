@@ -431,7 +431,11 @@ fn replacing_a_tracked_directory_with_a_symlink_or_file_restores_it() {
     clean(dir);
 
     let out = once_cut(dir, "rm -rf sub && echo hi > sub");
-    assert!(out.stderr.ends_with(&format!("{FOR_UNDO}\n")), "{}", out.stderr);
+    assert!(
+        out.stderr.ends_with(&format!("{FOR_UNDO}\n")),
+        "{}",
+        out.stderr
+    );
     let undo = prune(dir, &["undo"]);
     assert_eq!(undo.code, 0, "{}", undo.stderr);
     assert_eq!(read(dir, "sub/a.txt"), "a\n");

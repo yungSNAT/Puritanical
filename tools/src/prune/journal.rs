@@ -442,6 +442,9 @@ pub fn undo(root: &Path) -> Result<usize, String> {
             edited.join(", ")
         ));
     }
+    // Remove check-created files first, so a file that replaced a tracked
+    // directory is gone before its children are restored.
+    plan.sort_by_key(|(_, _, orig)| orig.is_some());
     for (n, path, orig) in &plan {
         // Checked again just before the replace, to narrow the window for an
         // edit made whilst undo runs.
@@ -484,7 +487,10 @@ fn ours(dir: &Path, e: &Entries, n: usize, orig: Option<&[u8]>, path: &Path) -> 
                 || wrote(n.to_string()).as_ref() == Some(&b)
                 || wrote(format!("{n}.new")).as_ref() == Some(&b)
         }
-        Err(err) => err.kind() == ErrorKind::NotFound && (orig.is_none() || e.deleted.contains(&n)),
+        Err(err) => {
+            matches!(err.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
+                && (orig.is_none() || e.deleted.contains(&n))
+        }
     }
 }
 

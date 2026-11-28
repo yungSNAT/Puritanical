@@ -20,8 +20,20 @@ fn range(s: proc_macro2::Span) -> Range {
     (r.start, r.end)
 }
 
-/// Attributes that neither register an item nor generate code that uses it.
-pub(super) fn plain_attr(a: &syn::Attribute) -> bool {
+/// Standard-library derive traits whose expansion cannot introduce hidden cfgs.
+pub(super) const STD_DERIVES: [&str; 9] = [
+    "Debug",
+    "Clone",
+    "Copy",
+    "PartialEq",
+    "Eq",
+    "PartialOrd",
+    "Ord",
+    "Hash",
+    "Default",
+];
+
+fn plain_non_derive(a: &syn::Attribute) -> bool {
     let p = a.path();
     let tool = p.segments.len() > 1
         && p.segments
@@ -43,20 +55,21 @@ pub(super) fn plain_attr(a: &syn::Attribute) -> bool {
     ]
     .iter()
     .any(|w| p.is_ident(w))
-        || std_derive(a)
 }
 
-/// Built-in compiler attributes that cannot expand to arbitrary code or cfgs.
-/// Includes `plain_attr` plus attributes like `#[repr(C)]` or `#[test]` that
-/// may make their own item risky without hiding uses elsewhere in the crate.
-pub(super) fn builtin_attr(a: &syn::Attribute) -> bool {
-    plain_attr(a)
+/// Attributes that neither register an item nor generate code that uses it.
+pub(super) fn plain_attr(a: &syn::Attribute) -> bool {
+    plain_non_derive(a) || std_derive(a)
+}
+
+/// True built-in compiler/tool attributes that cannot be shadowed by `use` or
+/// proc macros (excludes `derive`, `test` and `bench`, which resolve as macros).
+pub(super) fn compiler_attr(a: &syn::Attribute) -> bool {
+    plain_non_derive(a)
         || [
             "repr",
-            "test",
             "should_panic",
             "ignore",
-            "bench",
             "no_mangle",
             "export_name",
             "link_name",
@@ -76,22 +89,11 @@ pub(super) fn builtin_attr(a: &syn::Attribute) -> bool {
 /// A derive of standard traits only: any other derive is a procedural macro
 /// whose output, built for this platform alone, prune cannot see.
 fn std_derive(a: &syn::Attribute) -> bool {
-    let std = [
-        "Debug",
-        "Clone",
-        "Copy",
-        "PartialEq",
-        "Eq",
-        "PartialOrd",
-        "Ord",
-        "Hash",
-        "Default",
-    ];
     a.path().is_ident("derive")
         && a.parse_args_with(
             syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
         )
-        .is_ok_and(|ps| ps.iter().all(|p| std.iter().any(|d| p.is_ident(d))))
+        .is_ok_and(|ps| ps.iter().all(|p| STD_DERIVES.iter().any(|d| p.is_ident(d))))
 }
 
 /// Makes risky each item in `items` that is not already, when the module or

@@ -54,18 +54,34 @@ const NOT_MACROS: [&str; 9] = [
     "if", "while", "match", "return", "break", "yield", "in", "else", "for",
 ];
 
-/// Whether `stream` contains an attribute `#` or a macro call `! (...)` at
-/// any nesting depth. A local `macro_rules!` without either cannot hide a
-/// `cfg` attribute or call an unseen macro.
-fn tokens_have_attr_or_macro(stream: TokenStream) -> bool {
+/// Item-introducing keywords that cannot be safely ignored inside opaque token
+/// streams (a macro argument block or a `macro_rules!` body).
+const OPAQUE_KEYWORDS: [&str; 4] = ["use", "extern", "mod", "macro_rules"];
+
+fn path_segs(p: &syn::Path) -> Vec<String> {
+    p.segments
+        .iter()
+        .map(|s| s.ident.unraw().to_string())
+        .collect()
+}
+
+/// Whether a `macro_rules!` body contains `#`, `!`, `:tt` or an item keyword
+/// (`use`/`extern`/`mod`/`macro_rules`), any of which could synthesize an
+/// attribute, import or nested macro call (`$m!$arg`, `$m $b $a`).
+fn macro_body_unsafe(stream: TokenStream) -> bool {
     let mut iter = stream.into_iter().peekable();
     while let Some(tt) = iter.next() {
         match tt {
-            TokenTree::Group(g) if tokens_have_attr_or_macro(g.stream()) => return true,
+            TokenTree::Group(g) if macro_body_unsafe(g.stream()) => return true,
             TokenTree::Punct(p)
                 if p.as_char() == '#'
-                    || (p.as_char() == '!' && matches!(iter.peek(), Some(TokenTree::Group(_)))) =>
+                    || p.as_char() == '!'
+                    || (p.as_char() == ':'
+                        && matches!(iter.peek(), Some(TokenTree::Ident(id)) if id == "tt")) =>
             {
+                return true;
+            }
+            TokenTree::Ident(id) if OPAQUE_KEYWORDS.contains(&id.to_string().as_str()) => {
                 return true;
             }
             _ => {}
@@ -75,53 +91,87 @@ fn tokens_have_attr_or_macro(stream: TokenStream) -> bool {
 }
 
 fn push_macro_path(leading: bool, path: Vec<String>, calls: &mut Vec<(bool, Vec<String>)>) {
+    // Raw idents (`r#if!()`) are macro calls, not unary `!` after a keyword.
     let kw = !leading && path.len() == 1 && NOT_MACROS.contains(&path[0].as_str());
     if !kw {
-        calls.push((leading, path));
+        let segs = path
+            .into_iter()
+            .map(|s| s.strip_prefix("r#").unwrap_or(&s).to_string())
+            .collect();
+        calls.push((leading, segs));
     }
 }
 
-/// Scans `stream` (a macro's arguments) recursively for nested `path!(...)` calls.
-fn collect_token_macros(stream: TokenStream, calls: &mut Vec<(bool, Vec<String>)>) {
-    let (mut leading, mut colon, mut path) = (false, false, Vec::new());
+#[derive(Default)]
+struct TokenPath {
+    leading: bool,
+    colon: bool,
+    segs: Vec<String>,
+}
+
+impl TokenPath {
+    fn reset(&mut self) {
+        self.leading = false;
+        self.colon = false;
+        self.segs.clear();
+    }
+
+    fn push_ident(&mut self, raw: String) {
+        if !self.colon {
+            self.leading = false;
+            self.segs.clear();
+        }
+        self.colon = false;
+        self.segs.push(raw);
+    }
+}
+
+/// Scans `stream` (a macro's arguments) recursively for nested `path!(...)` calls,
+/// failing closed (`*unknown = true`) on `#` attributes or `use`/`extern`/`mod`/`macro_rules`.
+fn collect_token_macros(
+    stream: TokenStream,
+    calls: &mut Vec<(bool, Vec<String>)>,
+    unknown: &mut bool,
+) {
+    let mut p = TokenPath::default();
     let mut iter = stream.into_iter().peekable();
     while let Some(tt) = iter.next() {
         match tt {
             TokenTree::Group(g) => {
-                (leading, colon) = (false, false);
-                path.clear();
-                collect_token_macros(g.stream(), calls);
+                p.reset();
+                collect_token_macros(g.stream(), calls, unknown);
+            }
+            TokenTree::Punct(ch) if ch.as_char() == '#' => {
+                *unknown = true;
+                return;
             }
             TokenTree::Ident(id) => {
-                if !colon {
-                    leading = false;
-                    path.clear();
+                let raw = id.to_string();
+                if OPAQUE_KEYWORDS.contains(&raw.as_str()) {
+                    *unknown = true;
+                    return;
                 }
-                colon = false;
-                path.push(id.unraw().to_string());
+                p.push_ident(raw);
             }
-            TokenTree::Punct(p)
-                if p.as_char() == ':'
-                    && p.spacing() == Spacing::Joint
+            TokenTree::Punct(ch)
+                if ch.as_char() == ':'
+                    && ch.spacing() == Spacing::Joint
                     && matches!(iter.peek(), Some(TokenTree::Punct(q)) if q.as_char() == ':') =>
             {
                 let _ = iter.next();
-                leading |= path.is_empty();
-                colon = true;
+                p.leading |= p.segs.is_empty();
+                p.colon = true;
             }
-            TokenTree::Punct(p)
-                if p.as_char() == '!'
-                    && !path.is_empty()
-                    && !colon
+            TokenTree::Punct(ch)
+                if ch.as_char() == '!'
+                    && !p.segs.is_empty()
+                    && !p.colon
                     && matches!(iter.peek(), Some(TokenTree::Group(_))) =>
             {
-                push_macro_path(leading, std::mem::take(&mut path), calls);
-                leading = false;
+                push_macro_path(p.leading, std::mem::take(&mut p.segs), calls);
+                p.leading = false;
             }
-            _ => {
-                (leading, colon) = (false, false);
-                path.clear();
-            }
+            _ => p.reset(),
         }
     }
 }
@@ -131,11 +181,14 @@ struct CrateScan {
     todo: Vec<(PathBuf, PathBuf)>,
     unknown: bool,
     ext_glob: bool,
+    std_globs: BTreeSet<String>,
     shadowed: BTreeSet<String>,
     defined: BTreeSet<String>,
     clean_macros: BTreeSet<String>,
     dirty_macros: BTreeSet<String>,
     calls: Vec<(bool, Vec<String>)>,
+    derives: Vec<(bool, Vec<String>)>,
+    attr_macros: Vec<(bool, Vec<String>)>,
 }
 
 impl CrateScan {
@@ -145,23 +198,27 @@ impl CrateScan {
             todo: vec![(file.to_path_buf(), dir.to_path_buf())],
             unknown: false,
             ext_glob: false,
+            std_globs: BTreeSet::new(),
             shadowed: BTreeSet::new(),
             defined: BTreeSet::new(),
             clean_macros: BTreeSet::new(),
             dirty_macros: BTreeSet::new(),
             calls: Vec::new(),
+            derives: Vec::new(),
+            attr_macros: Vec::new(),
         }
     }
 
-    fn record_use(&mut self, tree: &syn::UseTree, root: Option<&str>) {
+    fn record_use(&mut self, tree: &syn::UseTree, prefix: &mut Vec<String>) {
         match tree {
             syn::UseTree::Path(p) => {
-                let name = p.ident.unraw().to_string();
-                self.record_use(&p.tree, Some(root.unwrap_or(name.as_str())));
+                prefix.push(p.ident.unraw().to_string());
+                self.record_use(&p.tree, prefix);
+                prefix.pop();
             }
             syn::UseTree::Group(g) => {
                 for t in &g.items {
-                    self.record_use(t, root);
+                    self.record_use(t, prefix);
                 }
             }
             syn::UseTree::Name(n) => {
@@ -170,26 +227,39 @@ impl CrateScan {
             syn::UseTree::Rename(r) => {
                 self.shadowed.insert(r.rename.unraw().to_string());
             }
-            syn::UseTree::Glob(_) => {
-                let local = root.is_some_and(|r| {
-                    ["self", "super", "crate", "std", "core", "alloc"].contains(&r)
-                });
-                if !local {
-                    self.ext_glob = true;
+            syn::UseTree::Glob(_) => match prefix.first().map(String::as_str) {
+                Some(root @ ("std" | "core" | "alloc")) => {
+                    self.std_globs.insert(root.to_string());
                 }
-            }
+                Some(_)
+                    if prefix
+                        .iter()
+                        .all(|s| ["self", "super", "crate"].contains(&s.as_str())) => {}
+                _ => self.ext_glob = true,
+            },
         }
     }
 
+    fn has_ext_glob(&self) -> bool {
+        self.ext_glob || self.std_globs.iter().any(|r| self.shadowed.contains(r))
+    }
+
+    fn safe_std_path(&self, segs: &[String], roots: &[&str], names: &[&str]) -> bool {
+        matches!(
+            segs,
+            [root, .., name]
+                if roots.contains(&root.as_str())
+                    && names.contains(&name.as_str())
+                    && !self.shadowed.contains(root)
+        )
+    }
+
     fn safe_call(&self, leading: bool, segs: &[String]) -> bool {
+        if segs.len() == 2 && self.safe_std_path(segs, &["std", "core", "alloc"], &STD_MACROS) {
+            return true;
+        }
         match segs {
-            [root, name]
-                if ["std", "core", "alloc"].contains(&root.as_str())
-                    && STD_MACROS.contains(&name.as_str()) =>
-            {
-                leading || !self.shadowed.contains(root)
-            }
-            [name] if !leading && !self.ext_glob && !self.shadowed.contains(name) => {
+            [name] if !leading && !self.has_ext_glob() && !self.shadowed.contains(name) => {
                 let local = self.clean_macros.contains(name) && !self.dirty_macros.contains(name);
                 let std = !self.defined.contains(name) && STD_MACROS.contains(&name.as_str());
                 local || std
@@ -197,11 +267,56 @@ impl CrateScan {
             _ => false,
         }
     }
+
+    fn safe_derive(&self, leading: bool, segs: &[String]) -> bool {
+        match segs {
+            [name] => {
+                !leading
+                    && !self.has_ext_glob()
+                    && !self.shadowed.contains(name)
+                    && items::STD_DERIVES.contains(&name.as_str())
+            }
+            _ => self.safe_std_path(segs, &["std", "core"], &items::STD_DERIVES),
+        }
+    }
+
+    fn safe_attr_macro(&self, leading: bool, segs: &[String]) -> bool {
+        match segs {
+            [name] => {
+                !leading
+                    && !self.has_ext_glob()
+                    && !self.shadowed.contains(name)
+                    && !self.defined.contains(name)
+                    && ["test", "bench"].contains(&name.as_str())
+            }
+            _ => self.safe_std_path(segs, &["std", "core"], &["test", "bench"]),
+        }
+    }
 }
 
 impl<'ast> Visit<'ast> for CrateScan {
     fn visit_attribute(&mut self, a: &'ast syn::Attribute) {
-        if !items::builtin_attr(a) {
+        if items::compiler_attr(a) {
+            return;
+        }
+        let p = a.path();
+        if p.is_ident("derive") {
+            let Ok(ps) = a.parse_args_with(
+                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+            ) else {
+                self.unknown = true;
+                return;
+            };
+            for d in ps {
+                self.derives
+                    .push((d.leading_colon.is_some(), path_segs(&d)));
+            }
+            return;
+        }
+        let segs = path_segs(p);
+        if segs.last().is_some_and(|n| n == "test" || n == "bench") {
+            self.attr_macros.push((p.leading_colon.is_some(), segs));
+        } else {
             self.unknown = true;
         }
     }
@@ -244,7 +359,7 @@ impl<'ast> Visit<'ast> for CrateScan {
         };
         let name = ident.unraw().to_string();
         self.defined.insert(name.clone());
-        if m.mac.path.is_ident("macro_rules") && !tokens_have_attr_or_macro(m.mac.tokens.clone()) {
+        if m.mac.path.is_ident("macro_rules") && !macro_body_unsafe(m.mac.tokens.clone()) {
             self.clean_macros.insert(name);
         } else {
             self.dirty_macros.insert(name);
@@ -255,7 +370,7 @@ impl<'ast> Visit<'ast> for CrateScan {
         for a in &u.attrs {
             self.visit_attribute(a);
         }
-        self.record_use(&u.tree, None);
+        self.record_use(&u.tree, &mut Vec::new());
     }
 
     fn visit_item_extern_crate(&mut self, e: &'ast syn::ItemExternCrate) {
@@ -267,14 +382,9 @@ impl<'ast> Visit<'ast> for CrateScan {
     }
 
     fn visit_macro(&mut self, m: &'ast syn::Macro) {
-        let segs = m
-            .path
-            .segments
-            .iter()
-            .map(|s| s.ident.unraw().to_string())
-            .collect();
-        self.calls.push((m.path.leading_colon.is_some(), segs));
-        collect_token_macros(m.tokens.clone(), &mut self.calls);
+        self.calls
+            .push((m.path.leading_colon.is_some(), path_segs(&m.path)));
+        collect_token_macros(m.tokens.clone(), &mut self.calls, &mut self.unknown);
     }
 }
 
@@ -299,10 +409,13 @@ pub(super) fn tree(file: &Path) -> Option<BTreeSet<PathBuf>> {
             }
         }
     }
-    scan.calls
-        .iter()
-        .all(|(leading, segs)| scan.safe_call(*leading, segs))
-        .then_some(seen)
+    let ok = scan.calls.iter().all(|(l, s)| scan.safe_call(*l, s))
+        && scan.derives.iter().all(|(l, s)| scan.safe_derive(*l, s))
+        && scan
+            .attr_macros
+            .iter()
+            .all(|(l, s)| scan.safe_attr_macro(*l, s));
+    ok.then_some(seen)
 }
 
 #[cfg(test)]
@@ -320,25 +433,48 @@ mod tests {
     fn allows_std_and_clean_local_macros_and_flags_the_rest() {
         assert!(ok("macro_rules! c { ($f:ident) => { $f() }; }\n\
              use super::*;\n\
+             use std::prelude::v1::*;\n\
+             #[derive(Debug, core::fmt::Debug)]\n\
+             struct S;\n\
+             #[core::prelude::v1::test]\n\
              fn f(x: bool) { c!(g); std::println!(\"ok\"); ::core::assert!(if !(x) { true } else { false }); }\n"));
-        // Custom macro call, nested macro in std macro args, dirty local macro_rules!.
+        // Custom macro call, nested macro / attr / import / raw-ident call in macro args.
         assert!(!ok("fn f() { pm::call!(); }\n"));
         assert!(!ok("fn f() { assert!(::pm::call!()); }\n"));
+        assert!(!ok("fn f() { assert!({ #[pm::attr] fn h() {} true }); }\n"));
+        assert!(!ok("fn f() { assert!({ use pm::x as println; true }); }\n"));
+        assert!(!ok("fn f() { assert!({ r#if!(); true }); }\n"));
+        // Dirty local macro_rules! (#, !, :tt, item keywords).
         assert!(!ok(
             "macro_rules! d { () => { #[allow(x)] fn g() {} }; } fn f() { d!(); }\n"
         ));
         assert!(!ok(
-            "macro_rules! d { () => { pm::x!(); }; } fn f() { d!(); }\n"
+            "macro_rules! d { ($m:ident, $a:tt) => { $m!$a }; } fn f() { d!(x, ()); }\n"
         ));
-        // Shadowed std macros and external globs.
+        assert!(!ok(
+            "macro_rules! d { ($m:ident, $b:tt) => { $m $b }; } fn f() { d!(x, y); }\n"
+        ));
+        assert!(!ok(
+            "macro_rules! d { () => { use pm::x; }; } fn f() { d!(); }\n"
+        ));
+    }
+
+    #[test]
+    fn flags_shadowed_derives_attrs_and_globs() {
         assert!(!ok(
             "use evil::{a, b as println};\nfn f() { println!(); }\n"
         ));
         assert!(!ok("use evil::*;\nfn f() { println!(); }\n"));
+        assert!(!ok("use crate::p::*;\nfn f() { println!(); }\n"));
         assert!(!ok(
-            "extern crate evil as std;\nfn f() { std::println!(); }\n"
+            "extern crate evil as core;\nuse core::*;\nfn f() { println!(); }\n"
         ));
-        // Attribute macros anywhere in the crate (inline item, external mod, inner attr).
+        assert!(!ok(
+            "extern crate evil as std;\nfn f() { ::std::println!(); }\n"
+        ));
+        assert!(!ok("use evil::D as Debug;\n#[derive(Debug)]\nstruct S;\n"));
+        assert!(!ok("#[derive(123)]\nstruct S;\n"));
+        assert!(!ok("use evil::t as test;\n#[test]\nfn f() {}\n"));
         assert!(!ok("#[pm::attr]\nfn live() {}\n"));
         assert!(!ok("#[pm::attr]\nmod ext;\n"));
         assert!(!ok("#![pm::attr]\nfn live() {}\n"));

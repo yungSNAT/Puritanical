@@ -212,7 +212,7 @@ fn orig_before(
         return Ok(Some(orig[path].clone().into_bytes()));
     }
     let spec = format!("{tree}:{path}");
-    if git(root, env, &["cat-file", "-e", &spec]).is_ok() {
+    if git(root, env, &["cat-file", "-t", &spec]).is_ok_and(|k| k.trim() == "blob") {
         git_bytes(root, env, &["cat-file", "--filters", &spec]).map(Some)
     } else {
         Ok(None)
@@ -221,8 +221,9 @@ fn orig_before(
 
 /// Records in `journal`, for each file the check changed, its bytes before
 /// the run and what the check left, repairing a damaged journal first. When
-/// a path passes through a symlink, its original (if tracked) is recorded as
-/// absent so `undo` restores it once the link is removed.
+/// a path passes through a symlink, its original (if tracked) is kept in the
+/// journal and the file is recorded as absent so `undo` restores it once the
+/// link is removed.
 fn record_stopped(
     repo: (&Path, &HashMap<String, String>, &str),
     journal: &mut Journal,
@@ -369,6 +370,13 @@ fn finish_apply(
     }
 }
 
+fn clear_and_err(root: &Path, err: String) -> String {
+    match journal::clear(root) {
+        Ok(()) => err,
+        Err(c) => format!("{err}; removing the journal failed: {c}"),
+    }
+}
+
 pub(super) fn apply(
     root: &Path,
     env: &HashMap<String, String>,
@@ -389,7 +397,7 @@ pub(super) fn apply(
     let (base, orig) = match ready {
         Ok(r) => r,
         Err((e, true)) => return Err(e),
-        Err((e, false)) => return journal::clear(root).and(Err(e)),
+        Err((e, false)) => return Err(clear_and_err(root, e)),
     };
     out.say(format!(
         "baseline: check passes ({})",
