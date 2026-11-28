@@ -273,6 +273,37 @@ pub fn freebsd_use(_: TokenStream) -> TokenStream {
         .parse()
         .expect("tokens")
 }
+
+#[proc_macro]
+pub fn println(_: TokenStream) -> TokenStream {
+    freebsd_use(TokenStream::new())
+}
+
+#[proc_macro_attribute]
+pub fn freebsd_attr(_: TokenStream, item: TokenStream) -> TokenStream {
+    let extra: TokenStream = "#[cfg(target_os = \"freebsd\")] { dead_in_fn(); }"
+        .parse()
+        .expect("tokens");
+    item.into_iter()
+        .map(|tt| match tt {
+            TokenTree::Group(g) if g.delimiter() == Delimiter::Brace => {
+                let mut body = g.stream();
+                body.extend(extra.clone());
+                let mut out = Group::new(Delimiter::Brace, body);
+                out.set_span(g.span());
+                TokenTree::Group(out)
+            }
+            other => other,
+        })
+        .collect()
+}
+
+#[proc_macro_derive(FreebsdDerive)]
+pub fn freebsd_derive(_: TokenStream) -> TokenStream {
+    "#[cfg(target_os = \"freebsd\")] fn _d() { dead_in_fn(); }"
+        .parse()
+        .expect("tokens")
+}
 "##;
 
 /// A repository (`repo/`) depending on a sibling proc-macro crate `pm/`.
@@ -335,4 +366,52 @@ fn a_function_body_proc_macro_makes_its_package_risky() {
             dry.stdout
         );
     }
+}
+
+fn assert_dead_in_fn_risky(libs: &[&str]) {
+    for lib in libs {
+        let tmp = proc_macro_repo(lib, &[]);
+        let dry = prune(&tmp.path().join("repo"), &[]);
+        assert_eq!(dry.code, 0, "{lib}\n{}", dry.stderr);
+        assert!(
+            dry.stdout.contains("function `dead_in_fn` (risky:")
+                && dry.stdout.contains("1 candidate(s), 1 risky."),
+            "{lib}\n{}",
+            dry.stdout
+        );
+    }
+}
+
+#[test]
+fn macro_args_with_attrs_imports_or_raw_ident_calls_make_package_risky() {
+    assert_dead_in_fn_risky(&[
+        "pub fn api() {\n    assert!({ #[pm::freebsd_attr] fn h() {} h(); true });\n}\n\nfn dead_in_fn() {}\n",
+        "pub fn api() {\n    assert!({ use pm::freebsd_use as println; println!(); true });\n}\n\nfn dead_in_fn() {}\n",
+        "use pm::freebsd_use as r#if;\npub fn api() {\n    assert!({ r#if!(); true });\n}\n\nfn dead_in_fn() {}\n",
+    ]);
+}
+
+#[test]
+fn local_macro_invoking_metavar_macro_makes_package_risky() {
+    assert_dead_in_fn_risky(&[
+        "use pm::freebsd_use;\nmacro_rules! call_mac { ($m:ident, $arg:tt) => { $m!$arg }; }\npub fn api() {\n    call_mac!(freebsd_use, ());\n}\n\nfn dead_in_fn() {}\n",
+        "macro_rules! sneaky_use { () => { use pm::freebsd_use as println; }; }\npub fn api() {\n    sneaky_use!();\n    println!();\n}\n\nfn dead_in_fn() {}\n",
+    ]);
+}
+
+#[test]
+fn shadowed_std_derive_or_test_attr_makes_package_risky() {
+    assert_dead_in_fn_risky(&[
+        "use pm::FreebsdDerive as Debug;\n#[derive(Debug)]\npub struct Api;\n\nfn dead_in_fn() {}\n",
+        "#[derive(Debug)]\npub struct Api;\nuse pm::FreebsdDerive as Debug;\n\nfn dead_in_fn() {}\n",
+        "use pm::freebsd_attr as test;\n#[test]\npub fn api() {}\n\nfn dead_in_fn() {}\n",
+    ]);
+}
+
+#[test]
+fn shadowed_std_glob_or_reexported_glob_makes_package_risky() {
+    assert_dead_in_fn_risky(&[
+        "#![no_std]\nextern crate pm as core;\nuse core::*;\npub fn api() {\n    println!();\n}\n\nfn dead_in_fn() {}\n",
+        "#![no_std]\npub use pm as p;\nmod sub {\n    use crate::p::*;\n    pub fn f() {\n        println!();\n    }\n}\npub fn api() {\n    sub::f();\n}\n\nfn dead_in_fn() {}\n",
+    ]);
 }

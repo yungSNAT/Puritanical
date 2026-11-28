@@ -405,3 +405,57 @@ fn replacing_an_existing_file_with_a_symlink_still_restores_it_after_removal() {
         clean(dir);
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn replacing_a_tracked_directory_with_a_symlink_or_file_restores_it() {
+    let d = repo(&[
+        ("Cargo.toml", MANIFEST),
+        (".gitignore", IGNORE),
+        ("src/lib.rs", LIB_D),
+        ("src/util.rs", UTIL_D),
+        ("sub/a.txt", "a\n"),
+    ]);
+    let dir = d.path();
+
+    let out = once_cut(dir, "rm -rf sub && ln -s src sub");
+    assert!(
+        out.stderr.contains("passes through a symbolic link"),
+        "{}",
+        out.stderr
+    );
+    fs::remove_file(dir.join("sub")).expect("rm link");
+    let undo = prune(dir, &["undo"]);
+    assert_eq!(undo.code, 0, "{}", undo.stderr);
+    assert_eq!(read(dir, "sub/a.txt"), "a\n");
+    clean(dir);
+
+    let out = once_cut(dir, "rm -rf sub && echo hi > sub");
+    assert!(out.stderr.ends_with(&format!("{FOR_UNDO}\n")), "{}", out.stderr);
+    let undo = prune(dir, &["undo"]);
+    assert_eq!(undo.code, 0, "{}", undo.stderr);
+    assert_eq!(read(dir, "sub/a.txt"), "a\n");
+    clean(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn baseline_error_is_preserved_when_journal_clear_refuses_a_symlink() {
+    let d = repo_d();
+    let dir = d.path();
+    let ext = tempfile::tempdir().expect("ext dir");
+    let sentinel = ext.path().join("0");
+    write(&sentinel, "SENTINEL");
+    let alias = format!(
+        "alias.chk=!rm -rf .puritanical-prune/orig && ln -s '{}' .puritanical-prune/orig && exit 1",
+        ext.path().display()
+    );
+    let out = prune(dir, &["--apply", "--", "git", "-c", &alias, "chk"]);
+    assert!(
+        out.stderr.contains("the check fails before any cut")
+            && out.stderr.contains("is not a plain folder"),
+        "{}",
+        out.stderr
+    );
+    assert_eq!(fs::read_to_string(&sentinel).expect("sentinel"), "SENTINEL");
+}
