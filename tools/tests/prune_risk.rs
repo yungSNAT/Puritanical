@@ -435,27 +435,45 @@ fn shadowed_tool_attrs_make_package_risky() {
     );
 }
 
-#[test]
-fn self_import_shadowing_std_root_makes_package_risky() {
-    let tmp = proc_macro_repo(
-        "use dep::core::{self};\npub fn api() {\n    core::println!();\n}\n\nfn dead_in_fn() {}\n",
-        &[],
-    );
+fn dep_repo(dep_lib: &str, app_lib: &str) -> tempfile::TempDir {
+    let tmp = proc_macro_repo(app_lib, &[]);
     write(
         &tmp.path().join("dep/Cargo.toml"),
         "[package]\nname = \"dep\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\npm = { path = \"../pm\" }\n",
     );
-    write(
-        &tmp.path().join("dep/src/lib.rs"),
-        "pub mod core {\n    pub use pm::println;\n}\n",
-    );
+    write(&tmp.path().join("dep/src/lib.rs"), dep_lib);
     let dir = tmp.path().join("repo");
     write(
         &dir.join("Cargo.toml"),
         "[package]\nname = \"fx\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\ndep = { path = \"../dep\" }\n",
     );
     commit(&dir);
-    let dry = prune(&dir, &[]);
+    tmp
+}
+
+#[test]
+fn self_import_shadowing_std_root_makes_package_risky() {
+    let tmp = dep_repo(
+        "pub mod core {\n    pub use pm::println;\n}\n",
+        "use dep::core::{self};\npub fn api() {\n    core::println!();\n}\n\nfn dead_in_fn() {}\n",
+    );
+    let dry = prune(&tmp.path().join("repo"), &[]);
+    assert_eq!(dry.code, 0, "{}", dry.stderr);
+    assert!(
+        dry.stdout.contains("function `dead_in_fn` (risky:")
+            && dry.stdout.contains("1 candidate(s), 1 risky."),
+        "{}",
+        dry.stdout
+    );
+}
+
+#[test]
+fn ext_glob_shadowing_qualified_std_path_makes_package_risky() {
+    let tmp = dep_repo(
+        "pub mod std {\n    pub use pm::println;\n}\n",
+        "#![no_std]\nuse dep::*;\npub fn api() {\n    std::println!();\n}\n\nfn dead_in_fn() {}\n",
+    );
+    let dry = prune(&tmp.path().join("repo"), &[]);
     assert_eq!(dry.code, 0, "{}", dry.stderr);
     assert!(
         dry.stdout.contains("function `dead_in_fn` (risky:")

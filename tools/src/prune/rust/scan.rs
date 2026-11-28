@@ -255,6 +255,7 @@ impl CrateScan {
             [root, .., name]
                 if roots.contains(&root.as_str())
                     && names.contains(&name.as_str())
+                    && !self.has_ext_glob()
                     && !self.shadowed.contains(root)
         )
     }
@@ -499,5 +500,6 @@ mod tests {
         assert!(!ok(
             "use dep::core::{self};\nfn f() { core::println!(); }\n"
         ));
+        assert!(!ok("use dep::*;\nfn f() { std::println!(); }\n"));
     }
 }
