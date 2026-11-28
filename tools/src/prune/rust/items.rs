@@ -33,13 +33,20 @@ pub(super) const STD_DERIVES: [&str; 9] = [
     "Default",
 ];
 
-fn plain_non_derive(a: &syn::Attribute) -> bool {
+/// Tool attributes (`rustfmt::*`, `clippy::*`) without a leading `::`;
+/// Rust resolves them as built-in tool attributes only when unshadowed.
+pub(super) fn tool_attr(a: &syn::Attribute) -> bool {
     let p = a.path();
-    let tool = p.segments.len() > 1
+    p.leading_colon.is_none()
+        && p.segments.len() > 1
         && p.segments
             .first()
-            .is_some_and(|s| s.ident == "rustfmt" || s.ident == "clippy");
-    tool || [
+            .is_some_and(|s| s.ident == "rustfmt" || s.ident == "clippy")
+}
+
+fn plain_builtin(a: &syn::Attribute) -> bool {
+    let p = a.path();
+    [
         "doc",
         "allow",
         "warn",
@@ -59,13 +66,13 @@ fn plain_non_derive(a: &syn::Attribute) -> bool {
 
 /// Attributes that neither register an item nor generate code that uses it.
 pub(super) fn plain_attr(a: &syn::Attribute) -> bool {
-    plain_non_derive(a) || std_derive(a)
+    plain_builtin(a) || tool_attr(a) || std_derive(a)
 }
 
-/// True built-in compiler/tool attributes that cannot be shadowed by `use` or
-/// proc macros (excludes `derive`, `test` and `bench`, which resolve as macros).
+/// True built-in compiler attributes that cannot be shadowed by `use` or
+/// proc macros (excludes `derive`, `test`, `bench`, `rustfmt::*` and `clippy::*`).
 pub(super) fn compiler_attr(a: &syn::Attribute) -> bool {
-    plain_non_derive(a)
+    plain_builtin(a)
         || [
             "repr",
             "should_panic",

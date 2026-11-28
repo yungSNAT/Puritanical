@@ -220,6 +220,9 @@ struct Owners {
     unknown: BTreeSet<PathBuf>,
 }
 
+/// Built-in crate and tool roots that `scan` trusts unless shadowed.
+const TRUSTED_ROOTS: [&str; 5] = ["std", "core", "alloc", "rustfmt", "clippy"];
+
 fn owners(root: &Path, env: &HashMap<String, String>) -> Result<Owners, String> {
     let args = ["metadata", "--no-deps", "--format-version", "1"];
     let (_, json) = cargo(root, env, &args)?;
@@ -228,6 +231,15 @@ fn owners(root: &Path, env: &HashMap<String, String>) -> Result<Owners, String> 
     for p in v["packages"].as_array().into_iter().flatten() {
         let manifest = canon(p["manifest_path"].as_str().unwrap_or_default());
         let dir = manifest.parent().unwrap_or(Path::new("")).to_path_buf();
+        let shadows_root = p["dependencies"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|d| d["rename"].as_str().or_else(|| d["name"].as_str()))
+            .any(|n| TRUSTED_ROOTS.contains(&n.replace('-', "_").as_str()));
+        if shadows_root {
+            o.unknown.insert(dir.clone());
+        }
         for t in p["targets"].as_array().into_iter().flatten() {
             let kinds = t["kind"].as_array().map_or(&[][..], Vec::as_slice);
             if !kinds.iter().any(|k| CRATE_KINDS.iter().any(|c| k == c)) {

@@ -222,7 +222,12 @@ impl CrateScan {
                 }
             }
             syn::UseTree::Name(n) => {
-                self.shadowed.insert(n.ident.unraw().to_string());
+                let name = n.ident.unraw().to_string();
+                if name == "self" {
+                    self.shadowed.extend(prefix.last().cloned());
+                } else {
+                    self.shadowed.insert(name);
+                }
             }
             syn::UseTree::Rename(r) => {
                 self.shadowed.insert(r.rename.unraw().to_string());
@@ -289,6 +294,9 @@ impl CrateScan {
                     && !self.defined.contains(name)
                     && ["test", "bench"].contains(&name.as_str())
             }
+            [root, _, ..] if root == "rustfmt" || root == "clippy" => {
+                !leading && !self.has_ext_glob() && !self.shadowed.contains(root)
+            }
             _ => self.safe_std_path(segs, &["std", "core"], &["test", "bench"]),
         }
     }
@@ -314,7 +322,8 @@ impl<'ast> Visit<'ast> for CrateScan {
             return;
         }
         let segs = path_segs(p);
-        if segs.last().is_some_and(|n| n == "test" || n == "bench") {
+        let prelude = segs.last().is_some_and(|n| n == "test" || n == "bench");
+        if prelude || items::tool_attr(a) {
             self.attr_macros.push((p.leading_colon.is_some(), segs));
         } else {
             self.unknown = true;
@@ -327,6 +336,9 @@ impl<'ast> Visit<'ast> for CrateScan {
         if m.attrs.iter().any(|a| !items::plain_attr(a)) {
             self.unknown = true;
             return;
+        }
+        for a in &m.attrs {
+            self.visit_attribute(a);
         }
         let name = m.ident.unraw().to_string();
         self.shadowed.insert(name.clone());
@@ -436,6 +448,7 @@ mod tests {
              use std::prelude::v1::*;\n\
              #[derive(Debug, core::fmt::Debug)]\n\
              struct S;\n\
+             #[rustfmt::skip]\n\
              #[core::prelude::v1::test]\n\
              fn f(x: bool) { c!(g); std::println!(\"ok\"); ::core::assert!(if !(x) { true } else { false }); }\n"));
         // Custom macro call, nested macro / attr / import / raw-ident call in macro args.
@@ -481,5 +494,10 @@ mod tests {
         assert!(!ok("#[allow(x)]\nuse a::b;\n#[pm::attr]\nuse a::c;\n"));
         assert!(!ok("#[pm::attr]\nextern crate core;\n"));
         assert!(!ok("#[pm::attr]\nmacro_rules! m { () => {} }\n"));
+        assert!(!ok("#[::rustfmt::skip]\nfn f() {}\n"));
+        assert!(!ok("mod rustfmt {}\n#[rustfmt::skip]\nfn f() {}\n"));
+        assert!(!ok(
+            "use dep::core::{self};\nfn f() { core::println!(); }\n"
+        ));
     }
 }
